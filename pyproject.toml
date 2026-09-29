@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "kipe"
+version = "0.0.1"
+description = """Parameter estimation with reduced-order unscented Kalman filtering, and \
+identifiability analysis, for PDE models"""
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [{name = "David Nolte", email = "dajuno@users.noreply.github.com"}]
+keywords = ["ROUKF", "unscented-kalman-filter", "data-assimilation",
+            "parameter-estimation", "identifiability", "FEniCS",
+            "inverse-problems", "fisher-information"]
+classifiers = [
+  "Development Status :: 1 - Planning",
+  "Programming Language :: Python :: 3",
+  "Topic :: Scientific/Engineering :: Mathematics",
+]
+
+[project.urls]
+Homepage = "https://github.com/dajuno/kipe"

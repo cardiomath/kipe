@@ -1,0 +1,24 @@
+kipe authors
+============
+
+The copyright notice "The kipe authors" in LICENSE refers to the people listed
+here. See CITATION.cff for how to cite kipe.
+
+Authors
+-------
+
+- David Nolte
+- Cristóbal Bertoglio
+
+roukf contributors
+------------------
+
+kipe contains code derived from roukf (MIT License, "Copyright (c) 2018-2026 The
+roukf authors"). Contributors to roukf, in alphabetical order:
+
+- Reidmen Arostica Barrera
+- Cristóbal Bertoglio
+- Jeremías Garay Labra
+- Miriam Löcke
+- David Nolte
+- Giorgia Pase

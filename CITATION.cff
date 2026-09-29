@@ -1,0 +1,34 @@
+# Citation metadata, used by GitHub ("Cite this repository") and Zenodo.
+# Format: https://citation-file-format.github.io  — validate with `cffconvert --validate`.
+cff-version: 1.2.0
+message: "If you use kipe, please cite it using the metadata below."
+title: "kipe: Kalman-based identifiability and parameter estimation"
+type: software
+abstract: >-
+  Identifiability and parameter estimation for PDE models: reduced-order unscented
+  Kalman filtering (ROUKF), Fisher-information sensitivity analysis and synthetic
+  observations, with an optional FEniCSx backend.
+license: MIT
+repository-code: "https://github.com/dajuno/kipe"   # TODO: update if moved to an organization
+keywords:
+  - ROUKF
+  - unscented Kalman filter
+  - data assimilation
+  - parameter estimation
+  - identifiability
+  - Fisher information
+  - inverse problems
+  - FEniCS
+authors:
+  - family-names: Nolte
+    given-names: David
+    affiliation: "University of Groningen"
+    orcid: "https://orcid.org/0000-0002-3535-8075"
+  - family-names: Bertoglio
+    given-names: Cristóbal
+    affiliation: "University of Groningen"
+    orcid: "https://orcid.org/0000-0001-5049-1707"
+# Add on release (or let Zenodo add the DOI):
+# version: 0.1.0
+# date-released: YYYY-MM-DD
+# doi: 10.5281/zenodo.TODO
