@@ -92,7 +92,9 @@ section-order = [
 "petsc" = ["petsc4py"]
 
 [tool.mypy]
-files = ["src"]
+# src, plus the typed protocol-conformance tests (structural check of example solvers)
+files = ["src", "tests/examples/test_fitzhugh_nagumo_protocol.py"]
+mypy_path = "src"
 # adapted from roukf, based on the suggested "strict" config:
 # https://mypy.readthedocs.io/en/stable/existing_code.html#introduce-stricter-options
 warn_unused_configs = true
