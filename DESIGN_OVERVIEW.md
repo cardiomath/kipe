@@ -19,7 +19,7 @@ while roukf stays in use until kipe reaches parity.
 
 ## Forward solver interface
 
-- **Stateless calls:** `initial_state()`, `advance_to(t0, t1, state, θ)`,
+- **Stateless calls:** `initial_state()`, `propagate(t0, t1, state, θ)`,
   `timestep(t0, state, θ)`.
 - **State:** named numpy fields, local to each MPI rank. Measurements refer to fields by name
   (`velocity`), not by index.
@@ -29,7 +29,7 @@ while roukf stays in use until kipe reaches parity.
   files.
 - **Construction:** the input file names a `factory` (a class, or a function returning the
   solver) plus its arguments. Using kipe directly from Python works just as well.
-- **Time:** `advance_to` guarantees that all particles reach the same time. Solvers with a
+- **Time:** `propagate` guarantees that all particles reach the same time. Solvers with a
   fixed step are checked against the measurement times at startup, before anything is
   computed.
 
