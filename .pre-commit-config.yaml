@@ -20,8 +20,9 @@ repos:
     rev: v2.3.1  # keep in sync with the mypy pin in pyproject.toml [check]
     hooks:
       - id: mypy
-        files: ^src/
-        additional_dependencies: [numpy]
+        files: ^(src|tests)/
+        pass_filenames: false
+        additional_dependencies: [numpy, pytest]
 
   - repo: https://github.com/compilerla/conventional-pre-commit
     rev: v4.4.0
