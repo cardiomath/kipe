@@ -27,6 +27,89 @@ dependencies = [
 test = [
   "pytest>=8",
 ]
+check = [
+  "ruff==0.16.9",  # pinned: preview formatting differs between versions
+  "mypy==2.3.1",
+  "pre-commit",
+]
 
 [project.urls]
 Homepage = "https://github.com/dajuno/kipe"
+
+[tool.ruff]
+line-length = 97
+preview = true
+extend-exclude = ["*.md"]  # design docs contain deliberately aligned illustrative snippets
+
+[tool.ruff.lint]
+# see https://docs.astral.sh/ruff/rules/
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "FA",     # flake8-future-annotations
+    "B",      # flake8-bugbear
+    "I",      # isort
+    "UP",     # pyupgrade
+    "ICN",    # flake8-import-conventions
+    "NPY",    # numpy-specific rules
+    "FLY",    # use f-string not static joins
+    "G",      # logging format (lazy %-formatting, no f-strings in logging calls)
+    "D",      # pydocstyle
+    "DOC",    # pydoclint
+    "RUF",    # Ruff-specific rules
+]
+ignore = [
+    "undocumented-magic-method",         # D105
+    "undocumented-public-init",          # D107: constructor args documented in class docstring
+    "blank-line-after-function",         # D202
+    "missing-blank-line-after-summary",  # D205
+    "docstring-missing-exception",       # DOC501
+    "docstring-extraneous-exception",    # DOC502
+]
+allowed-confusables = ["σ"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D", "DOC"]  # test docstrings are optional
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.isort]
+section-order = [
+    "future",
+    "standard-library",
+    "mpi",
+    "petsc",
+    "third-party",
+    "first-party",
+    "local-folder",
+]
+
+[tool.ruff.lint.isort.sections]
+"mpi" = ["mpi4py"]
+"petsc" = ["petsc4py"]
+
+[tool.mypy]
+files = ["src"]
+# adapted from roukf, based on the suggested "strict" config:
+# https://mypy.readthedocs.io/en/stable/existing_code.html#introduce-stricter-options
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+strict_equality = true
+extra_checks = true
+check_untyped_defs = true
+disallow_subclassing_any = true
+disallow_any_generics = true
+disallow_untyped_decorators = true
+disallow_untyped_calls = true
+disallow_incomplete_defs = true
+disallow_untyped_defs = true
+disallow_any_unimported = true
+no_implicit_reexport = false
+warn_return_any = false
+
+[[tool.mypy.overrides]]
+module = ["matplotlib", "matplotlib.*"]  # optional, only for plotting in example __main__ blocks
+ignore_missing_imports = true
