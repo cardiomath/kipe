@@ -12,13 +12,11 @@ import pytest
 from kipe.examples.fitzhugh_nagumo import Solver
 from kipe.protocols import ForwardSolver
 
-PARAMETERS = (0.2, 0.2, 3.0)  # a, b, c (Ramsay et al. 2007)
-INITIAL_STATE = (-1.0, 1.0)  # v, w
 DT = 0.05
 
 
 def _solver() -> Solver:
-    return Solver(PARAMETERS, INITIAL_STATE, DT)
+    return Solver(dt=DT)
 
 
 def _as_protocol(solver: Solver) -> ForwardSolver:
@@ -70,4 +68,4 @@ def test_parameters_overrides_nominal_values() -> None:
     assert not np.allclose(_vector(perturbed), _vector(nominal))
 
     # a perturbed call must not change the solver's nominal values
-    assert solver.nominal_parameters()["c"] == PARAMETERS[2]
+    assert solver.nominal_parameters() == Solver().nominal_parameters()

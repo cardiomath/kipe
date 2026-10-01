@@ -32,10 +32,20 @@ def reference():
 
 
 def _max_error(dt: float, reference) -> float:
-    """Maximum error of the RK4 solution over all time steps."""
-    times, states = Solver(PARAMETERS, INITIAL_STATE, dt).solve(T)
+    """Maximum error of the RK4 solution over all time steps, stepping via ``timestep``."""
+    a, b, c = PARAMETERS
+    v0, w0 = INITIAL_STATE
+    solver = Solver(dt=dt, v0=v0, w0=w0, a=a, b=b, c=c)
+
+    t, state = solver.initial_state()
+    times, states = [t], [[state["v"][0], state["w"][0]]]
+    for _ in range(round(T / dt)):
+        t, state = solver.timestep(t, state, {})
+        times.append(t)
+        states.append([state["v"][0], state["w"][0]])
+
     assert times[-1] == pytest.approx(T)
-    return float(np.abs(states - reference(times).T).max())
+    return float(np.abs(np.array(states) - reference(np.array(times)).T).max())
 
 
 @pytest.mark.parametrize(("dt", "tol"), [(0.1, 5e-3), (0.05, 3e-4), (0.02, 1e-5), (0.01, 1e-6)])
