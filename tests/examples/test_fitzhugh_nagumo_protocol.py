@@ -30,7 +30,7 @@ def _vector(state: dict[str, np.ndarray]) -> np.ndarray:
 
 @pytest.mark.parametrize("t1", [DT, 0.3, 1.0, 20.0])
 def test_propagate_accepts_times_on_grid(t1: float) -> None:
-    """Float round-off must not reject valid target times (e.g. 0.3 % 0.05 != 0 in floats)."""
+    """Float round-off must not reject valid target times (e.g., 0.3 % 0.05 != 0 in floats)."""
     solver = _solver()
     t0, state = solver.initial_state()
     solver.propagate(t0, t1, state, {})

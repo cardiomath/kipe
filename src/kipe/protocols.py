@@ -21,7 +21,7 @@ type Parameters = dict[str, float]
 class FieldSpec(Protocol):
     """Layout of one state field on the current MPI rank.
 
-    Any object with these two attributes conforms, e.g. a solver's own frozen dataclass.
+    Any object with these two attributes conforms, e.g., a solver's own frozen dataclass.
     """
 
     @property
@@ -33,9 +33,9 @@ class FieldSpec(Protocol):
 
     @property
     def kind(self) -> Literal["distributed", "replicated"]:
-        """``distributed``: each entry is owned by exactly one rank (e.g. the owned dofs of a
+        """``distributed``: each entry is owned by exactly one rank (e.g., the owned dofs of a
         finite element function). ``replicated``: every rank holds the full, identical field
-        (e.g. the state of a small lumped-parameter model).
+        (e.g., the state of a small lumped-parameter model).
         """
         ...
 
@@ -56,7 +56,7 @@ class ForwardSolver(Protocol):
     whatever it keeps. kipe passes parameters as physical values, any reparameterization is
     kipe's business.
 
-    The state must be complete: everything a time step depends on (e.g. previous time levels
+    The state must be complete: everything a time step depends on (e.g., previous time levels
     of a multistep scheme, states of lumped-parameter boundary models) is a field of the state,
     so that a step can be restarted from any given state.
     """
@@ -82,7 +82,7 @@ class ForwardSolver(Protocol):
     def nominal_parameters(self) -> Parameters:
         """Return the estimable parameters and their nominal values.
 
-        The nominal values are those the solver was configured with (e.g. by its input file
+        The nominal values are those the solver was configured with (e.g., by its input file
         or constructor). kipe uses the names to validate the parameters selected in a study,
         and the values as default initial guesses.
 
@@ -124,6 +124,6 @@ class ForwardSolver(Protocol):
             state at ``t1``, valid until the next call
 
         Raises:
-            ValueError: if ``t1`` cannot be reached exactly (e.g. not on a fixed time grid)
+            ValueError: if ``t1`` cannot be reached exactly (e.g., not on a fixed time grid)
         """
         ...
