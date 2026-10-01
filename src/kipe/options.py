@@ -19,7 +19,7 @@ from dataclasses import field
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from pydantic import ConfigDict, Field, TypeAdapter
+from pydantic import ConfigDict, Field, PositiveFloat, TypeAdapter
 from pydantic.dataclasses import dataclass
 from ruamel.yaml import YAML, YAMLError
 
@@ -58,6 +58,92 @@ class ForwardSolverOptions:
     """Keyword arguments passed to the factory, as given (no path resolution)."""
 
 
+type Reparameterization = Literal["log", "multiplicative", "additive"]
+
+
+@dataclass(frozen=True, config=_CONFIG)
+class ParameterPrior:
+    r"""Initial estimate of one estimated parameter and its uncertainty.
+
+    The two define the prior (Gaussian in the estimated parameter :math:`\theta`) and the
+    starting state of the filter: the standard deviation sets the initial size of the
+    sigma-point stencil used for the derivative-free linearization, and the initial weight
+    against the measurement noise.
+
+    ``log`` and ``multiplicative`` take a ``relative_stddev``, ``additive`` an absolute
+    ``stddev``.
+    """
+
+    initial: float | None = None
+    """Initial estimate (prior mean), as physical value. The solver's nominal value if not
+    given."""
+
+    relative_stddev: PositiveFloat | None = None
+    r"""Standard deviation relative to ``initial``, e.g., ``0.3`` for 30%. For ``log`` and
+    ``multiplicative``.
+
+    Converted to the standard deviation of :math:`\theta`, to first order around ``initial``:
+    :math:`\sigma_\theta` = ``relative_stddev`` / ln 2 for ``log``, :math:`\sigma_\theta` =
+    ``relative_stddev`` for ``multiplicative``. So both give the same prior as long as
+    ``relative_stddev`` is small. For large values they differ: ``log`` keeps the parameter
+    positive, at the price of an asymmetric distribution. ``kipe list-parameters`` shows the
+    resulting 1σ range."""
+
+    stddev: PositiveFloat | None = None
+    """Absolute standard deviation, in the parameter's physical unit. For ``additive``."""
+
+    reparameterization: Reparameterization | None = None
+    """Overrides the section's ``reparameterization`` for this parameter."""
+
+
+@dataclass(frozen=True, config=_CONFIG)
+class ParametersOptions:
+    """Selection, initial estimate and reparameterization of the estimated parameters.
+
+    ``kipe list-parameters`` shows the names the forward solver accepts.
+    """
+
+    reparameterization: Reparameterization
+    r"""How the estimated parameter :math:`\theta` relates to the physical value :math:`\phi`,
+    relative to the initial estimate :math:`\phi_0`. Default for all parameters in
+    ``select``, each can override it.
+
+    Available reparameterizations:
+
+    - ``log``: :math:`\phi = \phi_0 2^\theta`, starting at :math:`\theta = 0`, with a
+      ``relative_stddev``. Keeps :math:`\phi` positive; the initial estimate must be positive.
+    - ``multiplicative``: :math:`\phi = \phi_0 \theta`, starting at :math:`\theta = 1`, with
+      a ``relative_stddev``. The initial estimate must not be zero; :math:`\phi` can change
+      sign.
+    - ``additive``: :math:`\phi = \phi_0 + \theta`, starting at :math:`\theta = 0`, with an
+      absolute ``stddev``. :math:`\theta` is the deviation from the initial estimate, in the
+      parameter's physical unit. Accepts any initial estimate, including zero."""
+
+    select: Annotated[dict[str, ParameterPrior], Field(min_length=1)]
+    """Estimated parameters: parameter name -> initial estimate and uncertainty. All other
+    parameters keep their nominal values."""
+
+    def __post_init__(self) -> None:
+        """Check that each parameter has the standard deviation its reparameterization needs.
+
+        Raises:
+            ValueError: if a parameter gives the wrong kind of standard deviation, or none
+        """
+        for name, prior in self.select.items():
+            reparameterization = prior.reparameterization or self.reparameterization
+            if reparameterization == "additive":
+                if prior.stddev is None or prior.relative_stddev is not None:
+                    raise ValueError(
+                        f"select.{name}: 'additive' needs an absolute 'stddev' "
+                        "(and no 'relative_stddev')"
+                    )
+            elif prior.relative_stddev is None or prior.stddev is not None:
+                raise ValueError(
+                    f"select.{name}: '{reparameterization}' needs a 'relative_stddev' "
+                    "(and no 'stddev')"
+                )
+
+
 @dataclass(frozen=True, config=_CONFIG)
 class StudyOptions:
     """All sections of a study file."""
@@ -67,6 +153,9 @@ class StudyOptions:
 
     forward_solver: ForwardSolverOptions
     """Construction of the forward solver."""
+
+    parameters: ParametersOptions | None = None
+    """Estimated parameters."""
 
 
 def load_study(path: str | Path) -> StudyOptions:

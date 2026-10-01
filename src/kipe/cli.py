@@ -9,6 +9,7 @@ from pydantic import ValidationError
 
 from kipe.forward_solver import ForwardSolverError, build_forward_solver
 from kipe.options import StudyFileError, load_study
+from kipe.parameters import build_parameterization
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -43,11 +44,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     except (StudyFileError, ForwardSolverError) as err:  # user errors: no traceback
         print(f"kipe: error: {err}", file=sys.stderr)
         return 1
+
     return 0
 
 
 def _list_parameters(args: argparse.Namespace) -> None:
     """Print the solver's estimable parameters and their nominal values.
+
+    If the study file selects parameters, also print their initial estimate, standard
+    deviation and the resulting physical 1σ range.
 
     Args:
         args: parsed command line arguments, with the path to the study file
@@ -55,9 +60,41 @@ def _list_parameters(args: argparse.Namespace) -> None:
     study = load_study(args.study)
     solver = build_forward_solver(study.forward_solver)
     nominal = solver.nominal_parameters()
-    width = max(map(len, nominal), default=0)
+
+    selected: dict[str, tuple[str, str, str, str]] = {}
+
+    if study.parameters is not None:
+        parameterization = build_parameterization(study.parameters, nominal)
+        ranges = parameterization.one_sigma_range()
+
+        for parameter, (lower, upper) in zip(parameterization.parameters, ranges, strict=True):
+            prior = study.parameters.select[parameter.name]
+            if prior.relative_stddev is not None:
+                stddev = f"{prior.relative_stddev:.3g} (relative)"
+            else:
+                stddev = f"{prior.stddev:g}"
+
+            selected[parameter.name] = (
+                parameter.reparameterization,
+                f"{parameter.initial:g}",
+                stddev,
+                f"[{lower:.3g}, {upper:.3g}]",
+            )
+
+    rows: list[tuple[str, ...]] = [
+        ("parameter", "nominal", "reparameterization", "initial", "stddev", "1σ range")
+    ]
+
     for name, value in nominal.items():
-        print(f"{name:<{width}}  {value:g}")
+        rows.append((name, f"{value:g}", *selected.get(name, ("", "", "", ""))))
+
+    if not selected:
+        rows = [row[:2] for row in rows]
+
+    widths = [max(len(row[i]) for row in rows) for i in range(len(rows[0]))]
+    for row in rows:
+        cells = [cell.ljust(width) for cell, width in zip(row, widths, strict=True)]
+        print("  ".join(cells).rstrip())
 
 
 if __name__ == "__main__":

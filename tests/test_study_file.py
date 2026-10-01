@@ -105,7 +105,33 @@ def test_build_forward_solver_rejects_nonconforming(monkeypatch):
 
 def test_list_parameters(tmp_path, capsys):
     assert main(["list-parameters", str(_write(tmp_path, STUDY))]) == 0
-    assert capsys.readouterr().out.split() == ["a", "0.2", "b", "0.2", "c", "2.5"]
+    lines = capsys.readouterr().out.splitlines()
+    assert [line.split() for line in lines] == [
+        ["parameter", "nominal"],
+        ["a", "0.2"],
+        ["b", "0.2"],
+        ["c", "2.5"],
+    ]
+
+
+def test_list_parameters_shows_selection(tmp_path, capsys):
+    selection = """
+parameters:
+  reparameterization: multiplicative
+  select:
+    c: {relative_stddev: 0.5, initial: 3.0}
+    a: {reparameterization: additive, stddev: 0.1}
+"""
+    assert main(["list-parameters", str(_write(tmp_path, STUDY + selection))]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0].split() == [
+        "parameter", "nominal", "reparameterization", "initial", "stddev", "1σ", "range"
+    ]  # fmt: skip
+    assert lines[1].split() == ["a", "0.2", "additive", "0.2", "0.1", "[0.1,", "0.3]"]
+    assert lines[2].split() == ["b", "0.2"]
+    assert lines[3].split() == [
+        "c", "2.5", "multiplicative", "3", "0.5", "(relative)", "[1.5,", "4.5]"
+    ]  # fmt: skip
 
 
 def test_list_parameters_reports_errors(tmp_path, capsys):

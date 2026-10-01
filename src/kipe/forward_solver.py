@@ -29,7 +29,6 @@ def build_forward_solver(options: ForwardSolverOptions) -> ForwardSolver:
     _check_arguments(factory, options.factory, options.arguments)
 
     solver = factory(**options.arguments)
-
     _check_conformance(solver, options.factory)
 
     return solver
@@ -48,12 +47,14 @@ def _import_factory(path: str) -> Callable[..., Any]:
         ForwardSolverError: if the module or the name within it cannot be imported
     """
     module_name, name = path.split(":")
+
     try:
         module = importlib.import_module(module_name)
     except ImportError as err:
         raise ForwardSolverError(
             f"could not import forward solver factory {path!r}: {err}"
         ) from err
+
     try:
         factory: Callable[..., Any] = getattr(module, name)
     except AttributeError as err:
@@ -61,6 +62,7 @@ def _import_factory(path: str) -> Callable[..., Any]:
             f"could not import forward solver factory {path!r}: "
             f"module {module_name!r} has no attribute {name!r}"
         ) from err
+
     return factory
 
 
@@ -81,6 +83,7 @@ def _check_arguments(
         signature = inspect.signature(factory)
     except ValueError:  # no signature available (e.g., some builtins): let the call decide
         return
+
     try:
         signature.bind(**arguments)
     except TypeError as err:
