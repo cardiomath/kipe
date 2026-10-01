@@ -24,7 +24,7 @@ while roukf stays in use until kipe reaches parity.
 - **State:** named numpy fields, local to each MPI rank. Measurements refer to fields by name
   (`velocity`), not by index.
 - **Parameters:** the solver lists what can be estimated, with nominal values
-  (e.g. `fluid.bc4.R_d`). The kipe config selects parameters and sets the prior (std next to
+  (e.g., `fluid.bc4.R_d`). The kipe config selects parameters and sets the prior (std next to
   the reparameterization; optionally the initial guess). Today the prior is split across two
   files.
 - **Construction:** the input file names a `factory` (a class, or a function returning the
@@ -39,7 +39,7 @@ while roukf stays in use until kipe reaches parity.
 - **SpatialSampler:** samples the solver's fields at the measurement locations; depends on
   the solver: interpolation, voxelization, point evaluation, projections (component, surface
   normal). ("Spatial" as opposed to the temporal sampling given by the measurement times.)
-- **MeasurementModel:** the acquisition physics. `predict` is the signal model (e.g. MRI
+- **MeasurementModel:** the acquisition physics. `predict` is the signal model (e.g., MRI
   phase, FFT, mask); `innovation` is the comparison formula (plain difference, phase-based,
   complex).
 - **Observation operator** H = M ∘ S: measurement model after spatial sampling,

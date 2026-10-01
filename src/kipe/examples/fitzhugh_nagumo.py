@@ -40,9 +40,9 @@ class FieldSpec:
     field, the full size for a replicated one."""
 
     kind: Literal["distributed", "replicated"] = "replicated"
-    """``distributed``: each entry is owned by exactly one rank (e.g. the owned dofs of a finite
+    """``distributed``: each entry is owned by exactly one rank (e.g., the owned dofs of a finite
     element function).
-    ``replicated``: every rank holds the full, identical field (e.g. the state of FHN or a small
+    ``replicated``: every rank holds the full, identical field (e.g., the state of FHN or a small
     lumped-parameter model)."""
 
 
