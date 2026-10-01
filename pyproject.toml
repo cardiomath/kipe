@@ -40,7 +40,7 @@ check = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/dajuno/kipe"
+Homepage = "https://github.com/cardiomath/kipe"
 
 [tool.ruff]
 line-length = 97
