@@ -9,7 +9,7 @@ abstract: >-
   Kalman filtering (ROUKF), Fisher-information sensitivity analysis and synthetic
   observations, with an optional FEniCSx backend.
 license: MIT
-repository-code: "https://github.com/dajuno/kipe"   # TODO: update if moved to an organization
+repository-code: "https://github.com/cardiomath/kipe"   # TODO: update if moved to an organization
 keywords:
   - ROUKF
   - unscented Kalman filter
