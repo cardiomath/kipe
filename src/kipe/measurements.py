@@ -7,15 +7,12 @@ giving :math:`y`; a :class:`MeasurementModel` predicts the data from it,
 innovation :math:`\Gamma(z, \hat{z})`. Models act on arrays only, so they are the same for
 every backend.
 
-At each assimilation time, a measurement is passed around as a :class:`MeasurementSnapshot`.
-
 To add a model: subclass :class:`MeasurementModel`, implement both methods, add its options
 to :mod:`kipe.options` and a ``case`` to :func:`build_model`.
 """
 
 import math
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -24,40 +21,32 @@ from kipe._types import NDArray_f64
 from kipe.options import DifferenceModelOptions, StudyFileError, TimeRange
 
 
-@dataclass(frozen=True)
-class MeasurementSnapshot:
-    """A measurement at one assimilation time."""
-
-    # NOTE: this class is going to be extended by auxiliary/additional data, like pcmri
-    # (background phase), or geometry data
-
-    z: NDArray_f64
-    """Measured data, in the measurement space (e.g., values at the measurement locations)."""
-
-
 class MeasurementModel(ABC):
     """Turns sampled model fields into predicted data and compares them with the measurement."""
 
+    # NOTE: a measurement context (time-dependent geometry, auxiliary data such as the magnitude
+    # or background phase of PC-MRI) is expected soon. It becomes an additional argument of
+    # both methods, e.g., `context: MeasurementContext` (see PLAN.md, "Measurement context").
+
     @abstractmethod
-    def predict(self, y: NDArray_f64, m: MeasurementSnapshot) -> NDArray_f64:
+    def predict(self, y: NDArray_f64) -> NDArray_f64:
         r"""Predict the measured data from the sampled state, :math:`\hat{z} = M(y)`.
 
         Args:
             y: sampled state :math:`y`, as returned by
                 :meth:`kipe.sampling.SpatialSampler.sample`
-            m: the measurement at the current assimilation time
 
         Returns:
             predicted data :math:`\hat{z}`, in the measurement space
         """
 
     @abstractmethod
-    def innovation(self, z_hat: NDArray_f64, m: MeasurementSnapshot) -> NDArray_f64:
+    def innovation(self, z_hat: NDArray_f64, z: NDArray_f64) -> NDArray_f64:
         r"""Compare predicted and measured data, :math:`\Gamma(z, \hat{z})`.
 
         Args:
             z_hat: predicted data :math:`\hat{z}`, as returned by :meth:`predict`
-            m: the measurement at the current assimilation time
+            z: measured data at the current assimilation time, in the measurement space
 
         Returns:
             innovation, before weighting with the measurement noise
@@ -69,29 +58,28 @@ class DifferenceModel(MeasurementModel):
     :math:`\Gamma = z - \hat{z}`.
     """
 
-    def predict(self, y: NDArray_f64, m: MeasurementSnapshot) -> NDArray_f64:
+    def predict(self, y: NDArray_f64) -> NDArray_f64:
         """Return the sampled fields as predicted data.
 
         Args:
             y: sampled state
-            m: the measurement at the current assimilation time (unused)
 
         Returns:
             ``y``
         """
         return y
 
-    def innovation(self, z_hat: NDArray_f64, m: MeasurementSnapshot) -> NDArray_f64:
+    def innovation(self, z_hat: NDArray_f64, z: NDArray_f64) -> NDArray_f64:
         """Return measured minus predicted data.
 
         Args:
             z_hat: predicted data
-            m: the measurement at the current assimilation time
+            z: measured data
 
         Returns:
-            ``m.z - z_hat``
+            ``z - z_hat``
         """
-        return m.z - z_hat
+        return z - z_hat
 
 
 def build_model(options: DifferenceModelOptions) -> MeasurementModel:

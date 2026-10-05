@@ -6,7 +6,6 @@ import pytest
 from kipe.measurements import (
     DifferenceModel,
     MeasurementModel,
-    MeasurementSnapshot,
     build_model,
     measurement_times,
     read_numpy,
@@ -15,23 +14,22 @@ from kipe.measurements import (
 from kipe.options import ArraySamplingOptions, DifferenceModelOptions, StudyFileError, TimeRange
 from kipe.sampling import ArraySampler, SpatialSampler, build_sampler
 
-SNAPSHOT = MeasurementSnapshot(z=np.array([1.0, 2.0, 3.0]))
-
 
 def test_difference_model():
     model = build_model(DifferenceModelOptions())
     assert isinstance(model, DifferenceModel)
-    z_hat = model.predict(np.array([0.5, 2.0, 4.0]), SNAPSHOT)
+    z_hat = model.predict(np.array([0.5, 2.0, 4.0]))
     np.testing.assert_array_equal(z_hat, [0.5, 2.0, 4.0])
-    np.testing.assert_array_equal(model.innovation(z_hat, SNAPSHOT), [0.5, 0.0, -1.0])
+    z = np.array([1.0, 2.0, 3.0])
+    np.testing.assert_array_equal(model.innovation(z_hat, z), [0.5, 0.0, -1.0])
 
 
 def test_incomplete_model_cannot_be_instantiated():
     """A model missing a method fails on instantiation, not deep inside the filter."""
 
     class InnovationOnly(MeasurementModel):
-        def innovation(self, y, m):
-            return y
+        def innovation(self, z_hat, z):
+            return z - z_hat
 
     with pytest.raises(TypeError, match="predict"):
         InnovationOnly()
@@ -41,13 +39,13 @@ def test_array_sampler_concatenates_in_order_of_fields():
     sampler = build_sampler(ArraySamplingOptions(), ["w", "v"])
     assert isinstance(sampler, ArraySampler)
     fields = {"v": np.array([1.0]), "w": np.array([2.0, 3.0])}
-    np.testing.assert_array_equal(sampler.sample(fields, SNAPSHOT), [2.0, 3.0, 1.0])
+    np.testing.assert_array_equal(sampler.sample(fields), [2.0, 3.0, 1.0])
 
 
 def test_array_sampler_returns_a_new_array():
     """The filter keeps sampled states while the fields' arrays may be reused."""
     v = np.array([1.0, 2.0])
-    y = ArraySampler(["v"]).sample({"v": v}, SNAPSHOT)
+    y = ArraySampler(["v"]).sample({"v": v})
     v[:] = 0.0
     np.testing.assert_array_equal(y, [1.0, 2.0])
 
