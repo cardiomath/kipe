@@ -26,8 +26,8 @@ from typing import Literal
 import numpy as np
 import numpy.typing as npt
 
-type NDArray64 = npt.NDArray[np.float64]
-type State = dict[str, NDArray64]
+type NDArray_f64 = npt.NDArray[np.float64]
+type State = dict[str, NDArray_f64]
 type Parameters = dict[str, float]
 
 
@@ -139,7 +139,7 @@ class Solver:
     # model
 
     @staticmethod
-    def _rhs(x: NDArray64, a: float, b: float, c: float) -> NDArray64:
+    def _rhs(x: NDArray_f64, a: float, b: float, c: float) -> NDArray_f64:
         r"""Evaluate the right-hand side of the FitzHugh-Nagumo equations.
 
         Args:
@@ -154,7 +154,7 @@ class Solver:
         v, w = x
         return np.array([c * (v - v**3 / 3 + w), -(v - a + b * w) / c])
 
-    def _rk4_step(self, x: NDArray64, parameters: Parameters) -> NDArray64:
+    def _rk4_step(self, x: NDArray_f64, parameters: Parameters) -> NDArray_f64:
         """Perform one classical RK4 step of size ``dt``.
 
         Args:

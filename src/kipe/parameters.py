@@ -10,7 +10,7 @@ from typing import Self, assert_never
 import numpy as np
 
 from kipe.options import ParametersOptions, Reparameterization, StudyFileError
-from kipe.protocols import NDArray64, Parameters
+from kipe.protocols import NDArray_f64, Parameters
 
 
 @dataclass(frozen=True)
@@ -95,7 +95,7 @@ class Parameterization:
         """Names of the estimated parameters."""
         return [parameter.name for parameter in self.parameters]
 
-    def stddev_theta(self) -> NDArray64:
+    def stddev_theta(self) -> NDArray_f64:
         r"""Return the initial standard deviations of :math:`\theta`.
 
         Returns:
@@ -103,7 +103,7 @@ class Parameterization:
         """
         return np.array([parameter.stddev_theta for parameter in self.parameters])
 
-    def initial_theta(self) -> NDArray64:
+    def initial_theta(self) -> NDArray_f64:
         r"""Return the initial :math:`\theta`, which maps to the initial estimates.
 
         Returns:
@@ -111,7 +111,7 @@ class Parameterization:
         """
         return np.array([parameter.initial_theta() for parameter in self.parameters])
 
-    def to_physical(self, theta: NDArray64) -> Parameters:
+    def to_physical(self, theta: NDArray_f64) -> Parameters:
         r"""Map :math:`\theta` to physical values, as passed to the forward solver.
 
         Args:
@@ -125,7 +125,7 @@ class Parameterization:
             for parameter, value in zip(self.parameters, theta, strict=True)
         }
 
-    def recenter(self, theta: NDArray64) -> Self:
+    def recenter(self, theta: NDArray_f64) -> Self:
         r"""Return the parameterization with the initial estimates moved to ``theta``.
 
         Used between outer iterations: the next pass starts from the estimate, with the
