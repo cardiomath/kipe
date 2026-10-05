@@ -10,6 +10,7 @@ section            content                                              read by
 ``forward_solver`` how to construct the forward solver                  all
 ``parameters``     estimated parameters, initial estimate, uncertainty  estimation
 ``measurements``   observed fields, data, sampling, model, noise        estimation, synthesis
+``synthesis``      source of the true state                             synthesis
 ================== ==================================================== =====================
 
 See ``examples/fitzhugh_nagumo/study.yaml`` for a complete study file.
@@ -204,6 +205,11 @@ class NoiseOptions:
     stddev: PositiveFloat
     """Standard deviation of the noise, in the unit of the data."""
 
+    seed: Annotated[int, Field(ge=0)] | None = None
+    """Seed of the noise added by ``synthesis`` (required there). The noise of the k-th time
+    of the measurement is drawn from ``numpy.random.default_rng([seed, k])``, so it does not
+    depend on the other times. Measurements must have different seeds."""
+
 
 @dataclass(frozen=True, config=_CONFIG)
 class MeasurementOptions:
@@ -231,6 +237,22 @@ class MeasurementOptions:
 
 
 @dataclass(frozen=True, config=_CONFIG)
+class RunTruthOptions:
+    """Generate the data by running the forward solver with its nominal parameters."""
+
+    type: Literal["run"] = "run"
+    """Source of the true state."""
+
+
+@dataclass(frozen=True, config=_CONFIG)
+class SynthesisOptions:
+    """Generation of synthetic measurement data."""
+
+    truth: RunTruthOptions = field(default_factory=RunTruthOptions)
+    """Source of the true state the data are generated from."""
+
+
+@dataclass(frozen=True, config=_CONFIG)
 class StudyOptions:
     """All sections of a study file."""
 
@@ -245,6 +267,27 @@ class StudyOptions:
 
     measurements: Annotated[dict[str, MeasurementOptions], Field(min_length=1)] | None = None
     """Measurements: name -> measurement. The names appear in logs, output and errors."""
+
+    synthesis: SynthesisOptions = field(default_factory=SynthesisOptions)
+    """Generation of synthetic measurement data."""
+
+    def __post_init__(self) -> None:
+        """Check that measurements do not share a noise seed.
+
+        Raises:
+            ValueError: if two measurements have the same noise seed
+        """
+        seeds: dict[int, str] = {}
+        for name, measurement in (self.measurements or {}).items():
+            seed = measurement.noise.seed
+            if seed is None:
+                continue
+            if seed in seeds:
+                raise ValueError(
+                    f"measurements {seeds[seed]} and {name} share the noise seed {seed}, "
+                    "their noise would be identical"
+                )
+            seeds[seed] = name
 
 
 def load_study(path: str | Path) -> StudyOptions:
