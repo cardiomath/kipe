@@ -47,7 +47,7 @@ class ForwardSolverOptions:
 
     kipe imports ``factory`` and calls it with ``arguments`` as keyword arguments. The factory
     can be a class or a function; it must return an object that conforms to
-    :class:`kipe.protocols.ForwardSolver`.
+    :class:`kipe.forward_solver.ForwardSolver`.
     """
 
     factory: Annotated[str, Field(pattern=r"^[\w.]+:\w+$")]
