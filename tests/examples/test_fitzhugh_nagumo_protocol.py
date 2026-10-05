@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 from kipe.examples.fitzhugh_nagumo import Solver
-from kipe.protocols import ForwardSolver
+from kipe.forward_solver import ForwardSolver
 
 DT = 0.05
 

@@ -9,8 +9,9 @@ from typing import Self, assert_never
 
 import numpy as np
 
+from kipe._types import NDArray_f64
+from kipe.forward_solver import Parameters
 from kipe.options import ParametersOptions, Reparameterization, StudyFileError
-from kipe.protocols import NDArray_f64, Parameters
 
 
 @dataclass(frozen=True)
