@@ -51,7 +51,7 @@ class ForwardSolver(Protocol):
     """Forward model as seen by kipe.
 
     From kipe's point of view the solver is stateless: state, parameters and time are passed
-    in on every call of :meth:`~.timestep`/:meth:`~.propagate` and results are returned.
+    in on every call of :meth:`~.propagate` and results are returned.
     Whatever the solver keeps internally (meshes, assembled operators, parameter objects it
     updates in place) must not make a call's result depend on previous calls.
 
@@ -94,21 +94,6 @@ class ForwardSolver(Protocol):
 
         Returns:
             parameter name -> nominal physical value dict (a new dict that the caller may modify)
-        """
-        ...
-
-    def timestep(self, t0: float, state: State, parameters: Parameters) -> tuple[float, State]:
-        """Advance the state by one step of the solver's own choosing.
-
-        Args:
-            t0: time of ``state``
-            state: state at ``t0`` (handed over, may be modified or reused)
-            parameters: physical values of the selected parameters, applied for this call.
-                Parameters not in ``parameters`` keep their nominal values.
-
-        Returns:
-            - time ``t1`` reached by the step
-            - state at ``t1``, valid until the next call
         """
         ...
 
