@@ -3,16 +3,16 @@
 A study file is a YAML file with one section per concern. Each subcommand reads the sections
 it needs. Relative paths are relative to the working directory kipe is run from.
 
-Example:
+================== ==================================================== =====================
+section            content                                              read by
+================== ==================================================== =====================
+``output``         result directory, logging                            all
+``forward_solver`` how to construct the forward solver                  all
+``parameters``     estimated parameters, initial estimate, uncertainty  estimation
+``measurements``   observed fields, data, sampling, model, noise        estimation, synthesis
+================== ==================================================== =====================
 
-.. code-block:: yaml
-
-    output:
-      path: results/fhn
-
-    forward_solver:
-      factory: "kipe.examples.fitzhugh_nagumo:Solver"
-      arguments: {dt: 0.05}
+See ``examples/fitzhugh_nagumo/study.yaml`` for a complete study file.
 """
 
 from dataclasses import field
@@ -145,6 +145,92 @@ class ParametersOptions:
 
 
 @dataclass(frozen=True, config=_CONFIG)
+class TimeRange:
+    """Equidistant times from ``start`` to ``stop``, both included."""
+
+    start: float
+    """First time."""
+
+    stop: float
+    """Last time, included (up to round-off)."""
+
+    step: PositiveFloat
+    """Distance between successive times."""
+
+    def __post_init__(self) -> None:
+        """Check that the range is not empty.
+
+        Raises:
+            ValueError: if ``stop`` is before ``start``
+        """
+        if self.stop < self.start:
+            raise ValueError(f"stop = {self.stop} is before start = {self.start}")
+
+
+@dataclass(frozen=True, config=_CONFIG)
+class NumpyDataOptions:
+    """Measurement data in a numpy ``.npz`` file.
+
+    The file holds the arrays ``times`` (n,) and ``values`` (n, m): m values at each of n times.
+    """
+
+    type: Literal["numpy"]
+    """Data format."""
+
+    path: str
+    """Path to the ``.npz`` file."""
+
+
+@dataclass(frozen=True, config=_CONFIG)
+class ArraySamplingOptions:
+    """Sample all entries of the observed fields, concatenated in the order of ``fields``."""
+
+    type: Literal["array"] = "array"
+    """Kind of spatial sampling."""
+
+
+@dataclass(frozen=True, config=_CONFIG)
+class DifferenceModelOptions:
+    """Measured data are the sampled fields; innovation = measured - predicted."""
+
+    type: Literal["difference"] = "difference"
+    """Kind of measurement model."""
+
+
+@dataclass(frozen=True, config=_CONFIG)
+class NoiseOptions:
+    """Measurement noise: assumed by ``estimation``, added by ``synthesis``."""
+
+    stddev: PositiveFloat
+    """Standard deviation of the noise, in the unit of the data."""
+
+
+@dataclass(frozen=True, config=_CONFIG)
+class MeasurementOptions:
+    """One measurement: which fields it observes, its data, and how to compare them."""
+
+    fields: Annotated[list[str], Field(min_length=1)]
+    """State fields the measurement observes."""
+
+    data: NumpyDataOptions
+    """Where the measured data are: read by ``estimation``, written by ``synthesis``."""
+
+    noise: NoiseOptions
+    """Measurement noise."""
+
+    times: list[float] | TimeRange | None = None
+    """Measurement times: a list or a range. Required by ``synthesis`` (the times to
+    generate); for ``estimation`` a selection from the times in the data, all if not
+    given."""
+
+    spatial_sampling: ArraySamplingOptions = field(default_factory=ArraySamplingOptions)
+    """How the observed fields are brought to the measurement locations."""
+
+    model: DifferenceModelOptions = field(default_factory=DifferenceModelOptions)
+    """How predicted data are computed from the sampled fields and compared with the data."""
+
+
+@dataclass(frozen=True, config=_CONFIG)
 class StudyOptions:
     """All sections of a study file."""
 
@@ -156,6 +242,9 @@ class StudyOptions:
 
     parameters: ParametersOptions | None = None
     """Estimated parameters."""
+
+    measurements: Annotated[dict[str, MeasurementOptions], Field(min_length=1)] | None = None
+    """Measurements: name -> measurement. The names appear in logs, output and errors."""
 
 
 def load_study(path: str | Path) -> StudyOptions:
