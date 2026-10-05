@@ -19,8 +19,7 @@ while roukf stays in use until kipe reaches parity.
 
 ## Forward solver interface
 
-- **Stateless calls:** `initial_state()`, `propagate(t0, t1, state, θ)`,
-  `timestep(t0, state, θ)`.
+- **Stateless calls:** `initial_state()`, `propagate(t0, t1, state, θ)`.
 - **State:** named numpy fields, local to each MPI rank. Measurements refer to fields by name
   (`velocity`), not by index.
 - **Parameters:** the solver lists what can be estimated, with nominal values

@@ -32,7 +32,7 @@ def reference():
 
 
 def _max_error(dt: float, reference) -> float:
-    """Maximum error of the RK4 solution over all time steps, stepping via ``timestep``."""
+    """Maximum error of the RK4 solution over all time steps, stepping via ``propagate``."""
     a, b, c = PARAMETERS
     v0, w0 = INITIAL_STATE
     solver = Solver(dt=dt, v0=v0, w0=w0, a=a, b=b, c=c)
@@ -40,7 +40,8 @@ def _max_error(dt: float, reference) -> float:
     t, state = solver.initial_state()
     times, states = [t], [[state["v"][0], state["w"][0]]]
     for _ in range(round(T / dt)):
-        t, state = solver.timestep(t, state, {})
+        state = solver.propagate(t, t + dt, state, {})
+        t += dt
         times.append(t)
         states.append([state["v"][0], state["w"][0]])
 

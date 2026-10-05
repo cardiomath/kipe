@@ -98,22 +98,6 @@ class Solver:
         v0, w0 = self._x0
         return 0.0, {"v": np.array([v0]), "w": np.array([w0])}
 
-    def timestep(self, t0: float, state: State, parameters: Parameters) -> tuple[float, State]:
-        """Perform one RK4 step from ``(t0, state)``.
-
-        Args:
-            t0: time of ``state``
-            state: state at ``t0``
-            parameters: parameter values for this step, overriding the nominal values
-
-        Returns:
-            - time ``t1 = t0 + dt``
-            - state at ``t1``
-        """
-        x = np.array([state["v"][0], state["w"][0]])
-        x = self._rk4_step(x, self._nominal | parameters)
-        return t0 + self._dt, {"v": x[0:1], "w": x[1:2]}
-
     def propagate(self, t0: float, t1: float, state: State, parameters: Parameters) -> State:
         """Propagate the state from ``t0`` to ``t1`` with RK4 steps.
 
@@ -132,9 +116,11 @@ class Solver:
         n = round((t1 - t0) / self._dt)
         if n < 1 or not np.isclose(t0 + n * self._dt, t1, rtol=0, atol=1e-12 * max(1, abs(t1))):
             raise ValueError(f"cannot reach t1 = {t1} from t0 = {t0} with dt = {self._dt}")
+        x = np.array([state["v"][0], state["w"][0]])
+        merged = self._nominal | parameters
         for _ in range(n):
-            t0, state = self.timestep(t0, state, parameters)
-        return state
+            x = self._rk4_step(x, merged)
+        return {"v": x[0:1], "w": x[1:2]}
 
     # model
 

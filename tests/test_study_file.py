@@ -98,7 +98,7 @@ def test_build_forward_solver_rejects_nonconforming(monkeypatch):
         build_forward_solver(ForwardSolverOptions("fake_solvers:IncompleteSolver"))
 
     message = str(excinfo.value)
-    for name in ["initial_state", "propagate", "state_spec", "timestep"]:
+    for name in ["initial_state", "propagate", "state_spec"]:
         assert name in message
     assert "nominal_parameters" not in message
 
