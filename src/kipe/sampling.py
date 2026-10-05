@@ -16,20 +16,22 @@ from collections.abc import Mapping
 import numpy as np
 
 from kipe._types import NDArray_f64
-from kipe.measurements import MeasurementSnapshot
 from kipe.options import ArraySamplingOptions
 
 
 class SpatialSampler(ABC):
     """Evaluates the model fields at the measurement locations."""
 
+    # NOTE: a measurement context (time-dependent geometry, auxiliary data such as the magnitude
+    # or background phase of PC-MRI) is expected soon. It becomes an additional argument of
+    # this method, e.g., `context: MeasurementContext` (see PLAN.md, "Measurement context").
+
     @abstractmethod
-    def sample(self, fields: Mapping[str, NDArray_f64], m: MeasurementSnapshot) -> NDArray_f64:
+    def sample(self, fields: Mapping[str, NDArray_f64]) -> NDArray_f64:
         r"""Evaluate the model fields at the measurement locations.
 
         Args:
             fields: the state fields the measurement observes (its ``fields``), rank-local
-            m: the measurement at the current correction time
 
         Returns:
             sampled state :math:`y`, rank-local; a new array, not a view of ``fields``
@@ -47,12 +49,11 @@ class ArraySampler(SpatialSampler):
     def __init__(self, fields: list[str]) -> None:
         self._fields = fields
 
-    def sample(self, fields: Mapping[str, NDArray_f64], m: MeasurementSnapshot) -> NDArray_f64:
+    def sample(self, fields: Mapping[str, NDArray_f64]) -> NDArray_f64:
         """Concatenate the observed fields.
 
         Args:
             fields: the observed state fields
-            m: the measurement at the current correction time (unused)
 
         Returns:
             all entries of the fields, concatenated (a new array)
