@@ -11,8 +11,8 @@ from typing import Literal, Protocol, runtime_checkable
 import numpy as np
 import numpy.typing as npt
 
-type NDArray64 = npt.NDArray[np.float64]
-type State = dict[str, NDArray64]
+type NDArray_f64 = npt.NDArray[np.float64]
+type State = dict[str, NDArray_f64]
 """Model state as named fields: field name -> rank-local array of the field state"""
 type Parameters = dict[str, float]
 """Parameter name -> physical value."""
