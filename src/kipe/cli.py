@@ -1,6 +1,7 @@
 """Command line interface: ``kipe <subcommand> study.yaml``."""
 
 import argparse
+import logging
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -10,6 +11,7 @@ from pydantic import ValidationError
 from kipe.forward_solver import ForwardSolverError, build_forward_solver
 from kipe.options import StudyFileError, load_study
 from kipe.parameters import build_parameterization
+from kipe.synthesis import synthesize
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -30,6 +32,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     list_parameters.add_argument("study", type=Path, help="study file (YAML)")
     list_parameters.set_defaults(func=_list_parameters)
+
+    synthesis = subparsers.add_parser(
+        "synthesis",
+        aliases=["synthesize"],
+        help="generate synthetic measurement data from a forward run",
+    )
+    synthesis.add_argument("study", type=Path, help="study file (YAML)")
+    synthesis.set_defaults(func=_synthesis)
 
     args = parser.parse_args(argv)
 
@@ -95,6 +105,31 @@ def _list_parameters(args: argparse.Namespace) -> None:
     for row in rows:
         cells = [cell.ljust(width) for cell, width in zip(row, widths, strict=True)]
         print("  ".join(cells).rstrip())
+
+
+def _synthesis(args: argparse.Namespace) -> None:
+    """Generate the measurement data of the study.
+
+    Args:
+        args: parsed command line arguments, with the path to the study file
+    """
+    study = load_study(args.study)
+    _setup_logging(study.output.log_level)
+    synthesize(study)
+
+
+def _setup_logging(level: str) -> None:
+    """Send kipe's log messages to stderr.
+
+    Args:
+        level: minimum level of the messages, e.g., ``"info"``
+    """
+    logger = logging.getLogger("kipe")
+    if not logger.handlers:  # main() may run several times in one process, e.g., in tests
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("kipe: %(message)s"))
+        logger.addHandler(handler)
+    logger.setLevel(level.upper())
 
 
 if __name__ == "__main__":

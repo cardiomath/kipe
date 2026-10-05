@@ -1,0 +1,32 @@
+# FitzHugh-Nagumo twin experiment. Run from this directory:
+#   kipe synthesis study.yaml     # generates data/v.npz, data/w.npz with the nominal parameters
+#   kipe estimation study.yaml    # estimates a, b, c from them, starting from a wrong guess
+
+output:
+  path: results
+
+forward_solver:
+  factory: "kipe.examples.fitzhugh_nagumo:Solver"
+  arguments: {dt: 0.05}             # nominal (true) parameters: a = 0.2, b = 0.2, c = 3
+
+parameters:
+  reparameterization: log
+  select:
+    a: {initial: 0.3, relative_stddev: 0.5}
+    b: {initial: 0.3, relative_stddev: 0.5}
+    c: {initial: 2.0, relative_stddev: 0.5}
+
+measurements:
+  v:
+    fields: [v]
+    times: {start: 0.5, stop: 20.0, step: 0.5}
+    data: {type: numpy, path: data/v.npz}
+    noise: {stddev: 0.05, seed: 0}
+  w:
+    fields: [w]
+    times: {start: 0.5, stop: 20.0, step: 0.5}
+    data: {type: numpy, path: data/w.npz}
+    noise: {stddev: 0.05, seed: 1}
+
+synthesis:
+  truth: {type: run}                # run the solver with its nominal parameters (the default)
