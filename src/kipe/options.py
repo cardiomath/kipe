@@ -257,6 +257,25 @@ type Particles = Literal["simplex", "canonical", "star", "unique"]
 
 
 @dataclass(frozen=True, config=_CONFIG)
+class EstimationOptions:
+    """Parameter estimation with the reduced-order unscented Kalman filter (ROUKF)."""
+
+    particles: Particles = "simplex"
+    r"""Sigma-point stencil, the pattern along which the estimates are perturbed:
+
+    - ``simplex``: :math:`p + 1` sigma points, the cheapest.
+    - ``canonical``: :math:`2p` sigma points, :math:`\pm` along each parameter.
+    - ``star``: the canonical points and the center, :math:`2p + 1` sigma points.
+    - ``unique``: one sigma point at the estimate, no spread: no correction. A sanity check
+      of the whole pipeline (with the true parameters, the innovations are pure noise).
+    """
+
+    iterations: Annotated[int, Field(ge=1)] = 1
+    """Number of passes over the measurements. Each pass after the first starts from the
+    previous estimate, with the initial uncertainty."""
+
+
+@dataclass(frozen=True, config=_CONFIG)
 class StudyOptions:
     """All sections of a study file."""
 
@@ -274,6 +293,9 @@ class StudyOptions:
 
     synthesis: SynthesisOptions = field(default_factory=SynthesisOptions)
     """Generation of synthetic measurement data."""
+
+    estimation: EstimationOptions = field(default_factory=EstimationOptions)
+    """Parameter estimation."""
 
     def __post_init__(self) -> None:
         """Check that measurements do not share a noise seed.

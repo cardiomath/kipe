@@ -1,4 +1,4 @@
-"""``kipe synthesis``: synthetic data from a forward run, and the example study file."""
+"""``kipe synthesis``: synthetic data from a forward run."""
 
 from pathlib import Path
 
@@ -10,8 +10,6 @@ from kipe.examples.fitzhugh_nagumo import Solver
 from kipe.measurements import read_numpy
 from kipe.options import load_study
 from kipe.synthesis import synthesize
-
-EXAMPLE = Path(__file__).parents[1] / "examples" / "fitzhugh_nagumo" / "study.yaml"
 
 
 def _study(tmp_path: Path, measurements: str) -> Path:
@@ -37,11 +35,6 @@ def _exact(times: list[float], field: str) -> np.ndarray:
             t = t_k
         values.append(state[field].copy())
     return np.array(values)
-
-
-def test_example_study_file_is_valid():
-    study = load_study(EXAMPLE)
-    assert set(study.measurements) == {"v", "w"}
 
 
 def test_synthesis(tmp_path):

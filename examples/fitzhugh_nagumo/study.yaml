@@ -12,21 +12,25 @@ forward_solver:
 parameters:
   reparameterization: log
   select:
-    a: {initial: 0.3, relative_stddev: 0.5}
-    b: {initial: 0.3, relative_stddev: 0.5}
-    c: {initial: 2.0, relative_stddev: 0.5}
+    a: {initial: 0.3, relative_stddev: 0.1}
+    b: {initial: 0.3, relative_stddev: 0.1}
+    c: {initial: 2.0, relative_stddev: 0.1}
 
 measurements:
   v:
     fields: [v]
     times: {start: 0.5, stop: 20.0, step: 0.5}
     data: {type: numpy, path: data/v.npz}
-    noise: {stddev: 0.05, seed: 0}
+    noise: {stddev: 0.01, seed: 0}
   w:
     fields: [w]
     times: {start: 0.5, stop: 20.0, step: 0.5}
     data: {type: numpy, path: data/w.npz}
-    noise: {stddev: 0.05, seed: 1}
+    noise: {stddev: 0.01, seed: 1}
 
 synthesis:
   truth: {type: run}                # run the solver with its nominal parameters (the default)
+
+estimation:
+  particles: simplex
+  iterations: 5                     # outer iterations: restart from the previous estimate
