@@ -9,6 +9,7 @@ from kipe.cli import main
 from kipe.examples.fitzhugh_nagumo import Solver
 from kipe.measurements import read_numpy
 from kipe.options import load_study
+from kipe.synthesis import synthesize
 
 EXAMPLE = Path(__file__).parents[1] / "examples" / "fitzhugh_nagumo" / "study.yaml"
 
@@ -72,6 +73,25 @@ def test_synthesis(tmp_path):
             np.random.default_rng([seed, k]).normal(0.0, stddev, 1) for k in range(len(times))
         ])
         np.testing.assert_allclose(values, _exact(times, name) + noise, atol=1e-12)
+
+
+def test_synthesize_returns_the_written_measurements(tmp_path):
+    study = _study(
+        tmp_path,
+        f"""\
+  v:
+    fields: [v]
+    times: [0.5, 1.0]
+    data: {{type: numpy, path: {tmp_path / "v.npz"}}}
+    noise: {{stddev: 0.1, seed: 0}}
+""",
+    )
+    (measurement,) = synthesize(load_study(study))
+    times, values = read_numpy(tmp_path / "v.npz")
+    assert measurement.name == "v"
+    assert measurement.stddev == pytest.approx(0.1)
+    np.testing.assert_array_equal(measurement.times, times)
+    np.testing.assert_array_equal(measurement.values, values)
 
 
 def test_synthesize_alias(tmp_path):

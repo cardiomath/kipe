@@ -1,17 +1,25 @@
-"""Measurement models, numpy data, measurement times and spatial samplers."""
+"""Measurement models, observation operators, numpy data, measurement times and samplers."""
 
 import numpy as np
 import pytest
 
+from kipe.examples.fitzhugh_nagumo import Solver
 from kipe.measurements import (
     DifferenceModel,
     MeasurementModel,
     build_model,
+    build_observation_operator,
     measurement_times,
     read_numpy,
     write_numpy,
 )
-from kipe.options import ArraySamplingOptions, DifferenceModelOptions, StudyFileError, TimeRange
+from kipe.options import (
+    ArraySamplingOptions,
+    DifferenceModelOptions,
+    MeasurementOptions,
+    StudyFileError,
+    TimeRange,
+)
 from kipe.sampling import ArraySampler, SpatialSampler, build_sampler
 
 
@@ -92,3 +100,25 @@ def test_read_numpy_errors(tmp_path):
     np.savez(tmp_path / "mismatch.npz", times=np.zeros(2), values=np.zeros((3, 1)))
     with pytest.raises(StudyFileError, match="expected times"):
         read_numpy(tmp_path / "mismatch.npz")
+
+
+def _options(fields: list[str]) -> MeasurementOptions:
+    return MeasurementOptions(
+        fields=fields,
+        data={"type": "numpy", "path": "unused.npz"},
+        noise={"stddev": 0.1},
+    )
+
+
+def test_observation_operator_samples_and_predicts():
+    """H(state): the observed fields, sampled (array) and predicted (difference: unchanged)."""
+    operator = build_observation_operator("vw", _options(["w", "v"]), Solver().state_spec)
+    state = {"v": np.array([1.0]), "w": np.array([2.0])}
+    np.testing.assert_array_equal(operator(state), [2.0, 1.0])
+
+
+def test_observation_operator_unknown_field():
+    with pytest.raises(
+        StudyFileError, match=r"measurements\.u: the forward solver has no field u"
+    ):
+        build_observation_operator("u", _options(["u"]), Solver().state_spec)
