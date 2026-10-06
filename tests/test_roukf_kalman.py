@@ -47,28 +47,21 @@ def _roukf_step(kind, x0, theta0, stddev, propagate, observe, z, noise):
         - parameter covariance, shape ``(p, p)``
     """
     stencil = roukf.sigma_point_stencil(kind, len(theta0))
-    L_x, L_theta, U_inv = roukf.initial_factors(stddev, len(x0), stencil)
+    state = roukf.initial_state(x0, theta0, stddev, stencil)
 
     # 1. sampling
-    x_sigma, theta_sigma = roukf.sample(x0, theta0, L_x, L_theta, U_inv, stencil)
+    x_sigma, theta_sigma = roukf.sample(state, stencil)
 
-    # 2. prediction: propagate the sigma points, then average
+    # 2. propagation
     x_sigma = propagate(x_sigma, theta_sigma)
-    x_prior = roukf.mean(x_sigma, stencil)
-    theta_prior = roukf.mean(theta_sigma, stencil)
 
     # 3. innovations, weighted with the noise
     Gamma = (z[:, np.newaxis] - observe(x_sigma, theta_sigma)) / noise
 
     # 4. correction
-    L_x = roukf.sensitivity(x_sigma, stencil)
-    L_theta = roukf.sensitivity(theta_sigma, stencil)
-    U_inv, M = roukf.gain(Gamma, stencil, MPI.COMM_WORLD)
+    state = roukf.update(x_sigma, theta_sigma, Gamma, stencil, MPI.COMM_WORLD)
 
-    x = roukf.correct(x_prior, L_x, M)
-    theta = roukf.correct(theta_prior, L_theta, M)
-
-    return x, theta, roukf.covariance(L_theta, U_inv)
+    return state.x, state.theta, state.covariance()
 
 
 def _kalman_update(theta0, P0, H, z, noise):

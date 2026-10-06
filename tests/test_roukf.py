@@ -35,32 +35,33 @@ def test_sampling_reproduces_estimate_and_sensitivity(kind):
     stencil = roukf.sigma_point_stencil(kind, 3)
     x, theta = rng.normal(size=5), rng.normal(size=3)
     L_x, L_theta = rng.normal(size=(5, 3)), rng.normal(size=(3, 3))
-    _, _, U_inv = roukf.initial_factors(np.ones(3), 5, stencil)  # P_alpha = I: U_inv = I
+    U_inv = np.linalg.inv(stencil.p_alpha())  # = I for these stencils
+    state = roukf.FilterState(x, theta, L_x, L_theta, U_inv)
 
-    X, Theta = roukf.sample(x, theta, L_x, L_theta, U_inv, stencil)
+    X, Theta = roukf.sample(state, stencil)
     np.testing.assert_allclose(roukf.mean(X, stencil), x, atol=1e-14)
     np.testing.assert_allclose(roukf.mean(Theta, stencil), theta, atol=1e-14)
     np.testing.assert_allclose(roukf.sensitivity(X, stencil), L_x, atol=1e-14)
     np.testing.assert_allclose(roukf.sensitivity(Theta, stencil), L_theta, atol=1e-14)
 
 
-def test_initial_covariance():
+def test_initial_state():
     stddev = np.array([0.5, 1.0, 2.0])
     stencil = roukf.sigma_point_stencil("simplex", 3)
-    L_x, L_theta, U_inv = roukf.initial_factors(stddev, 4, stencil)
-    np.testing.assert_array_equal(L_x, np.zeros((4, 3)))
-    np.testing.assert_allclose(roukf.covariance(L_theta, U_inv), np.diag(stddev**2), atol=1e-14)
+    state = roukf.initial_state(np.arange(4.0), np.ones(3), stddev, stencil)
+    np.testing.assert_array_equal(state.L_x, np.zeros((4, 3)))  # reduced order
+    np.testing.assert_allclose(state.covariance(), np.diag(stddev**2), atol=1e-14)
 
 
 def test_unique_does_not_correct():
     """unique: one sigma point at the estimate, no spread, no correction."""
     stencil = roukf.sigma_point_stencil("unique", 2)
-    L_x, L_theta, U_inv = roukf.initial_factors(np.ones(2), 3, stencil)
     x, theta = np.arange(3.0), np.array([1.0, 2.0])
-    X, Theta = roukf.sample(x, theta, L_x, L_theta, U_inv, stencil)
+    state = roukf.initial_state(x, theta, np.ones(2), stencil)
+    X, Theta = roukf.sample(state, stencil)
     np.testing.assert_array_equal(X[:, 0], x)
     np.testing.assert_array_equal(Theta[:, 0], theta)
-    U_inv, M = roukf.gain(np.ones((4, 1)), stencil, MPI.COMM_WORLD)
+    _, M = roukf.gain(np.ones((4, 1)), stencil, MPI.COMM_WORLD)
     np.testing.assert_array_equal(M, 0.0)
 
 
