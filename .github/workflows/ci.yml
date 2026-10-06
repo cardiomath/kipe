@@ -34,5 +34,6 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       # non-editable install: with the src layout, tests run against the installed package
-      - run: pip install ".[test]"
+      # mpi4py loads an MPI library at runtime; the runner has none, so install MPICH from PyPI
+      - run: pip install ".[test]" mpich
       - run: pytest -q

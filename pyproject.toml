@@ -20,6 +20,7 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Mathematics",
 ]
 dependencies = [
+  "mpi4py>=4",  # needs an MPI library at runtime, e.g., the system's or `pip install mpich`
   "numpy>=1.26",
   "pydantic>=2.7",  # use_attribute_docstrings
   "ruamel.yaml>=0.18",  # YAML 1.2: 1e-3 is a float
