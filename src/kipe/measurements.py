@@ -121,8 +121,8 @@ def read_numpy(path: str | Path) -> tuple[NDArray_f64, NDArray_f64]:
         path: path to the ``.npz`` file
 
     Returns:
-        - times, shape (n,)
-        - values, shape (n, m): the data at each time
+        - times, shape ``(n,)``
+        - values, shape ``(n, m)``: m values at each of the n times
 
     Raises:
         StudyFileError: if the file cannot be read or does not hold the expected arrays
@@ -150,8 +150,8 @@ def write_numpy(path: str | Path, times: NDArray_f64, values: NDArray_f64) -> No
 
     Args:
         path: path to the ``.npz`` file
-        times: measurement times, shape (n,)
-        values: the data at each time, shape (n, m)
+        times: the n measurement times, shape ``(n,)``
+        values: m values at each of the n times, shape ``(n, m)``
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
