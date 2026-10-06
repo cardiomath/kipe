@@ -14,6 +14,7 @@ to :mod:`kipe.options` and a ``case`` to :func:`build_model`.
 import math
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import assert_never
 
 import numpy as np
 
@@ -94,6 +95,8 @@ def build_model(options: DifferenceModelOptions) -> MeasurementModel:
     match options:
         case DifferenceModelOptions():
             return DifferenceModel()
+        case _:
+            assert_never(options)
 
 
 def measurement_times(times: list[float] | TimeRange) -> NDArray_f64:
