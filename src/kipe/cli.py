@@ -8,6 +8,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from kipe.estimation import estimate
 from kipe.forward_solver import ForwardSolverError, build_forward_solver
 from kipe.options import StudyFileError, load_study
 from kipe.parameters import build_parameterization
@@ -40,6 +41,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     synthesis.add_argument("study", type=Path, help="study file (YAML)")
     synthesis.set_defaults(func=_synthesis)
+
+    estimation = subparsers.add_parser(
+        "estimation",
+        aliases=["estimate"],
+        help="estimate the parameters from the measurement data",
+    )
+    estimation.add_argument("study", type=Path, help="study file (YAML)")
+    estimation.set_defaults(func=_estimation)
 
     args = parser.parse_args(argv)
 
@@ -116,6 +125,17 @@ def _synthesis(args: argparse.Namespace) -> None:
     study = load_study(args.study)
     _setup_logging(study.output.log_level)
     synthesize(study)
+
+
+def _estimation(args: argparse.Namespace) -> None:
+    """Estimate the parameters of the study.
+
+    Args:
+        args: parsed command line arguments, with the path to the study file
+    """
+    study = load_study(args.study)
+    _setup_logging(study.output.log_level)
+    estimate(study)
 
 
 def _setup_logging(level: str) -> None:
