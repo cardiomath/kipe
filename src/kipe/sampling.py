@@ -12,6 +12,7 @@ add its options to :mod:`kipe.options` and a ``case`` to :func:`build_sampler`.
 
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
+from typing import assert_never
 
 import numpy as np
 
@@ -74,3 +75,5 @@ def build_sampler(options: ArraySamplingOptions, fields: list[str]) -> SpatialSa
     match options:
         case ArraySamplingOptions():
             return ArraySampler(fields)
+        case _:
+            assert_never(options)
