@@ -172,7 +172,8 @@ class TimeRange:
 class NumpyDataOptions:
     """Measurement data in a numpy ``.npz`` file.
 
-    The file holds the arrays ``times`` (n,) and ``values`` (n, m): m values at each of n times.
+    The file holds the arrays ``times``, shape ``(n,)``, and ``values``, shape ``(n, m)``: m
+    values at each of the n times.
     """
 
     type: Literal["numpy"]
