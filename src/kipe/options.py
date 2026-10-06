@@ -252,6 +252,9 @@ class SynthesisOptions:
     """Source of the true state the data are generated from."""
 
 
+type Particles = Literal["simplex", "canonical", "star", "unique"]
+
+
 @dataclass(frozen=True, config=_CONFIG)
 class StudyOptions:
     """All sections of a study file."""
