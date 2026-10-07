@@ -19,7 +19,7 @@ import pytest
 
 from kipe import roukf
 
-KINDS = ["simplex", "canonical", "star"]  # unique has no spread, hence no update
+KINDS = ["simplex", "canonical"]  # unique has no spread, hence no update
 
 
 def _assert_close(actual, expected, tol=1e-11):
@@ -122,19 +122,7 @@ def test_one_step_equals_kalman_update_for_linear_observation(kind):
     _assert_close(P, P_kalman)
 
 
-@pytest.mark.parametrize(
-    "kind",
-    [
-        "simplex",
-        "canonical",
-        pytest.param(
-            "star",
-            marks=pytest.mark.xfail(
-                strict=True, reason="equal weights 1/(2p+1) give P_alpha = 2p/(2p+1) I"
-            ),
-        ),
-    ],
-)
+@pytest.mark.parametrize("kind", KINDS)
 def test_several_steps_equal_sequential_kalman_filter(kind):
     """For z_k = H_k theta + noise, each of several ROUKF steps is the Kalman update.
 

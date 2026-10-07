@@ -152,9 +152,16 @@ def sigma_point_stencil(particles: Particles, p: int) -> SigmaPointStencil:
 
     - ``simplex``: :math:`p + 1` points on a regular simplex; :math:`P_\alpha = I`.
     - ``canonical``: :math:`2p` points :math:`\pm\sqrt{p}\,e_j`; :math:`P_\alpha = I`.
-    - ``star``: the canonical points and the origin, :math:`2p + 1` points.
     - ``unique``: one point at the origin: no spread, hence no correction. A sanity check
       that runs the whole pipeline with fixed parameters.
+
+    .. note::
+
+       [MC11]_ also list ``star``, the canonical points and the origin. Its weights are not
+       given; for :math:`P_\alpha = I` and weights summing to one, the origin must have weight
+       zero, so it equals ``canonical``. Equal weights :math:`\alpha=1/(2p + 1)` would give
+       :math:`P_\alpha = \frac{2p}{2p + 1} I`: the sigma points would represent too small a
+       covariance, at every step.
 
     Args:
         particles: kind of stencil
@@ -179,19 +186,15 @@ def sigma_point_stencil(particles: Particles, p: int) -> SigmaPointStencil:
             for i in range(p):
                 points[i, i] = np.sqrt(p)
                 points[i, p + i] = -np.sqrt(p)
-        case "star":
-            r = 2 * p + 1
-            points = np.zeros((p, r))
-            for i in range(p):  # column 0 is the origin
-                points[i, i + 1] = np.sqrt(p)
-                points[i, p + i + 1] = -np.sqrt(p)
         case "unique":
             r = 1
             points = np.zeros((p, r))
         case _:
             assert_never(particles)
 
-    return SigmaPointStencil(points, 1.0 / r)
+    alpha = 1.0 / r
+
+    return SigmaPointStencil(points, alpha)
 
 
 def initial_state(
