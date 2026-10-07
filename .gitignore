@@ -22,6 +22,10 @@ env/
 .coverage.*
 htmlcov/
 
+# Output of running the examples
+examples/**/data/
+examples/**/results/
+
 # Docs build
 doc/build/
 docs/_build/
