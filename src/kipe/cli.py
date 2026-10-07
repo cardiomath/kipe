@@ -15,7 +15,13 @@ from kipe.estimation import estimate
 from kipe.forward_solver import ForwardSolverError, build_forward_solver
 from kipe.options import StudyFileError, StudyOptions, load_study
 from kipe.parameters import build_parameterization
-from kipe.plot import PlotError, plot_histories, read_history
+from kipe.plot import (
+    PlotError,
+    plot_histories,
+    read_history,
+    render_histories,
+    watch_histories,
+)
 from kipe.synthesis import synthesize
 
 
@@ -73,9 +79,26 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="draw the nominal parameters of the first study's forward solver as reference",
     )
     plot.add_argument("--save", type=Path, metavar="FILE", help="save the figure, don't show it")
+    plot.add_argument(
+        "--terminal", action="store_true", help="draw the plot as text in the terminal"
+    )
+    plot.add_argument(
+        "--watch",
+        action="store_true",
+        help="redraw in the terminal as the estimation runs, until Ctrl+C; implies --terminal",
+    )
+    plot.add_argument(
+        "--interval",
+        type=float,
+        default=2.0,
+        metavar="SECONDS",
+        help="time between redraws with --watch (default: %(default)s)",
+    )
     plot.set_defaults(func=_plot)
 
     args = parser.parse_args(argv)
+    if args.command == "plot" and args.save and (args.terminal or args.watch):
+        plot.error("--save writes a matplotlib figure, not with --terminal or --watch")
 
     try:
         args.func(args)
@@ -186,20 +209,30 @@ def _plot(args: argparse.Namespace) -> None:
     """Plot the estimation history of one or several studies.
 
     Args:
-        args: parsed command line arguments: the study files, ``--truth`` and ``--save``
+        args: parsed command line arguments: the study files and the plot options
 
     Raises:
-        PlotError: if matplotlib is not installed, or a history cannot be read
+        PlotError: if matplotlib or plotext is not installed, or a history cannot be read
     """
     studies = [_load_study(path) for path in args.studies]
-    histories = {
-        str(path): read_history(Path(study.output.path) / "estimation" / "history.csv")
+    paths = {
+        str(path): Path(study.output.path) / "estimation" / "history.csv"
         for path, study in zip(args.studies, studies, strict=True)
     }
 
     truth = None
     if args.truth:
         truth = build_forward_solver(studies[0].forward_solver).nominal_parameters()
+
+    if args.watch:
+        watch_histories(paths, truth, args.interval)
+        return
+
+    histories = {label: read_history(path) for label, path in paths.items()}
+
+    if args.terminal:
+        print(render_histories(histories, truth, color=sys.stdout.isatty()))
+        return
 
     try:
         import matplotlib.pyplot as plt
