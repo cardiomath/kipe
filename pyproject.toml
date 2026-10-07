@@ -36,6 +36,7 @@ test = [
 ]
 plot = [
   "matplotlib>=3.8",  # kipe plot
+  "plotext>=6.1,<7",  # kipe plot --terminal, --watch
 ]
 check = [
   "ruff==0.16.9",  # pinned: preview formatting differs between versions
@@ -121,3 +122,7 @@ disallow_untyped_defs = true
 disallow_any_unimported = true
 no_implicit_reexport = false
 warn_return_any = false
+
+[[tool.mypy.overrides]]
+module = "plotext"  # no type information
+ignore_missing_imports = true
