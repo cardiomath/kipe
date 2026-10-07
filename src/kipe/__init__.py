@@ -1,3 +1,5 @@
 """kipe: Kalman-based identifiability and parameter estimation."""
 
-__version__ = "0.0.1"
+from importlib import metadata
+
+__version__ = metadata.version("kipe")  # from the git tags at install time (hatch-vcs)
