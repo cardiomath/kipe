@@ -37,8 +37,11 @@ the correction, since they need no solver.
 
    .. math::
 
-      \hat{\chi}_{(i)} = \hat{\chi}_+ + L_\chi C^T I_{(i)}, \qquad
-      \hat{\theta}_{(i)} = \hat{\theta}_+ + L_\theta C^T I_{(i)}.
+      \hat{\chi}_{(i)} = \hat{\chi}_+ + L_\chi C I_{(i)}, \qquad
+      \hat{\theta}_{(i)} = \hat{\theta}_+ + L_\theta C I_{(i)}.
+
+   Note that in many publications, the formula used :math:`C^T`. This is incorrect for a *lower*
+   Cholesky factor :math:`C`.
 
 2. **Propagation:** each sigma point is propagated with the forward model to the next
    measurement time (:mod:`kipe.estimation`), the parameters stay constant.
@@ -231,10 +234,13 @@ def sample(state: FilterState, stencil: SigmaPointStencil) -> tuple[NDArray_f64,
 
     .. math::
 
-       \hat{\chi}_{(i)} = \hat{\chi}_+ + L_\chi C^T I_{(i)}, \qquad
-       \hat{\theta}_{(i)} = \hat{\theta}_+ + L_\theta C^T I_{(i)},
+       \hat{\chi}_{(i)} = \hat{\chi}_+ + L_\chi C I_{(i)}, \qquad
+       \hat{\theta}_{(i)} = \hat{\theta}_+ + L_\theta C I_{(i)},
 
     with :math:`C` the lower Cholesky factor of :math:`U^{-1}`.
+
+    Note that in many publications, the formula used :math:`C^T`. This is incorrect for a *lower*
+    Cholesky factor :math:`C`.
 
     Args:
         state: the filter state, around whose estimate the sigma points are sampled
@@ -246,7 +252,7 @@ def sample(state: FilterState, stencil: SigmaPointStencil) -> tuple[NDArray_f64,
     """
     U_inv = state.U_inv
     C = np.linalg.cholesky(U_inv) if U_inv.any() else np.zeros_like(U_inv)
-    spread = C.T @ stencil.points  # C^T I_(i), one column per sigma point
+    spread = C @ stencil.points  # C I_(i), one column per sigma point
 
     x_sigma = state.x[:, np.newaxis] + state.L_x @ spread
     theta_sigma = state.theta[:, np.newaxis] + state.L_theta @ spread

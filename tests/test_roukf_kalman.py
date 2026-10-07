@@ -1,11 +1,15 @@
-r"""One ROUKF step equals the Kalman update for a linear observation.
+r"""ROUKF assimilation steps equal the Kalman filter for a linear observation.
 
-The unscented transform is exact for linear observations, so a ROUKF assimilation step must
-reproduce the Kalman filter's posterior mean and covariance. This holds for every stencil with
-an invertible :math:`P_\alpha` thanks to the consistent initialization :math:`U^0 =
-P_\alpha`; with a state that depends linearly on the parameters, the corrected state follows
-the corrected parameters exactly. The derivation uses the zero mean of the stencil, the
-Cholesky factor :math:`C C^T = P_\alpha^{-1}` and the linearity of the observation.
+The unscented transform is exact for linear observations, so every ROUKF assimilation step
+must reproduce the Kalman filter's posterior mean and covariance. With a state that depends
+linearly on the parameters, the corrected state follows the corrected parameters exactly.
+
+One step holds for every stencil with an invertible :math:`P_\alpha`, thanks to the
+consistent initialization :math:`U^0 = P_\alpha`; the derivation uses the zero mean of the
+stencil, the Cholesky factor :math:`C C^T = P_\alpha^{-1}` and the linearity of the
+observation. Several steps also need :math:`P_\alpha = I` and the sampling with :math:`C`,
+:math:`C C^T = U^{-1}`: from the second step on, :math:`U^{-1}` is no longer diagonal, so
+only then does a test tell :math:`C` from :math:`C^T`.
 """
 
 from mpi4py import MPI
@@ -116,6 +120,47 @@ def test_one_step_equals_kalman_update_for_linear_observation(kind):
 
     _assert_close(theta, theta_kalman)
     _assert_close(P, P_kalman)
+
+
+@pytest.mark.parametrize(
+    "kind",
+    [
+        "simplex",
+        "canonical",
+        pytest.param(
+            "star",
+            marks=pytest.mark.xfail(
+                strict=True, reason="equal weights 1/(2p+1) give P_alpha = 2p/(2p+1) I"
+            ),
+        ),
+    ],
+)
+def test_several_steps_equal_sequential_kalman_filter(kind):
+    """For z_k = H_k theta + noise, each of several ROUKF steps is the Kalman update.
+
+    The posterior of one step is the prior of the next, for the ROUKF as for the Kalman
+    filter. With fewer measured values per step than parameters, the information accumulates
+    over the steps and U^-1 becomes a full matrix. Parameters only, no state.
+    """
+    rng = np.random.default_rng(3)
+    p, m, steps, noise = 3, 2, 5, 0.5  # parameters, measured values per step; noise stddev
+    H = [rng.normal(size=(m, p)) for _ in range(steps)]  # observation operator per step
+    z = [rng.normal(size=m) for _ in range(steps)]  # data per step
+    theta0 = rng.normal(size=p)
+    stddev = np.array([0.5, 1.0, 2.0])
+
+    stencil = roukf.sigma_point_stencil(kind, p)
+    state = roukf.initial_state(np.zeros(0), theta0, stddev, stencil)
+    theta_kalman, P_kalman = theta0, np.diag(stddev**2)
+
+    for H_k, z_k in zip(H, z, strict=True):
+        x_sigma, theta_sigma = roukf.sample(state, stencil)
+        Gamma = (z_k[:, np.newaxis] - H_k @ theta_sigma) / noise
+        state = roukf.update(x_sigma, theta_sigma, Gamma, stencil, MPI.COMM_WORLD)
+        theta_kalman, P_kalman = _kalman_update(theta_kalman, P_kalman, H_k, z_k, noise)
+
+        _assert_close(state.theta, theta_kalman)
+        _assert_close(state.covariance(), P_kalman)
 
 
 @pytest.mark.parametrize("kind", KINDS)
