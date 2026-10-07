@@ -6,11 +6,13 @@ measurements are written to their ``data`` files, and returned.
 """
 
 import logging
+import time
 from collections.abc import Mapping
 from typing import assert_never
 
 import numpy as np
 
+from kipe._formatting import format_table
 from kipe._types import NDArray_f64
 from kipe.forward_solver import ForwardSolver, build_forward_solver
 from kipe.measurements import (
@@ -41,11 +43,23 @@ def synthesize(study: StudyOptions) -> list[Measurement]:
     if not study.measurements:
         raise StudyFileError("synthesis needs a measurements section")
 
+    started = time.perf_counter()
     solver = build_forward_solver(study.forward_solver)
     operators = {
         name: build_observation_operator(name, options, solver.state_spec)
         for name, options in study.measurements.items()
     }
+
+    logger.info("synthesis")
+    logger.info("  %-16s%s", "forward solver", study.forward_solver.factory)
+    logger.info("  %-16s%s", "truth", study.synthesis.truth.type)
+    logger.info("")
+    rows = [("measurement", "fields", "σ", "seed")]
+    for name, options in study.measurements.items():
+        seed = "" if options.noise.seed is None else str(options.noise.seed)
+        rows.append((name, ", ".join(options.fields), f"{options.noise.stddev:g}", seed))
+    for line in format_table(rows, "<<>>"):
+        logger.info("  %s", line)
 
     match study.synthesis.truth:
         case RunTruthOptions():
@@ -57,6 +71,7 @@ def synthesize(study: StudyOptions) -> list[Measurement]:
         path = study.measurements[measurement.name].data.path
         write_numpy(path, measurement.times, measurement.values)
         logger.info("wrote %s: %d times to %s", measurement.name, len(measurement.times), path)
+    logger.info("%-11s%.3g s", "run time", time.perf_counter() - started)
 
     return measurements
 

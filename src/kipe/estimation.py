@@ -12,6 +12,7 @@ the full parameter covariance).
 """
 
 import logging
+import time
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -20,6 +21,7 @@ from mpi4py import MPI
 import numpy as np
 
 from kipe import roukf
+from kipe._formatting import format_table
 from kipe._types import NDArray_f64
 from kipe.forward_solver import (
     FieldSpec,
@@ -38,6 +40,8 @@ from kipe.options import EstimationOptions, StudyFileError, StudyOptions
 from kipe.parameters import Parameterization, build_parameterization
 
 logger = logging.getLogger(__name__)
+
+_WIDTH = 78  # width of the separator lines in the log
 
 
 class Estimation:
@@ -69,6 +73,8 @@ class Estimation:
         self._parameterization = parameterization
         self._measurements = measurements
         self._iterations = options.iterations
+        self._particles = options.particles
+        self._output = output
         self._comm = comm
 
         self._times = _common_times(measurements)
@@ -86,19 +92,74 @@ class Estimation:
         Returns:
             the estimated parameters, as physical values
         """
+        self._log_setup()
+        started = time.perf_counter()
+
         parameterization = self._parameterization
         for iteration in range(self._iterations):
-            logger.info("iteration %d/%d", iteration + 1, self._iterations)
-            theta = self._assimilate(parameterization, iteration)
-            estimate = parameterization.to_physical(theta)
-            parameterization = parameterization.recenter(theta)
+            title = f" iteration {iteration + 1}/{self._iterations} "
+            logger.info("%s", title.center(_WIDTH, "━"))
+            iteration_started = time.perf_counter()
+
+            filter_state = self._assimilate(parameterization, iteration)
+
+            elapsed = time.perf_counter() - iteration_started
+            logger.info("")
+            logger.info(
+                "  estimate after iteration %d/%d (%.3g s)",
+                iteration + 1,
+                self._iterations,
+                elapsed,
+            )
+            for line in format_table(_estimate_rows(filter_state, parameterization), "<><"):
+                logger.info("    %s", line)
+            estimate = parameterization.to_physical(filter_state.theta)
+            parameterization = parameterization.recenter(filter_state.theta)
 
         self._history.write_npz()
-        logger.info("estimate: %s", ", ".join(f"{k} = {v:g}" for k, v in estimate.items()))
+        logger.info("%s", "━" * _WIDTH)
+        logger.info("%-11s%s", "history", self._output / "history.{csv,npz}")
+        logger.info("%-11s%.3g s", "run time", time.perf_counter() - started)
 
         return estimate
 
-    def _assimilate(self, parameterization: Parameterization, iteration: int) -> NDArray_f64:
+    def _log_setup(self) -> None:
+        """Log what is estimated, from which measurements, and how."""
+        solver = type(self._solver)
+        logger.info("ROUKF estimation")
+        logger.info("  %-16s%s:%s", "forward solver", solver.__module__, solver.__qualname__)
+        logger.info("  %-16s%s", "output", self._output)
+        logger.info("")
+        logger.info("  filter")
+        sigma_points = self._stencil.points.shape[1]
+        logger.info("    %-14s%s (%d sigma points)", "stencil", self._particles, sigma_points)
+        logger.info("    %-14s%d", "iterations", self._iterations)
+        logger.info("    %-14s%d", "MPI ranks", self._comm.size)
+        logger.info("")
+
+        parameters = [("parameter", "reparameterization", "initial", "1σ range")]
+        ranges = self._parameterization.one_sigma_range()
+        for p, (lower, upper) in zip(self._parameterization.parameters, ranges, strict=True):
+            parameters.append((
+                p.name,
+                p.reparameterization,
+                f"{p.initial:.4g}",
+                f"[{lower:.4g}, {upper:.4g}]",
+            ))
+        for line in format_table(parameters, "<<><"):
+            logger.info("  %s", line)
+        logger.info("")
+
+        measurements = [("measurement", "fields", "times", "σ")]
+        for m in self._measurements:
+            times = f"{len(m.times)} ({m.times[0]:g} … {m.times[-1]:g})"
+            measurements.append((m.name, ", ".join(m.operator.fields), times, f"{m.stddev:g}"))
+        for line in format_table(measurements, "<<<>"):
+            logger.info("  %s", line)
+
+    def _assimilate(
+        self, parameterization: Parameterization, iteration: int
+    ) -> roukf.FilterState:
         r"""Run one pass of the filter over all measurement times.
 
         Args:
@@ -107,7 +168,7 @@ class Estimation:
             iteration: index of this pass
 
         Returns:
-            the estimated parameters :math:`\theta` at the end of the pass
+            the filter state at the end of the pass
 
         Raises:
             StudyFileError: if the first measurement time is not after the solver's start time
@@ -125,6 +186,7 @@ class Estimation:
             self._stencil,
         )
         self._history.record(iteration, t, filter_state, parameterization)
+        logger.info("%s", _table_header(parameterization.names))
 
         for k, t_next in enumerate(self._times):
             # 1. sampling
@@ -146,8 +208,10 @@ class Estimation:
             )
             t = float(t_next)
             self._history.record(iteration, t, filter_state, parameterization)
+            physical = parameterization.to_physical(filter_state.theta)
+            logger.info("%s", _table_row(k + 1, t, physical, self._innovation_rms(Gamma)))
 
-        return filter_state.theta
+        return filter_state
 
     def _propagate_and_observe(
         self,
@@ -178,12 +242,26 @@ class Estimation:
         x_propagated = np.empty_like(x_sigma)
         Gamma = np.empty((self._innovation_size(), x_sigma.shape[1]))
 
-        for i in range(x_sigma.shape[1]):
+        r = x_sigma.shape[1]
+        for i in range(r):
             phi = parameterization.to_physical(theta_sigma[:, i])
+            values = ", ".join(f"{name} = {value:.4g}" for name, value in phi.items())
+            logger.debug("step %d, sigma point %d/%d: %s", k + 1, i + 1, r, values)
+            started = time.perf_counter()
 
-            solver_state = self._solver.propagate(
-                t, t_next, self._layout.to_state(x_sigma[:, i]), phi
-            )
+            try:
+                solver_state = self._solver.propagate(
+                    t, t_next, self._layout.to_state(x_sigma[:, i]), phi
+                )
+            except Exception:
+                # which parameters made the solver fail; the exception itself follows
+                logger.error(
+                    "forward solver failed in step %d (t = %g → %g), sigma point %d/%d: %s",
+                    k + 1, t, t_next, i + 1, r, values,
+                )  # fmt: skip
+                raise
+            elapsed = time.perf_counter() - started
+            logger.debug("  └─ propagated %g → %g (%.2g s)", t, t_next, elapsed)
 
             x_propagated[:, i] = self._layout.to_vector(solver_state)
             Gamma[:, i] = self._innovation(solver_state, k)
@@ -208,6 +286,24 @@ class Estimation:
             blocks.append(innovation / measurement.stddev)
 
         return np.concatenate(blocks)
+
+    def _innovation_rms(self, Gamma: NDArray_f64) -> float:
+        """Return the RMS of the mean innovation, over all ranks.
+
+        The innovations are weighted with the noise, so the RMS approaches 1 if the model and
+        the assumed noise fit the data.
+
+        Args:
+            Gamma: the innovations of the sigma points, shape ``(m, r)``
+
+        Returns:
+            the RMS of the mean innovation
+        """
+        mean = roukf.mean(Gamma, self._stencil)
+        local = np.array([mean @ mean, mean.size] if self._rank_contributes else [0.0, 0.0])
+        self._comm.Allreduce(MPI.IN_PLACE, local, op=MPI.SUM)
+
+        return float(np.sqrt(local[0] / local[1]))
 
     def _innovation_size(self) -> int:
         """Return the number of innovation entries of all measurements at one time.
@@ -245,6 +341,58 @@ def estimate(study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD) -> Parameters
     return Estimation(
         solver, parameterization, measurements, study.estimation, output, comm
     ).run()
+
+
+def _table_header(names: list[str]) -> str:
+    """Return the header of the per-step table in the log.
+
+    Args:
+        names: names of the estimated parameters
+
+    Returns:
+        the header line
+    """
+    return f"{'step':>6}{'time':>9}" + "".join(f"{n:>11}" for n in names) + f"{'innovation':>12}"
+
+
+def _table_row(step: int, t: float, physical: Parameters, rms: float) -> str:
+    """Return one row of the per-step table in the log.
+
+    Args:
+        step: number of the assimilation step
+        t: its time
+        physical: the estimate, as physical values
+        rms: RMS of the mean innovation
+
+    Returns:
+        the table row
+    """
+    values = "".join(f"{v:>11.4g}" for v in physical.values())
+    return f"{step:>6}{t:>9.4g}{values}{rms:>12.3g}"
+
+
+def _estimate_rows(
+    filter_state: roukf.FilterState, parameterization: Parameterization
+) -> list[tuple[str, str, str]]:
+    """Return the table of the estimate with its physical 1σ range, with a header.
+
+    Args:
+        filter_state: the filter state
+        parameterization: maps the estimate to physical values
+
+    Returns:
+        the header and one row per parameter: name, estimate, 1σ range
+    """
+    theta = filter_state.theta
+    stddev = np.sqrt(np.diag(filter_state.covariance()))
+    physical = parameterization.to_physical(theta)
+    ranges = parameterization.physical_range(theta, stddev)
+
+    rows = [("parameter", "estimate", "1σ range")]
+    for (name, value), (lower, upper) in zip(physical.items(), ranges, strict=True):
+        rows.append((name, f"{value:.4g}", f"[{lower:.4g}, {upper:.4g}]"))
+
+    return rows
 
 
 def _build_measurements(
@@ -437,14 +585,6 @@ class _History:
         physical = np.array(list(parameterization.to_physical(theta).values()))
         stddev = np.sqrt(np.diag(P_theta))
         self._rows.append((iteration, t, physical, theta.copy(), P_theta.copy()))
-        logger.info(
-            "t = %g: %s",
-            t,
-            ", ".join(
-                f"{name} = {value:.4g} (stddev_theta {s:.2g})"
-                for name, value, s in zip(self._names, physical, stddev, strict=True)
-            ),
-        )
 
         if self._writes:
             row = [str(iteration), repr(t)]
