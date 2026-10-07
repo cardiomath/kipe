@@ -4,6 +4,7 @@
 
 output:
   path: results
+  log_level: info
 
 forward_solver:
   factory: "kipe.examples.fitzhugh_nagumo:Solver"

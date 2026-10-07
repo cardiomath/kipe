@@ -147,7 +147,7 @@ class Parameterization:
         )
 
     def one_sigma_range(self) -> list[tuple[float, float]]:
-        r"""Return the physical values at :math:`\theta_0 \pm \sigma_\theta`.
+        r"""Return the physical values at the initial :math:`\theta_0 \pm \sigma_\theta`.
 
         Shows what the uncertainty means in physical terms. Asymmetric around the initial
         estimate for ``log``.
@@ -155,12 +155,24 @@ class Parameterization:
         Returns:
             (lower, upper) physical value per parameter
         """
+        return self.physical_range(self.initial_theta(), self.stddev_theta())
+
+    def physical_range(
+        self, theta: NDArray_f64, stddev_theta: NDArray_f64
+    ) -> list[tuple[float, float]]:
+        r"""Return the physical values at :math:`\theta \pm \sigma_\theta`.
+
+        Args:
+            theta: estimated parameters, in the order of :attr:`parameters`
+            stddev_theta: their standard deviations
+
+        Returns:
+            (lower, upper) physical value per parameter
+        """
         ranges = []
-        for parameter in self.parameters:
-            theta0 = parameter.initial_theta()
-            sigma = parameter.stddev_theta
-            lower = parameter.to_physical(theta0 - sigma)
-            upper = parameter.to_physical(theta0 + sigma)
+        for parameter, value, sigma in zip(self.parameters, theta, stddev_theta, strict=True):
+            lower = parameter.to_physical(float(value - sigma))
+            upper = parameter.to_physical(float(value + sigma))
             ranges.append((min(lower, upper), max(lower, upper)))
 
         return ranges

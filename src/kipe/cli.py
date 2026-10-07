@@ -6,8 +6,11 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from mpi4py import MPI
+
 from pydantic import ValidationError
 
+from kipe._formatting import format_table
 from kipe.estimation import estimate
 from kipe.forward_solver import ForwardSolverError, build_forward_solver
 from kipe.options import StudyFileError, load_study
@@ -40,6 +43,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="generate synthetic measurement data from a forward run",
     )
     synthesis.add_argument("study", type=Path, help="study file (YAML)")
+    _add_log_level_argument(synthesis)
     synthesis.set_defaults(func=_synthesis)
 
     estimation = subparsers.add_parser(
@@ -48,6 +52,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="estimate the parameters from the measurement data",
     )
     estimation.add_argument("study", type=Path, help="study file (YAML)")
+    _add_log_level_argument(estimation)
     estimation.set_defaults(func=_estimation)
 
     args = parser.parse_args(argv)
@@ -110,10 +115,8 @@ def _list_parameters(args: argparse.Namespace) -> None:
     if not selected:
         rows = [row[:2] for row in rows]
 
-    widths = [max(len(row[i]) for row in rows) for i in range(len(rows[0]))]
-    for row in rows:
-        cells = [cell.ljust(width) for cell, width in zip(row, widths, strict=True)]
-        print("  ".join(cells).rstrip())
+    for line in format_table(rows):
+        print(line)
 
 
 def _synthesis(args: argparse.Namespace) -> None:
@@ -123,8 +126,10 @@ def _synthesis(args: argparse.Namespace) -> None:
         args: parsed command line arguments, with the path to the study file
     """
     study = load_study(args.study)
-    _setup_logging(study.output.log_level)
+    log_file = Path(study.output.path) / "synthesis" / "kipe.log"
+    _setup_logging(args.log_level or study.output.log_level, log_file)
     synthesize(study)
+    logging.getLogger("kipe").info("%-11s%s", "log", log_file)
 
 
 def _estimation(args: argparse.Namespace) -> None:
@@ -134,22 +139,62 @@ def _estimation(args: argparse.Namespace) -> None:
         args: parsed command line arguments, with the path to the study file
     """
     study = load_study(args.study)
-    _setup_logging(study.output.log_level)
+    log_file = Path(study.output.path) / "estimation" / "kipe.log"
+    _setup_logging(args.log_level or study.output.log_level, log_file)
     estimate(study)
+    logging.getLogger("kipe").info("%-11s%s", "log", log_file)
 
 
-def _setup_logging(level: str) -> None:
-    """Send kipe's log messages to stderr.
+def _add_log_level_argument(parser: argparse.ArgumentParser) -> None:
+    """Add the ``--log-level`` option, which overrides ``output.log_level`` of the study file.
 
     Args:
-        level: minimum level of the messages, e.g., ``"info"``
+        parser: parser of a subcommand
     """
+    parser.add_argument(
+        "--log-level",
+        choices=["debug", "info", "warning", "error"],
+        help="minimum level of the log messages; overrides output.log_level of the study file",
+    )
+
+
+def _setup_logging(level: str, log_file: Path) -> None:
+    """Send kipe's log messages to stderr and, in full detail, to a log file.
+
+    On stderr, MPI rank 0 reports from the given level on; the other ranks only report warnings
+    and errors, marked with their rank. At the debug level, each message shows where it was
+    logged. Rank 0 also writes all messages, from the debug level on and with their location, to
+    ``log_file`` (overwritten).
+
+    Args:
+        level: minimum level of the messages on stderr of rank 0, e.g., ``"info"``
+        log_file: path of the log file
+    """
+    rank = MPI.COMM_WORLD.rank
+    prefix = "kipe" if rank == 0 else f"kipe[{rank}]"
+    location = "%(module)s:%(funcName)s:%(lineno)d  "
+
     logger = logging.getLogger("kipe")
-    if not logger.handlers:  # main() may run several times in one process, e.g., in tests
-        handler = logging.StreamHandler()
-        handler.setFormatter(logging.Formatter("kipe: %(message)s"))
-        logger.addHandler(handler)
-    logger.setLevel(level.upper())
+    for handler in list(logger.handlers):  # main() may run several times in one process
+        logger.removeHandler(handler)
+        handler.close()
+
+    console = logging.StreamHandler()
+    console.setFormatter(
+        logging.Formatter(f"{prefix}: {location if level == 'debug' else ''}%(message)s")
+    )
+    console.setLevel(level.upper() if rank == 0 else logging.WARNING)
+    logger.addHandler(console)
+
+    if rank == 0:
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        file = logging.FileHandler(log_file, mode="w", encoding="utf-8")
+        file.setFormatter(
+            logging.Formatter(f"%(asctime)s %(levelname)-7s {location}%(message)s")
+        )
+        logger.addHandler(file)
+
+    logger.setLevel(logging.DEBUG if rank == 0 else logging.WARNING)
 
 
 if __name__ == "__main__":

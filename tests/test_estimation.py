@@ -1,6 +1,7 @@
 """``kipe estimation``: the FitzHugh-Nagumo twin experiment and example, history and errors."""
 
 import copy
+import logging
 import shutil
 from pathlib import Path
 
@@ -222,3 +223,74 @@ def test_example_study(tmp_path, monkeypatch):
 
     estimate = np.load("results/estimation/history.npz")["parameters"][-1]
     np.testing.assert_allclose(estimate, list(TRUE.values()), rtol=0.02)
+
+
+def test_log_output(tmp_path, caplog):
+    """Setup summary, one table row per assimilation step, estimate with its 1σ range."""
+    study = str(_study(tmp_path, times=[0.5, 1.0]))
+    assert main(["synthesis", study]) == 0
+    caplog.clear()
+    with caplog.at_level(logging.INFO, logger="kipe"):
+        assert main(["estimation", study]) == 0
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert messages[0] == "ROUKF estimation"
+    assert any(m.endswith("simplex (4 sigma points)") for m in messages)
+    header = next(m for m in messages if "innovation" in m)
+    assert header.split() == ["step", "time", "a", "b", "c", "innovation"]
+    rows = [m.split() for m in messages if m.split()[:1] in (["1"], ["2"])]
+    assert [row[:2] for row in rows] == [["1", "0.5"], ["2", "1"]]
+    estimate = messages.index(next(m for m in messages if m.startswith("  estimate after")))
+    assert messages[estimate + 1].split() == ["parameter", "estimate", "1σ", "range"]
+    assert messages[estimate + 2].split()[0] == "a"
+
+
+def test_log_level_option_overrides_study_file(tmp_path, caplog):
+    """``--log-level debug`` shows the per-sigma-point details and where they were logged."""
+    study = str(_study(tmp_path, times=[0.5]))
+    assert main(["synthesis", study]) == 0
+    caplog.clear()
+    assert main(["estimation", study, "--log-level", "debug"]) == 0
+    record = next(r for r in caplog.records if "sigma point 1/4" in r.getMessage())
+
+    # at the debug level, the message shows where it was logged
+    handler = logging.getLogger("kipe").handlers[0]
+    assert handler.format(record).startswith("kipe: estimation:_propagate_and_observe:")
+
+
+def test_solver_failure_reports_the_sigma_point(tmp_path, caplog, monkeypatch):
+    """If the solver fails, the log says in which step and for which parameters."""
+    study = str(_study(tmp_path, times=[0.5, 1.0]))
+    assert main(["synthesis", study]) == 0
+
+    calls = []
+    propagate = Solver.propagate
+
+    def failing_propagate(self, t0, t1, state, parameters):
+        calls.append(1)
+        if len(calls) == 7:  # step 2, sigma point 3 of 4
+            raise RuntimeError("Newton did not converge")
+        return propagate(self, t0, t1, state, parameters)
+
+    monkeypatch.setattr(Solver, "propagate", failing_propagate)
+    caplog.clear()
+    with pytest.raises(RuntimeError, match="Newton did not converge"):
+        main(["estimation", study])
+
+    error = next(r for r in caplog.records if r.levelno == logging.ERROR).getMessage()
+    assert error.startswith(
+        "forward solver failed in step 2 (t = 0.5 → 1), sigma point 3/4: a = "
+    )
+
+
+def test_log_file_has_full_detail(tmp_path):
+    """The log file gets every message, from the debug level on, whatever the console level."""
+    study = str(_study(tmp_path, times=[0.5]))
+    assert main(["synthesis", study]) == 0
+    assert main(["estimation", study]) == 0  # console at the default level, info
+
+    log = (tmp_path / "results" / "estimation" / "kipe.log").read_text()
+    assert "ROUKF estimation" in log
+    assert "DEBUG   estimation:_propagate_and_observe:" in log
+    assert "sigma point 1/4" in log
+    assert (tmp_path / "results" / "synthesis" / "kipe.log").exists()
