@@ -253,7 +253,7 @@ class SynthesisOptions:
     """Source of the true state the data are generated from."""
 
 
-type Particles = Literal["simplex", "canonical", "star", "unique"]
+type Particles = Literal["simplex", "canonical", "unique"]
 
 
 @dataclass(frozen=True, config=_CONFIG)
@@ -265,7 +265,6 @@ class EstimationOptions:
 
     - ``simplex``: :math:`p + 1` sigma points, the cheapest.
     - ``canonical``: :math:`2p` sigma points, :math:`\pm` along each parameter.
-    - ``star``: the canonical points and the center, :math:`2p + 1` sigma points.
     - ``unique``: one sigma point at the estimate, no spread: no correction. A sanity check
       of the whole pipeline (with the true parameters, the innovations are pure noise).
     """

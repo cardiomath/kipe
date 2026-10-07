@@ -7,7 +7,7 @@ import pytest
 
 from kipe import roukf
 
-KINDS = ["simplex", "canonical", "star"]
+KINDS = ["simplex", "canonical"]
 
 
 @pytest.mark.parametrize("kind", KINDS)
@@ -18,14 +18,17 @@ def test_stencil_has_zero_mean(kind, p):
     np.testing.assert_allclose(roukf.mean(stencil.points, stencil), 0.0, atol=1e-14)
 
 
-@pytest.mark.parametrize(
-    ("kind", "r", "p_alpha"),
-    [("simplex", 4, 1.0), ("canonical", 6, 1.0), ("star", 7, 6 / 7)],
-)
-def test_stencil_p_alpha(kind, r, p_alpha):
-    stencil = roukf.sigma_point_stencil(kind, 3)
-    assert stencil.points.shape == (3, r)
-    np.testing.assert_allclose(stencil.p_alpha(), p_alpha * np.eye(3), atol=1e-14)
+@pytest.mark.parametrize("kind", KINDS)
+@pytest.mark.parametrize("p", [1, 2, 5])
+def test_stencil_has_unit_covariance(kind, p):
+    """P_alpha = I: the sigma points represent the covariance they are sampled with."""
+    stencil = roukf.sigma_point_stencil(kind, p)
+    np.testing.assert_allclose(stencil.p_alpha(), np.eye(p), atol=1e-14)
+
+
+@pytest.mark.parametrize(("kind", "r"), [("simplex", 4), ("canonical", 6), ("unique", 1)])
+def test_stencil_size(kind, r):
+    assert roukf.sigma_point_stencil(kind, 3).points.shape == (3, r)
 
 
 @pytest.mark.parametrize("kind", ["simplex", "canonical"])
