@@ -15,6 +15,7 @@ from kipe.estimation import estimate
 from kipe.forward_solver import ForwardSolverError, build_forward_solver
 from kipe.options import StudyFileError, StudyOptions, load_study
 from kipe.parameters import build_parameterization
+from kipe.plot import PlotError, plot_histories, read_history
 from kipe.synthesis import synthesize
 
 
@@ -55,17 +56,30 @@ def main(argv: Sequence[str] | None = None) -> int:
     _add_log_level_argument(estimation)
     estimation.set_defaults(func=_estimation)
 
+    plot = subparsers.add_parser(
+        "plot",
+        help="plot the estimation history: the estimates with their 1σ range",
+    )
+    plot.add_argument(
+        "studies",
+        type=Path,
+        nargs="+",
+        metavar="study",
+        help="study file(s) (YAML); several are plotted into the same figure",
+    )
+    plot.add_argument(
+        "--truth",
+        action="store_true",
+        help="draw the nominal parameters of the first study's forward solver as reference",
+    )
+    plot.add_argument("--save", type=Path, metavar="FILE", help="save the figure, don't show it")
+    plot.set_defaults(func=_plot)
+
     args = parser.parse_args(argv)
 
     try:
         args.func(args)
-    except ValidationError as err:
-        print(f"kipe: error: invalid study file {args.study}", file=sys.stderr)
-        for error in err.errors(include_url=False):
-            location = ".".join(map(str, error["loc"]))
-            print(f"  {location}: {error['msg']}", file=sys.stderr)
-        return 1
-    except (StudyFileError, ForwardSolverError) as err:  # user errors: no traceback
+    except (StudyFileError, ForwardSolverError, PlotError) as err:  # user errors: no traceback
         print(f"kipe: error: {err}", file=sys.stderr)
         return 1
 
@@ -166,6 +180,40 @@ def _estimation(args: argparse.Namespace) -> None:
     _setup_logging(args.log_level or study.output.log_level, log_file)
     estimate(study)
     logging.getLogger("kipe").info("%-11s%s", "log", log_file)
+
+
+def _plot(args: argparse.Namespace) -> None:
+    """Plot the estimation history of one or several studies.
+
+    Args:
+        args: parsed command line arguments: the study files, ``--truth`` and ``--save``
+
+    Raises:
+        PlotError: if matplotlib is not installed, or a history cannot be read
+    """
+    studies = [_load_study(path) for path in args.studies]
+    histories = {
+        str(path): read_history(Path(study.output.path) / "estimation" / "history.csv")
+        for path, study in zip(args.studies, studies, strict=True)
+    }
+
+    truth = None
+    if args.truth:
+        truth = build_forward_solver(studies[0].forward_solver).nominal_parameters()
+
+    try:
+        import matplotlib.pyplot as plt
+        from matplotlib.figure import Figure
+    except ImportError as err:
+        raise PlotError("kipe plot needs matplotlib: pip install 'kipe[plot]'") from err
+
+    figure = Figure(layout="constrained") if args.save else plt.figure(layout="constrained")
+    figure.set_size_inches(4 * len(next(iter(histories.values())).names), 3.5)
+    plot_histories(figure, histories, truth)
+    if args.save:
+        figure.savefig(args.save, dpi=150)
+    else:
+        plt.show()
 
 
 def _add_log_level_argument(parser: argparse.ArgumentParser) -> None:

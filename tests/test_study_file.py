@@ -140,10 +140,12 @@ def test_list_parameters_reports_errors(tmp_path, capsys):
     assert "unexpected keyword argument 'd'" in capsys.readouterr().err
 
 
-def test_list_parameters_reports_invalid_options(tmp_path, capsys):
+@pytest.mark.parametrize("command", ["list-parameters", "synthesis", "estimation", "plot"])
+def test_cli_reports_invalid_options(tmp_path, capsys, command):
     study = _write(tmp_path, STUDY.replace("path:", "pth:"))
-    assert main(["list-parameters", str(study)]) == 1
+    assert main([command, str(study)]) == 1
     err = capsys.readouterr().err
+    assert f"kipe: error: invalid study file {study}" in err
     assert "output.pth: Unexpected keyword argument" in err
     assert "errors.pydantic.dev" not in err
 
