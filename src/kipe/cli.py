@@ -13,7 +13,7 @@ from pydantic import ValidationError
 from kipe._formatting import format_table
 from kipe.estimation import estimate
 from kipe.forward_solver import ForwardSolverError, build_forward_solver
-from kipe.options import StudyFileError, load_study
+from kipe.options import StudyFileError, StudyOptions, load_study
 from kipe.parameters import build_parameterization
 from kipe.synthesis import synthesize
 
@@ -72,6 +72,29 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
+def _load_study(path: Path) -> StudyOptions:
+    """Read and validate a study file, reporting invalid options as a user error.
+
+    Args:
+        path: path to the study file
+
+    Returns:
+        validated study options
+
+    Raises:
+        StudyFileError: if the file cannot be read, or its options are invalid; the message
+            lists each invalid option
+    """
+    try:
+        return load_study(path)
+    except ValidationError as err:
+        lines = [f"invalid study file {path}"]
+        for error in err.errors(include_url=False):
+            location = ".".join(map(str, error["loc"]))
+            lines.append(f"  {location}: {error['msg']}")
+        raise StudyFileError("\n".join(lines)) from err
+
+
 def _list_parameters(args: argparse.Namespace) -> None:
     """Print the solver's estimable parameters and their nominal values.
 
@@ -81,7 +104,7 @@ def _list_parameters(args: argparse.Namespace) -> None:
     Args:
         args: parsed command line arguments, with the path to the study file
     """
-    study = load_study(args.study)
+    study = _load_study(args.study)
     solver = build_forward_solver(study.forward_solver)
     nominal = solver.nominal_parameters()
 
@@ -125,7 +148,7 @@ def _synthesis(args: argparse.Namespace) -> None:
     Args:
         args: parsed command line arguments, with the path to the study file
     """
-    study = load_study(args.study)
+    study = _load_study(args.study)
     log_file = Path(study.output.path) / "synthesis" / "kipe.log"
     _setup_logging(args.log_level or study.output.log_level, log_file)
     synthesize(study)
@@ -138,7 +161,7 @@ def _estimation(args: argparse.Namespace) -> None:
     Args:
         args: parsed command line arguments, with the path to the study file
     """
-    study = load_study(args.study)
+    study = _load_study(args.study)
     log_file = Path(study.output.path) / "estimation" / "kipe.log"
     _setup_logging(args.log_level or study.output.log_level, log_file)
     estimate(study)
