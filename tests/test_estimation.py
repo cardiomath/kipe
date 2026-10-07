@@ -135,15 +135,26 @@ def test_history_files(tmp_path):
     assert main(["estimation", study]) == 0
 
     lines = (tmp_path / "results" / "estimation" / "history.csv").read_text().splitlines()
-    assert lines[0] == (
-        "iteration,time,a,theta_a,stddev_theta_a,b,theta_b,stddev_theta_b,"
-        "c,theta_c,stddev_theta_c"
-    )
+    header = ["iteration", "time"]
+    for name in "abc":
+        header += [
+            name,
+            f"lower_{name}",
+            f"upper_{name}",
+            f"theta_{name}",
+            f"stddev_theta_{name}",
+        ]
+    assert lines[0].split(",") == header
     assert len(lines) == 1 + 3  # header, initial estimate, two steps
+
     history = _history(tmp_path)
     np.testing.assert_allclose(history["time"], [0.0, 0.5, 1.0])
-    assert history["parameters"].shape == history["theta"].shape == (3, 3)
+    for key in ["parameters", "lower", "upper", "theta"]:
+        assert history[key].shape == (3, 3)
     assert history["P_theta"].shape == (3, 3, 3)
+    # the physical 1σ range encloses the estimate
+    assert np.all(history["lower"] < history["parameters"])
+    assert np.all(history["parameters"] < history["upper"])
 
 
 def test_times_select_from_the_data(tmp_path):
