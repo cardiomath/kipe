@@ -98,6 +98,9 @@ def plot_histories(
 ) -> None:
     """Plot estimation histories into a figure, one subplot per parameter.
 
+    With a single history, each subplot title shows the latest estimate and range; with a
+    truth, also the true value.
+
     Args:
         figure: the figure to draw into
         histories: label -> history; all must estimate the same parameters
@@ -125,7 +128,7 @@ def plot_histories(
         if truth is not None and name in truth:
             ax.axhline(truth[name], color="k", ls="--", lw=1, label="truth")
 
-        ax.set_title(name)
+        ax.set_title(_title(name, histories, truth))
         ax.set_xlabel("assimilation step")
 
     if len(histories) > 1 or truth is not None:
