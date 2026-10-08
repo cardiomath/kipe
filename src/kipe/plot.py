@@ -2,7 +2,9 @@
 
 One subplot per parameter: the estimate after each assimilation step with its physical 1σ
 range, over the steps of all outer iterations. The history is read from ``history.csv``, which
-the estimation writes as it runs, so a running estimation can be plotted too.
+the estimation writes as it runs, so a running estimation can be plotted too. If the run's
+plan is known from its provenance (:mod:`kipe.provenance`), the x axis spans the whole run
+from the start, with all outer iterations marked.
 
 Draws with matplotlib (:func:`plot_histories`) or as text in the terminal with plotext
 (:func:`render_histories`), e.g., to follow an estimation on a cluster (:func:`watch_histories`).
@@ -18,6 +20,7 @@ from types import ModuleType
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
+from ruamel.yaml import YAML, YAMLError
 
 from kipe._types import NDArray_f64
 from kipe.forward_solver import Parameters
@@ -56,9 +59,36 @@ class History:
     upper: NDArray_f64
     """Upper end of the physical 1σ range, shape ``(k, p)``."""
 
+    steps_per_iteration: int | None = None
+    """Number of steps of each outer iteration, from the run's plan; None if unknown."""
+
+    iterations: int | None = None
+    """Number of outer iterations, from the run's plan; None if unknown."""
+
+    @property
+    def steps(self) -> int:
+        """Number of steps of the whole run if its plan is known, else of the history so far."""
+        if self.steps_per_iteration is None or self.iterations is None:
+            return len(self.iteration)
+        return max(self.steps_per_iteration * self.iterations, len(self.iteration))
+
+    def iteration_starts(self) -> list[int]:
+        """Return the steps at which the outer iterations after the first start.
+
+        Returns:
+            all of them if the run's plan is known, else those reached so far
+        """
+        if self.steps_per_iteration is None or self.iterations is None:
+            return (np.flatnonzero(np.diff(self.iteration)) + 1).tolist()
+        return [k * self.steps_per_iteration for k in range(1, self.iterations)]
+
 
 def read_history(path: str | Path) -> History:
-    """Read an estimation history from ``history.csv``.
+    """Read an estimation history from ``history.csv``, and the run's plan next to it.
+
+    The plan, the number of steps per outer iteration and of iterations, comes from the
+    provenance of the run: the assimilation times in ``run.yaml``, the iterations in
+    ``study.yaml`` (the options the run started with).
 
     Args:
         path: path to ``history.csv``
@@ -84,13 +114,35 @@ def read_history(path: str | Path) -> History:
     names = [column for column in header[2:] if f"theta_{column}" in header]
     column = {name: i for i, name in enumerate(header)}
 
+    steps_per_iteration, iterations = _read_plan(Path(path).parent)
+
     return History(
         names=names,
         iteration=data[:, column["iteration"]],
         parameters=data[:, [column[name] for name in names]],
         lower=data[:, [column[f"lower_{name}"] for name in names]],
         upper=data[:, [column[f"upper_{name}"] for name in names]],
+        steps_per_iteration=steps_per_iteration,
+        iterations=iterations,
     )
+
+
+def _read_plan(directory: Path) -> tuple[int | None, int | None]:
+    """Read the number of steps per outer iteration and of iterations of a run.
+
+    Args:
+        directory: output directory of the estimation
+
+    Returns:
+        the steps per iteration (the assimilation times and the initial state) and the
+        iterations; None, None if the run's provenance is missing, e.g., for older runs
+    """
+    try:
+        run = YAML(typ="safe").load(directory / "run.yaml")
+        study = YAML(typ="safe").load(directory / "study.yaml")
+        return len(run["assimilation_times"]) + 1, int(study["estimation"]["iterations"])
+    except (OSError, YAMLError, KeyError, TypeError):
+        return None, None
 
 
 def plot_histories(
@@ -110,6 +162,7 @@ def plot_histories(
         PlotError: if the histories estimate different parameters
     """
     names = _common_names(histories)
+    last = _last_step(histories)
     axes = figure.subplots(1, len(names), squeeze=False)[0]
     for j, (ax, name) in enumerate(zip(axes, names, strict=True)):
         for k, (label, history) in enumerate(histories.items()):
@@ -122,7 +175,7 @@ def plot_histories(
 
         # starts of the outer iterations, after the first
         first = next(iter(histories.values()))
-        for start in np.flatnonzero(np.diff(first.iteration)) + 1:
+        for start in first.iteration_starts():
             ax.axvline(start, color="0.7", lw=0.8)
 
         if truth is not None and name in truth:
@@ -130,6 +183,8 @@ def plot_histories(
 
         ax.set_title(_title(name, histories, truth))
         ax.set_xlabel("assimilation step")
+        if last > 0:
+            ax.set_xlim(0, last)
 
     if len(histories) > 1 or truth is not None:
         axes[0].legend()
@@ -185,6 +240,7 @@ def render_histories(
         marker = plotext.marker("braille", pixel=plotext.pixel(foreground=rgb))
         subplot.draw(subplot.signal(x, y, marker=marker).lines(True))
 
+    last = _last_step(histories)
     for j, name in enumerate(names):
         subplot = figure.subplot(j + 1, 1)
         first = next(iter(histories.values()))
@@ -194,11 +250,11 @@ def render_histories(
         # where lines share a cell, the last one drawn colors all its dots: first the reference
         # lines (the truth below the 1σ ranges, which jump across it at each outer iteration),
         # the estimates on top
-        for start in np.flatnonzero(np.diff(first.iteration)) + 1:  # outer iterations
+        for start in first.iteration_starts():  # outer iterations
             draw(subplot, [float(start)] * 2, [low, high], _GRAY)
 
         if truth is not None and name in truth:
-            draw(subplot, [0.0, float(len(first.iteration) - 1)], [truth[name]] * 2, _TRUTH)
+            draw(subplot, [0.0, float(last)], [truth[name]] * 2, _TRUTH)
 
         for history in histories.values():
             steps = np.arange(len(history.iteration)).tolist()
@@ -210,6 +266,8 @@ def render_histories(
             draw(subplot, steps, history.parameters[:, j].tolist(), _color(k))
 
         subplot.title(_title(name, histories, truth))
+        if last > 0:
+            subplot.ruler(0).lim(0, last)
 
     figure.subplot(len(names), 1).label("assimilation step", axis=0)
 
@@ -273,6 +331,18 @@ def _common_names(histories: Mapping[str, History]) -> list[str]:
         raise PlotError("the histories estimate different parameters and cannot be compared")
 
     return names
+
+
+def _last_step(histories: Mapping[str, History]) -> int:
+    """Return the last step of the x axis: of the longest run, or history if not planned.
+
+    Args:
+        histories: label -> history
+
+    Returns:
+        the last step
+    """
+    return max(history.steps for history in histories.values()) - 1
 
 
 def _title(name: str, histories: Mapping[str, History], truth: Parameters | None) -> str:

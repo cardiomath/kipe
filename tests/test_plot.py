@@ -7,7 +7,7 @@ import pytest
 from ruamel.yaml import YAML
 
 from kipe.cli import main
-from kipe.plot import PlotError, read_history, render_histories
+from kipe.plot import PlotError, plot_histories, read_history, render_histories
 
 pytest.importorskip("matplotlib")
 
@@ -176,3 +176,39 @@ def test_render_histories_keeps_terminal_background(tmp_path):
     text = render_histories({"study": history}, truth={"a": 0.2, "c": 3.0})
     assert "\x1b[38;" in text
     assert "\x1b[48;" not in text
+
+
+def test_read_history_reads_the_plan(tmp_path):
+    """The plan from the run's provenance: 2 iterations of 2 times and the initial state."""
+    _study(tmp_path)
+    history = read_history(tmp_path / "results" / "estimation" / "history.csv")
+    assert (history.steps_per_iteration, history.iterations) == (3, 2)
+    assert history.steps == len(history.iteration) == 6
+    assert history.iteration_starts() == [3]
+
+
+def test_running_estimation_spans_the_whole_run(tmp_path):
+    """While the estimation runs, the axis and the iteration starts cover the whole run."""
+    _study(tmp_path)
+    path = tmp_path / "results" / "estimation" / "history.csv"
+    path.write_text("".join(path.read_text().splitlines(keepends=True)[:3]))  # 2 steps
+    history = read_history(path)
+    assert len(history.iteration) == 2
+    assert history.steps == 6
+    assert history.iteration_starts() == [3]
+
+    from matplotlib.figure import Figure
+
+    figure = Figure()
+    plot_histories(figure, {"study": history})
+    assert figure.axes[0].get_xlim() == (0, 5)
+
+
+def test_without_plan_the_axis_follows_the_history(tmp_path):
+    """Older runs have no run.yaml: the steps and iteration starts come from the history."""
+    _study(tmp_path)
+    (tmp_path / "results" / "estimation" / "run.yaml").unlink()
+    history = read_history(tmp_path / "results" / "estimation" / "history.csv")
+    assert history.steps_per_iteration is None
+    assert history.steps == 6
+    assert history.iteration_starts() == [3]
