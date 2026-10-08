@@ -68,9 +68,9 @@ def test_unique_does_not_correct():
     np.testing.assert_array_equal(M, 0.0)
 
 
-def test_gain_without_contribution():
-    """A rank that does not contribute adds nothing; on one rank: no information."""
+def test_gain_without_entries():
+    """A rank that holds no innovation entries adds nothing; on one rank: no information."""
     stencil = roukf.sigma_point_stencil("simplex", 2)
-    U_inv, M = roukf.gain(np.ones((4, 3)), stencil, MPI.COMM_WORLD, contributes=False)
+    U_inv, M = roukf.gain(np.ones((0, 3)), stencil, MPI.COMM_WORLD)
     np.testing.assert_allclose(U_inv, np.linalg.inv(stencil.p_alpha()))
     np.testing.assert_array_equal(M, 0.0)

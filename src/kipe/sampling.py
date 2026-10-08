@@ -6,22 +6,38 @@ is taken, giving the sampled state :math:`y` that the measurement model (see
 arrays and their own configuration; samplers that need the discretization (mesh, degrees of
 freedom) live with their backend, e.g., in :mod:`kipe.fenicsx.sampling`.
 
-To add a sampler: subclass :class:`SpatialSampler`, implement :meth:`~SpatialSampler.sample`,
-add its options to :mod:`kipe.options` and a ``case`` to :func:`build_sampler`.
+In parallel, each entry of the sampled vector is held by exactly one rank: a sampler knows
+the vector's ``size`` over all ranks and, per rank, the ``global_indices`` of the entries it
+returns. The measurement's data are read and written in the order of these positions, so they
+do not depend on the number of ranks.
+
+To add a sampler: subclass :class:`SpatialSampler`, set ``size`` and ``global_indices``,
+implement :meth:`~SpatialSampler.sample`, add its options to :mod:`kipe.options` and a
+``case`` to :func:`build_sampler`.
 """
 
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from typing import assert_never
 
+from mpi4py import MPI
+
 import numpy as np
 
-from kipe._types import NDArray_f64
-from kipe.options import ArraySamplingOptions
+from kipe._types import NDArray_f64, NDArray_i64
+from kipe.forward_solver import FieldSpec
+from kipe.options import ArraySamplingOptions, StudyFileError
 
 
 class SpatialSampler(ABC):
     """Evaluates the model fields at the measurement locations."""
+
+    size: int
+    """Number of entries of the sampled vector, over all ranks."""
+
+    global_indices: NDArray_i64
+    """Positions of this rank's entries in the sampled vector, in the order :meth:`sample`
+    returns them; each entry is held by exactly one rank."""
 
     # NOTE: a measurement context (time-dependent geometry, auxiliary data such as the magnitude
     # or background phase of PC-MRI) is expected soon. It becomes an additional argument of
@@ -35,45 +51,79 @@ class SpatialSampler(ABC):
             fields: the state fields the measurement observes (its ``fields``), rank-local
 
         Returns:
-            sampled state :math:`y`, rank-local; a new array, not a view of ``fields``
-            or of internal buffers
+            this rank's entries of the sampled state :math:`y`, at the positions
+            ``global_indices``; a new array, not a view of ``fields`` or of internal buffers
         """
 
 
 class ArraySampler(SpatialSampler):
     """Samples all entries of the observed fields, concatenated in the order of ``fields``.
 
+    The fields must be replicated, i.e., held in full by every rank; rank 0 holds all entries
+    of the sampled vector, the other ranks none.
+
     Args:
         fields: names of the observed fields, in the order of concatenation
+        state_spec: the forward solver's state fields
+        comm: communicator of the run
+
+    Raises:
+        StudyFileError: if a field is distributed over the ranks; its entries would depend on
+            the partition, which needs a sampler of the backend, e.g., ``fenicsx.mesh``
     """
 
-    def __init__(self, fields: list[str]) -> None:
+    def __init__(
+        self,
+        fields: list[str],
+        state_spec: Mapping[str, FieldSpec],
+        comm: MPI.Comm = MPI.COMM_WORLD,
+    ) -> None:
+        distributed = [name for name in fields if state_spec[name].kind == "distributed"]
+        if distributed:
+            raise StudyFileError(
+                f"field {', '.join(distributed)} is distributed over the MPI ranks; array "
+                "sampling needs replicated fields, use a sampler of the backend instead"
+            )
+
         self._fields = fields
+        self._holds = comm.rank == 0
+        self.size = sum(state_spec[name].local_size for name in fields)
+        self.global_indices = np.arange(self.size if self._holds else 0, dtype=np.int64)
 
     def sample(self, fields: Mapping[str, NDArray_f64]) -> NDArray_f64:
-        """Concatenate the observed fields.
+        """Concatenate the observed fields, on rank 0.
 
         Args:
             fields: the observed state fields
 
         Returns:
-            all entries of the fields, concatenated (a new array)
+            all entries of the fields, concatenated (a new array); empty on the other ranks
         """
+        if not self._holds:
+            return np.empty(0)
+
         return np.concatenate([fields[name] for name in self._fields])
 
 
-def build_sampler(options: ArraySamplingOptions, fields: list[str]) -> SpatialSampler:
+def build_sampler(
+    options: ArraySamplingOptions,
+    fields: list[str],
+    state_spec: Mapping[str, FieldSpec],
+    comm: MPI.Comm = MPI.COMM_WORLD,
+) -> SpatialSampler:
     """Construct the sampler given by the ``spatial_sampling`` options of a measurement.
 
     Args:
         options: ``spatial_sampling`` options of the measurement
         fields: names of the fields the measurement observes
+        state_spec: the forward solver's state fields
+        comm: communicator of the run
 
     Returns:
         the spatial sampler
     """
     match options:
         case ArraySamplingOptions():
-            return ArraySampler(fields)
+            return ArraySampler(fields, state_spec, comm)
         case _:
             assert_never(options)
