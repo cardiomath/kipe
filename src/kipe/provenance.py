@@ -37,10 +37,8 @@ from typing import Any
 
 from mpi4py import MPI
 
-from pydantic import TypeAdapter
-from ruamel.yaml import YAML
-
-from kipe.options import StudyOptions
+from kipe._yaml import write_yaml
+from kipe.options import StudyOptions, dump_study
 
 logger = logging.getLogger(__name__)
 
@@ -75,12 +73,10 @@ def recorded_run(
 
     if comm.rank == 0:
         output.mkdir(parents=True, exist_ok=True)
-        _write_yaml(output / "run.yaml", run)
-        _write_yaml(
-            output / "study.yaml", TypeAdapter(StudyOptions).dump_python(study, mode="json")
-        )
+        write_yaml(output / "run.yaml", run)
+        dump_study(study, output / "study.yaml")
         environment = _environment(output, study, comm)
-        _write_yaml(output / "environment.yaml", environment)
+        write_yaml(output / "environment.yaml", environment)
         _write_packages(output / "packages.txt")
         logger.info("%s", _summary(environment))
 
@@ -88,11 +84,11 @@ def recorded_run(
         yield
     except BaseException:
         if comm.rank == 0:
-            _write_yaml(output / "run.yaml", run | {"status": "failed", "finished": _now()})
+            write_yaml(output / "run.yaml", run | {"status": "failed", "finished": _now()})
         raise
 
     if comm.rank == 0:
-        _write_yaml(output / "run.yaml", run | {"status": "finished", "finished": _now()})
+        write_yaml(output / "run.yaml", run | {"status": "finished", "finished": _now()})
         logger.info("%-11s%s", "run info", output / "run.yaml")
 
 
@@ -299,23 +295,6 @@ def _packages() -> str:
     """Return all installed distributions, one ``name==version`` per line, sorted by name."""
     packages = {f"{d.metadata['Name']}=={d.version}" for d in metadata.distributions()}
     return "\n".join(sorted(packages, key=str.lower)) + "\n"
-
-
-def _write_yaml(path: Path, data: Mapping[str, Any]) -> None:
-    """Write a mapping as YAML.
-
-    Args:
-        path: where to write
-        data: the mapping
-    """
-    yaml = YAML()
-    yaml.default_flow_style = False
-    yaml.width = 4096  # one line per value, no wrapping
-    yaml.representer.add_representer(  # write "null", not an empty value
-        type(None), lambda r, _: r.represent_scalar("tag:yaml.org,2002:null", "null")
-    )
-    with open(path, "w") as f:
-        yaml.dump(dict(data), f)
 
 
 def _git(directory: Path, *args: str) -> str | None:

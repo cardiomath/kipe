@@ -24,6 +24,8 @@ from pydantic import ConfigDict, Field, PositiveFloat, TypeAdapter
 from pydantic.dataclasses import dataclass
 from ruamel.yaml import YAML, YAMLError
 
+from kipe._yaml import write_yaml
+
 _CONFIG = ConfigDict(extra="forbid", use_attribute_docstrings=True)
 
 
@@ -340,3 +342,16 @@ def load_study(path: str | Path) -> StudyOptions:
         raise StudyFileError(f"study file {path} must be a YAML mapping of sections")
 
     return TypeAdapter(StudyOptions).validate_python(data)
+
+
+def dump_study(study: StudyOptions, path: str | Path) -> None:
+    """Write study options as a study file, which :func:`load_study` reads back.
+
+    All options are written, defaults included, ``null`` for those not set. Useful to generate
+    study files from Python, e.g., for a sweep over noise seeds.
+
+    Args:
+        study: the study options
+        path: where to write the study file
+    """
+    write_yaml(path, TypeAdapter(StudyOptions).dump_python(study, mode="json"))
