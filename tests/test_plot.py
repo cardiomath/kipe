@@ -4,9 +4,20 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from ruamel.yaml import YAML
 
 from kipe.cli import main
+from kipe.options import (
+    EstimationOptions,
+    ForwardSolverOptions,
+    MeasurementOptions,
+    NoiseOptions,
+    NumpyDataOptions,
+    OutputOptions,
+    ParameterPrior,
+    ParametersOptions,
+    StudyOptions,
+    dump_study,
+)
 from kipe.plot import PlotError, plot_histories, read_history, render_histories
 
 pytest.importorskip("matplotlib")
@@ -14,29 +25,40 @@ pytest.importorskip("matplotlib")
 
 def _study(tmp_path: Path, select: tuple[str, ...] = ("a", "c")) -> str:
     """Write and run a small FitzHugh-Nagumo estimation; return the study file."""
-    study = {
-        "output": {"path": str(tmp_path / "results")},
-        "forward_solver": {"factory": "kipe.examples.fitzhugh_nagumo:Solver"},
-        "parameters": {
-            "reparameterization": "log",
-            "select": {name: {"initial": 0.25, "relative_stddev": 0.1} for name in select},
+    study = StudyOptions(
+        output=OutputOptions(path=str(tmp_path / "results")),
+        forward_solver=ForwardSolverOptions(factory="kipe.examples.fitzhugh_nagumo:Solver"),
+        parameters=ParametersOptions(
+            reparameterization="log",
+            select={name: ParameterPrior(initial=0.25, relative_stddev=0.1) for name in select},
+        ),
+        measurements={
+            "v": MeasurementOptions(
+                fields=["v"],
+                times=[0.5, 1.0],
+                data=NumpyDataOptions(type="numpy", path=str(tmp_path / "v.npz")),
+                noise=NoiseOptions(stddev=0.05, seed=0),
+            )
         },
-        "measurements": {
-            "v": {
-                "fields": ["v"],
-                "times": [0.5, 1.0],
-                "data": {"type": "numpy", "path": str(tmp_path / "v.npz")},
-                "noise": {"stddev": 0.05, "seed": 0},
-            }
-        },
-        "estimation": {"iterations": 2},
-    }
+        estimation=EstimationOptions(iterations=2),
+    )
     tmp_path.mkdir(parents=True, exist_ok=True)
     path = tmp_path / "study.yaml"
-    YAML().dump(study, path)
+    dump_study(study, path)
     assert main(["synthesis", str(path)]) == 0
     assert main(["estimation", str(path)]) == 0
     return str(path)
+
+
+def _study_without_estimation(tmp_path: Path) -> Path:
+    """Write a study file without parameters or measurements; return its path."""
+    study = StudyOptions(
+        output=OutputOptions(path=str(tmp_path / "results")),
+        forward_solver=ForwardSolverOptions(factory="kipe.examples.fitzhugh_nagumo:Solver"),
+    )
+    path = tmp_path / "study.yaml"
+    dump_study(study, path)
+    return path
 
 
 def test_read_history_matches_npz(tmp_path):
@@ -66,14 +88,7 @@ def test_plot_compares_studies(tmp_path):
 
 
 def test_plot_without_history(tmp_path, capsys):
-    path = tmp_path / "study.yaml"
-    YAML().dump(
-        {
-            "output": {"path": str(tmp_path / "results")},
-            "forward_solver": {"factory": "kipe.examples.fitzhugh_nagumo:Solver"},
-        },
-        path,
-    )
+    path = _study_without_estimation(tmp_path)
     assert main(["plot", str(path), "--save", str(tmp_path / "x.png")]) == 1
     assert "no estimation history" in capsys.readouterr().err
 
@@ -139,14 +154,7 @@ def test_plot_watch_waits_for_history(tmp_path, capsys, monkeypatch):
         raise KeyboardInterrupt
 
     monkeypatch.setattr("kipe.plot.time.sleep", interrupt)
-    path = tmp_path / "study.yaml"
-    YAML().dump(
-        {
-            "output": {"path": str(tmp_path / "results")},
-            "forward_solver": {"factory": "kipe.examples.fitzhugh_nagumo:Solver"},
-        },
-        path,
-    )
+    path = _study_without_estimation(tmp_path)
     assert main(["plot", str(path), "--watch"]) == 0
     assert "no estimation history" in capsys.readouterr().out
 
