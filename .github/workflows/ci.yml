@@ -26,6 +26,11 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    env:
+      # MPICH from PyPI communicates through UCX, which probes the RDMA device (mana_0) of some
+      # Azure runners, fails, and aborts MPI_Init with a SIGTERM (exit code 143): use shared
+      # memory and TCP only
+      UCX_TLS: self,sm,tcp
     strategy:
       fail-fast: false
       matrix:
@@ -40,4 +45,7 @@ jobs:
       # non-editable install: with the src layout, tests run against the installed package
       # mpi4py loads an MPI library at runtime; the runner has none, so install MPICH from PyPI
       - run: pip install ".[test,plot]" mpich
+      # MPI problems of the runner show up here, not as a puzzling failure in pytest
+      - name: MPI start
+        run: python -c "from mpi4py import MPI; print(MPI.Get_library_version().splitlines()[0])"
       - run: pytest -q
