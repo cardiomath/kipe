@@ -18,11 +18,16 @@ kipe needs Python ≥ 3.12 and an MPI library (for `mpi4py`). Use your system's 
 with pip:
 
 ```bash
-pip install "kipe[plot] @ git+https://github.com/cardiomath/kipe"
+pip install "kipe[plot]"
 pip install mpich  # only if there is no MPI library on your system
 ```
 
-The `plot` extra adds matplotlib and plotext for `kipe plot`.
+The `plot` extra adds matplotlib and plotext for `kipe plot`. The latest development version
+installs from GitHub:
+
+```bash
+pip install "kipe[plot] @ git+https://github.com/cardiomath/kipe"
+```
 
 ## First run: the FitzHugh–Nagumo example
 
@@ -63,6 +68,20 @@ The `arguments` are those passed to the factory, i.e., `MySolver(dt=0.01)`.
 
 The FitzHugh–Nagumo solver in [`kipe/examples/fitzhugh_nagumo.py`](https://github.com/cardiomath/kipe/blob/main/src/kipe/examples/fitzhugh_nagumo.py)
 is a complete example in about 150 lines, docstrings included.
+
+## Development
+
+```bash
+git clone https://github.com/cardiomath/kipe
+cd kipe
+pip install -e ".[test,plot,check]"
+pre-commit install --hook-type pre-commit --hook-type commit-msg
+pytest
+```
+
+The pre-commit hooks run ruff, mypy and a check of the commit message, which follows
+[Conventional Commits](https://www.conventionalcommits.org), e.g., `fix(roukf): ...`; the
+allowed scopes are listed in `.pre-commit-config.yaml`.
 
 ## License
 
