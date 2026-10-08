@@ -245,7 +245,9 @@ def test_log_output(tmp_path, caplog):
         assert main(["estimation", study]) == 0
 
     messages = [record.getMessage() for record in caplog.records]
-    assert messages[0] == "ROUKF estimation"
+    assert messages[0].split() == ["study", str(Path(study).resolve())]
+    assert messages[1].startswith("kipe ")  # versions, host, ranks (kipe.provenance)
+    assert messages[2] == "ROUKF estimation"
     assert any(m.endswith("simplex (4 sigma points)") for m in messages)
     header = next(m for m in messages if "innovation" in m)
     assert header.split() == ["step", "time", "a", "b", "c", "innovation"]

@@ -127,8 +127,9 @@ def test_plot_watch(tmp_path, capsys, monkeypatch):
     def interrupt(seconds: float) -> None:
         raise KeyboardInterrupt
 
-    monkeypatch.setattr("kipe.plot.time.sleep", interrupt)
     study = _study(tmp_path)
+    # after the run: this patches time.sleep everywhere, e.g., in subprocess.run with a timeout
+    monkeypatch.setattr("kipe.plot.time.sleep", interrupt)
     assert main(["plot", study, "--watch"]) == 0
     assert "a = " in capsys.readouterr().out
 
@@ -161,8 +162,9 @@ def test_plot_watch_with_terminal(tmp_path, capsys, monkeypatch):
     def interrupt(seconds: float) -> None:
         raise KeyboardInterrupt
 
-    monkeypatch.setattr("kipe.plot.time.sleep", interrupt)
     study = _study(tmp_path)
+    # after the run: this patches time.sleep everywhere, e.g., in subprocess.run with a timeout
+    monkeypatch.setattr("kipe.plot.time.sleep", interrupt)
     assert main(["plot", study, "--terminal", "--watch"]) == 0
     assert "a = " in capsys.readouterr().out
 

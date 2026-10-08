@@ -2,12 +2,14 @@
 
 The forward solver runs with its nominal parameters through all measurement times. At each
 time, the observation operator gives the predicted data and noise is added. The resulting
-measurements are written to their ``data`` files, and returned.
+measurements are written to their ``data`` files, and returned. The provenance of the run is
+written to ``<output.path>/synthesis/`` (:mod:`kipe.provenance`).
 """
 
 import logging
 import time
 from collections.abc import Mapping
+from pathlib import Path
 from typing import assert_never
 
 import numpy as np
@@ -23,12 +25,13 @@ from kipe.measurements import (
     write_numpy,
 )
 from kipe.options import MeasurementOptions, RunTruthOptions, StudyFileError, StudyOptions
+from kipe.provenance import recorded_run
 
 logger = logging.getLogger(__name__)
 
 
 def synthesize(study: StudyOptions) -> list[Measurement]:
-    """Generate the data of all measurements of the study and write them.
+    """Generate the data of all measurements of the study; write them and the provenance.
 
     Args:
         study: the study options
@@ -50,28 +53,32 @@ def synthesize(study: StudyOptions) -> list[Measurement]:
         for name, options in study.measurements.items()
     }
 
-    logger.info("synthesis")
-    logger.info("  %-16s%s", "forward solver", study.forward_solver.factory)
-    logger.info("  %-16s%s", "truth", study.synthesis.truth.type)
-    logger.info("")
-    rows = [("measurement", "fields", "σ", "seed")]
-    for name, options in study.measurements.items():
-        seed = "" if options.noise.seed is None else str(options.noise.seed)
-        rows.append((name, ", ".join(options.fields), f"{options.noise.stddev:g}", seed))
-    for line in format_table(rows, "<<>>"):
-        logger.info("  %s", line)
+    output = Path(study.output.path) / "synthesis"
+    with recorded_run(output, study):
+        logger.info("synthesis")
+        logger.info("  %-16s%s", "forward solver", study.forward_solver.factory)
+        logger.info("  %-16s%s", "truth", study.synthesis.truth.type)
+        logger.info("")
+        rows = [("measurement", "fields", "σ", "seed")]
+        for name, options in study.measurements.items():
+            seed = "" if options.noise.seed is None else str(options.noise.seed)
+            rows.append((name, ", ".join(options.fields), f"{options.noise.stddev:g}", seed))
+        for line in format_table(rows, "<<>>"):
+            logger.info("  %s", line)
 
-    match study.synthesis.truth:
-        case RunTruthOptions():
-            measurements = _generate_from_run(solver, study.measurements, operators)
-        case _:
-            assert_never(study.synthesis.truth)
+        match study.synthesis.truth:
+            case RunTruthOptions():
+                measurements = _generate_from_run(solver, study.measurements, operators)
+            case _:
+                assert_never(study.synthesis.truth)
 
-    for measurement in measurements:
-        path = study.measurements[measurement.name].data.path
-        write_numpy(path, measurement.times, measurement.values)
-        logger.info("wrote %s: %d times to %s", measurement.name, len(measurement.times), path)
-    logger.info("%-11s%.3g s", "run time", time.perf_counter() - started)
+        for measurement in measurements:
+            path = study.measurements[measurement.name].data.path
+            write_numpy(path, measurement.times, measurement.values)
+            logger.info(
+                "wrote %s: %d times to %s", measurement.name, len(measurement.times), path
+            )
+        logger.info("%-11s%.3g s", "run time", time.perf_counter() - started)
 
     return measurements
 
