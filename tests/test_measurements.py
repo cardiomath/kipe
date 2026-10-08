@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from kipe.examples.fitzhugh_nagumo import Solver
+from kipe.examples.fitzhugh_nagumo import FieldSpec, Solver
 from kipe.measurements import (
     DifferenceModel,
     MeasurementModel,
@@ -44,16 +44,30 @@ def test_incomplete_model_cannot_be_instantiated():
 
 
 def test_array_sampler_concatenates_in_order_of_fields():
-    sampler = build_sampler(ArraySamplingOptions(), ["w", "v"])
+    spec = {"v": FieldSpec(1), "w": FieldSpec(2)}
+    sampler = build_sampler(ArraySamplingOptions(), ["w", "v"], spec)
     assert isinstance(sampler, ArraySampler)
     fields = {"v": np.array([1.0]), "w": np.array([2.0, 3.0])}
     np.testing.assert_array_equal(sampler.sample(fields), [2.0, 3.0, 1.0])
 
 
+def test_array_sampler_holds_all_entries_on_rank_0():
+    """Replicated fields: rank 0 holds all entries (one rank here), the other ranks none."""
+    sampler = ArraySampler(["w", "v"], {"v": FieldSpec(1), "w": FieldSpec(2)})
+    assert sampler.size == 3
+    np.testing.assert_array_equal(sampler.global_indices, [0, 1, 2])
+
+
+def test_array_sampler_rejects_distributed_fields():
+    """The entries of a distributed field depend on the partition: a backend's sampler."""
+    with pytest.raises(StudyFileError, match="u is distributed"):
+        ArraySampler(["u"], {"u": FieldSpec(5, kind="distributed")})
+
+
 def test_array_sampler_returns_a_new_array():
     """The filter keeps sampled states while the fields' arrays may be reused."""
     v = np.array([1.0, 2.0])
-    y = ArraySampler(["v"]).sample({"v": v})
+    y = ArraySampler(["v"], {"v": FieldSpec(2)}).sample({"v": v})
     v[:] = 0.0
     np.testing.assert_array_equal(y, [1.0, 2.0])
 

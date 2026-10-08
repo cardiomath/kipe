@@ -223,7 +223,9 @@ def test_estimation_from_python(tmp_path):
         t = t_next
         values.append(state["v"].copy())
 
-    operator = ObservationOperator(["v"], ArraySampler(["v"]), DifferenceModel())
+    operator = ObservationOperator(
+        ["v"], ArraySampler(["v"], solver.state_spec), DifferenceModel()
+    )
     measurement = Measurement("v", operator, times, np.array(values), stddev=0.1)
     parameters = ParametersOptions(
         reparameterization="log", select={"c": ParameterPrior(relative_stddev=0.5)}

@@ -292,7 +292,7 @@ def sensitivity(ensemble: NDArray_f64, stencil: SigmaPointStencil) -> NDArray_f6
 
 
 def gain(
-    Gamma: NDArray_f64, stencil: SigmaPointStencil, comm: MPI.Comm, *, contributes: bool = True
+    Gamma: NDArray_f64, stencil: SigmaPointStencil, comm: MPI.Comm
 ) -> tuple[NDArray_f64, NDArray_f64]:
     r"""Compute :math:`U^{-1}` and the correction factor :math:`M` from the innovations.
 
@@ -304,16 +304,14 @@ def gain(
 
     for innovations weighted with the noise (so :math:`W = I`). The products
     :math:`L_\Gamma^T L_\Gamma` and :math:`L_\Gamma^T E_\alpha(\Gamma_{(*)})` are sums over the
-    innovation entries, summed over the ranks; each entry must be counted on exactly one rank
-    (``contributes``).
+    innovation entries, summed over the ranks; each entry must be held by exactly one rank
+    (see :attr:`kipe.sampling.SpatialSampler.global_indices`).
 
     Args:
         Gamma: innovations, weighted with the noise, one sigma point per column; the m
-            innovation entries held by this rank, shape ``(m, r)``
+            innovation entries held by this rank (possibly none), shape ``(m, r)``
         stencil: the sigma-point stencil
         comm: communicator over which the innovation entries are distributed
-        contributes: whether this rank's entries count; False on all but one rank for
-            innovations that every rank holds in full
 
     Returns:
         - :math:`U^{-1}`, shape ``(p, p)``; zero for ``unique``
@@ -321,8 +319,8 @@ def gain(
     """
     p = stencil.points.shape[0]
     L_Gamma = sensitivity(Gamma, stencil)
-    LtL = L_Gamma.T @ L_Gamma if contributes else np.zeros((p, p))
-    LtG = L_Gamma.T @ mean(Gamma, stencil) if contributes else np.zeros(p)
+    LtL = L_Gamma.T @ L_Gamma
+    LtG = L_Gamma.T @ mean(Gamma, stencil)
     comm.Allreduce(MPI.IN_PLACE, LtL, op=MPI.SUM)
     comm.Allreduce(MPI.IN_PLACE, LtG, op=MPI.SUM)
 
@@ -342,8 +340,6 @@ def update(
     Gamma: NDArray_f64,
     stencil: SigmaPointStencil,
     comm: MPI.Comm,
-    *,
-    contributes: bool = True,
 ) -> FilterState:
     r"""Return the corrected filter state from the propagated sigma points and their innovations.
 
@@ -356,7 +352,6 @@ def update(
         Gamma: their innovations, weighted with the noise, see :func:`gain`
         stencil: the sigma-point stencil
         comm: communicator over which the state and innovation entries are distributed
-        contributes: whether this rank's innovation entries count, see :func:`gain`
 
     Returns:
         the corrected filter state
@@ -366,7 +361,7 @@ def update(
     L_x = sensitivity(x_sigma, stencil)
     L_theta = sensitivity(theta_sigma, stencil)
 
-    U_inv, M = gain(Gamma, stencil, comm, contributes=contributes)
+    U_inv, M = gain(Gamma, stencil, comm)
 
     x_posterior = x_prior - L_x @ M
     theta_posterior = theta_prior - L_theta @ M
