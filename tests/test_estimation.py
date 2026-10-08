@@ -1,67 +1,82 @@
 """``kipe estimation``: the FitzHugh-Nagumo twin experiment and example, history and errors."""
 
-import copy
 import logging
 import shutil
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 import pytest
-from ruamel.yaml import YAML
 
 from kipe.cli import main
 from kipe.estimation import Estimation
 from kipe.examples.fitzhugh_nagumo import Solver
 from kipe.measurements import DifferenceModel, Measurement, ObservationOperator, write_numpy
-from kipe.options import EstimationOptions, ParameterPrior, ParametersOptions
+from kipe.options import (
+    EstimationOptions,
+    ForwardSolverOptions,
+    MeasurementOptions,
+    NoiseOptions,
+    NumpyDataOptions,
+    OutputOptions,
+    ParameterPrior,
+    ParametersOptions,
+    SigmaPoints,
+    StudyOptions,
+    TimeRange,
+    dump_study,
+)
 from kipe.parameters import build_parameterization
 from kipe.sampling import ArraySampler
 
 TRUE = {"a": 0.2, "b": 0.2, "c": 3.0}  # nominal values of the solver: generate the data
 INITIAL = {"a": 0.3, "b": 0.3, "c": 2.0}  # deliberately wrong initial estimate
-TIMES = {"start": 0.5, "stop": 20.0, "step": 0.5}
+TIMES = TimeRange(start=0.5, stop=20.0, step=0.5)
 EXAMPLE = Path(__file__).parents[1] / "examples" / "fitzhugh_nagumo" / "study.yaml"
 
 
-def _study(
+def _options(
     tmp_path: Path,
     initial: dict[str, float] = INITIAL,
     *,
-    sigma_points: str = "simplex",
+    sigma_points: SigmaPoints = "simplex",
     iterations: int = 1,
-    times: dict[str, float] | list[float] = TIMES,
+    times: TimeRange | list[float] = TIMES,
     parameters: bool = True,
     relative_stddev: float = 0.2,
     noise: float = 0.05,
-) -> Path:
-    """Write a FitzHugh-Nagumo study file measuring v and w."""
-    study = {
-        "output": {"path": str(tmp_path / "results")},
-        "forward_solver": {
-            "factory": "kipe.examples.fitzhugh_nagumo:Solver",
-            "arguments": {"dt": 0.05},
+) -> StudyOptions:
+    """Return the options of a FitzHugh-Nagumo study measuring v and w."""
+    parameters_options = ParametersOptions(
+        reparameterization="log",
+        select={
+            name: ParameterPrior(initial=value, relative_stddev=relative_stddev)
+            for name, value in initial.items()
         },
-        "measurements": {
-            field: {
-                "fields": [field],
-                "times": copy.deepcopy(times),  # no YAML anchors for a shared object
-                "data": {"type": "numpy", "path": str(tmp_path / f"{field}.npz")},
-                "noise": {"stddev": noise, "seed": seed},
-            }
+    )
+    return StudyOptions(
+        output=OutputOptions(path=str(tmp_path / "results")),
+        forward_solver=ForwardSolverOptions(
+            factory="kipe.examples.fitzhugh_nagumo:Solver", arguments={"dt": 0.05}
+        ),
+        parameters=parameters_options if parameters else None,
+        measurements={
+            field: MeasurementOptions(
+                fields=[field],
+                times=times,
+                data=NumpyDataOptions(type="numpy", path=str(tmp_path / f"{field}.npz")),
+                noise=NoiseOptions(stddev=noise, seed=seed),
+            )
             for field, seed in [("v", 0), ("w", 1)]
         },
-        "estimation": {"sigma_points": sigma_points, "iterations": iterations},
-    }
-    if parameters:
-        study["parameters"] = {
-            "reparameterization": "log",
-            "select": {
-                name: {"initial": value, "relative_stddev": relative_stddev}
-                for name, value in initial.items()
-            },
-        }
+        estimation=EstimationOptions(sigma_points=sigma_points, iterations=iterations),
+    )
+
+
+def _study(tmp_path: Path, *args, **kwargs) -> Path:
+    """Write the study file of :func:`_options` (same arguments); return its path."""
     path = tmp_path / "study.yaml"
-    YAML().dump(study, path)  # round-trip dumper: keeps the order of the keys
+    dump_study(_options(tmp_path, *args, **kwargs), path)
     return path
 
 
@@ -114,7 +129,7 @@ def test_unique_keeps_true_parameters(tmp_path):
 
 def test_iterations_restart_from_estimate(tmp_path):
     """The second pass starts from the first pass's estimate, with the initial uncertainty."""
-    study = str(_study(tmp_path, iterations=2, times={"start": 0.5, "stop": 5.0, "step": 0.5}))
+    study = str(_study(tmp_path, iterations=2, times=TimeRange(start=0.5, stop=5.0, step=0.5)))
     assert main(["synthesis", study]) == 0
     assert main(["estimation", study]) == 0
 
@@ -187,11 +202,11 @@ def test_estimation_needs_parameters(tmp_path, capsys):
 def test_measurements_must_share_times(tmp_path, capsys):
     write_numpy(tmp_path / "v.npz", np.array([0.5, 1.0]), np.zeros((2, 1)))
     write_numpy(tmp_path / "w.npz", np.array([0.5]), np.zeros((1, 1)))
-    study = _study(tmp_path, times=[0.5, 1.0])
-    yaml = YAML(typ="safe")
-    options = yaml.load(study)
-    options["measurements"]["w"]["times"] = [0.5]
-    yaml.dump(options, study)
+    options = _options(tmp_path, times=[0.5, 1.0])
+    assert options.measurements is not None
+    w = replace(options.measurements["w"], times=[0.5])
+    study = tmp_path / "study.yaml"
+    dump_study(replace(options, measurements={**options.measurements, "w": w}), study)
     assert main(["estimation", str(study)]) == 1
     assert "have different times" in capsys.readouterr().err
 

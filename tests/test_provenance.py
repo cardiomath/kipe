@@ -10,31 +10,43 @@ import kipe
 from kipe.cli import main
 from kipe.estimation import estimate
 from kipe.examples.fitzhugh_nagumo import Solver
-from kipe.options import load_study
+from kipe.options import (
+    EstimationOptions,
+    ForwardSolverOptions,
+    MeasurementOptions,
+    NoiseOptions,
+    NumpyDataOptions,
+    OutputOptions,
+    ParameterPrior,
+    ParametersOptions,
+    StudyOptions,
+    dump_study,
+    load_study,
+)
 from kipe.provenance import _container, git_state
 
 
 def _study(tmp_path: Path) -> Path:
     """Write a small FitzHugh-Nagumo study file; return its path."""
-    study = {
-        "output": {"path": str(tmp_path / "results")},
-        "forward_solver": {"factory": "kipe.examples.fitzhugh_nagumo:Solver"},
-        "parameters": {
-            "reparameterization": "log",
-            "select": {"a": {"initial": 0.25, "relative_stddev": 0.1}},
+    study = StudyOptions(
+        output=OutputOptions(path=str(tmp_path / "results")),
+        forward_solver=ForwardSolverOptions(factory="kipe.examples.fitzhugh_nagumo:Solver"),
+        parameters=ParametersOptions(
+            reparameterization="log",
+            select={name: ParameterPrior(initial=0.25, relative_stddev=0.1) for name in ["a"]},
+        ),
+        measurements={
+            "v": MeasurementOptions(
+                fields=["v"],
+                times=[0.5, 1.0],
+                data=NumpyDataOptions(type="numpy", path=str(tmp_path / "v.npz")),
+                noise=NoiseOptions(stddev=0.05, seed=0),
+            )
         },
-        "measurements": {
-            "v": {
-                "fields": ["v"],
-                "times": [0.5, 1.0],
-                "data": {"type": "numpy", "path": str(tmp_path / "v.npz")},
-                "noise": {"stddev": 0.05, "seed": 0},
-            }
-        },
-        "estimation": {"iterations": 2},
-    }
+        estimation=EstimationOptions(iterations=2),
+    )
     path = tmp_path / "study.yaml"
-    YAML().dump(study, path)
+    dump_study(study, path)
     return path
 
 
