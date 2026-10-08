@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+import kipe
 from kipe.cli import main
 from kipe.forward_solver import ForwardSolverError, build_forward_solver
 from kipe.options import (
@@ -199,3 +200,10 @@ def test_dump_study_round_trip(tmp_path):
     path = tmp_path / "study.yaml"
     dump_study(study, path)
     assert load_study(path) == study
+
+
+def test_version(capsys):
+    with pytest.raises(SystemExit) as excinfo:
+        main(["--version"])
+    assert excinfo.value.code == 0
+    assert capsys.readouterr().out.strip() == f"kipe {kipe.__version__}"
