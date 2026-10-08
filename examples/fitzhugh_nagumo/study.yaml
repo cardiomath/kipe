@@ -33,5 +33,5 @@ synthesis:
   truth: {type: run}                # run the solver with its nominal parameters (the default)
 
 estimation:
-  particles: simplex
+  sigma_points: simplex
   iterations: 5                     # outer iterations: restart from the previous estimate

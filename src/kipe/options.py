@@ -253,14 +253,14 @@ class SynthesisOptions:
     """Source of the true state the data are generated from."""
 
 
-type Particles = Literal["simplex", "canonical", "unique"]
+type SigmaPoints = Literal["simplex", "canonical", "unique"]
 
 
 @dataclass(frozen=True, config=_CONFIG)
 class EstimationOptions:
     """Parameter estimation with the reduced-order unscented Kalman filter (ROUKF)."""
 
-    particles: Particles = "simplex"
+    sigma_points: SigmaPoints = "simplex"
     r"""Sigma-point stencil, the pattern along which the estimates are perturbed:
 
     - ``simplex``: :math:`p + 1` sigma points, the cheapest.

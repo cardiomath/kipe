@@ -97,7 +97,7 @@ from mpi4py import MPI
 import numpy as np
 
 from kipe._types import NDArray_f64
-from kipe.options import Particles
+from kipe.options import SigmaPoints
 
 
 @dataclass(frozen=True)
@@ -147,7 +147,7 @@ class FilterState:
         return self.L_theta @ self.U_inv @ self.L_theta.T
 
 
-def sigma_point_stencil(particles: Particles, p: int) -> SigmaPointStencil:
+def sigma_point_stencil(sigma_points: SigmaPoints, p: int) -> SigmaPointStencil:
     r"""Construct the sigma-point stencil of the given kind, after [MC11]_.
 
     - ``simplex``: :math:`p + 1` points on a regular simplex; :math:`P_\alpha = I`.
@@ -164,13 +164,13 @@ def sigma_point_stencil(particles: Particles, p: int) -> SigmaPointStencil:
        covariance, at every step.
 
     Args:
-        particles: kind of stencil
+        sigma_points: kind of stencil
         p: number of parameters
 
     Returns:
         the stencil
     """
-    match particles:
+    match sigma_points:
         case "simplex":
             r = p + 1
             alpha = 1.0 / r
@@ -190,7 +190,7 @@ def sigma_point_stencil(particles: Particles, p: int) -> SigmaPointStencil:
             r = 1
             points = np.zeros((p, r))
         case _:
-            assert_never(particles)
+            assert_never(sigma_points)
 
     alpha = 1.0 / r
 

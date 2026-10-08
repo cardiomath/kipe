@@ -76,14 +76,16 @@ class Estimation:
         self._parameterization = parameterization
         self._measurements = measurements
         self._iterations = options.iterations
-        self._particles = options.particles
+        self._sigma_points = options.sigma_points
         self._output = output
         self._comm = comm
 
         self._times = _common_times(measurements)
         self._rank_contributes = _rank_contributes(measurements, solver.state_spec, comm)
         self._layout = _StateLayout(solver.state_spec)
-        self._stencil = roukf.sigma_point_stencil(options.particles, len(parameterization.names))
+        self._stencil = roukf.sigma_point_stencil(
+            options.sigma_points, len(parameterization.names)
+        )
         self._history = _History(output, parameterization.names, comm)
 
     def run(self) -> Parameters:
@@ -134,8 +136,8 @@ class Estimation:
         logger.info("  %-16s%s", "output", self._output)
         logger.info("")
         logger.info("  filter")
-        sigma_points = self._stencil.points.shape[1]
-        logger.info("    %-14s%s (%d sigma points)", "stencil", self._particles, sigma_points)
+        n_points = self._stencil.points.shape[1]
+        logger.info("    %-14s%s (%d sigma points)", "stencil", self._sigma_points, n_points)
         logger.info("    %-14s%d", "iterations", self._iterations)
         logger.info("    %-14s%d", "MPI ranks", self._comm.size)
         logger.info("")

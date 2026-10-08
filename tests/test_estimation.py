@@ -27,7 +27,7 @@ def _study(
     tmp_path: Path,
     initial: dict[str, float] = INITIAL,
     *,
-    particles: str = "simplex",
+    sigma_points: str = "simplex",
     iterations: int = 1,
     times: dict[str, float] | list[float] = TIMES,
     parameters: bool = True,
@@ -50,7 +50,7 @@ def _study(
             }
             for field, seed in [("v", 0), ("w", 1)]
         },
-        "estimation": {"particles": particles, "iterations": iterations},
+        "estimation": {"sigma_points": sigma_points, "iterations": iterations},
     }
     if parameters:
         study["parameters"] = {
@@ -104,7 +104,7 @@ def test_iterations_converge_to_truth_on_noise_free_data(tmp_path):
 
 def test_unique_keeps_true_parameters(tmp_path):
     """unique: no correction; starting from the truth, the estimate stays there."""
-    study = str(_study(tmp_path, TRUE, particles="unique"))
+    study = str(_study(tmp_path, TRUE, sigma_points="unique"))
     assert main(["synthesis", study]) == 0
     assert main(["estimation", study]) == 0
 
@@ -219,7 +219,7 @@ def test_estimation_from_python(tmp_path):
         solver,
         parameterization,
         [measurement],
-        EstimationOptions(particles="unique"),
+        EstimationOptions(sigma_points="unique"),
         output=tmp_path / "estimation",
     )
     assert estimation.run() == pytest.approx({"c": 3.0})
