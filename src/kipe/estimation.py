@@ -8,7 +8,8 @@ corrected. Outer iterations repeat the pass, starting from the previous estimate
 
 The estimation history is written to ``<output.path>/estimation/``: ``history.csv`` (one row
 per assimilation step, written as the filter runs) and ``history.npz`` (all steps, including
-the full parameter covariance).
+the full parameter covariance). :func:`estimate` also writes the provenance of the run there
+(:mod:`kipe.provenance`).
 """
 
 import logging
@@ -39,6 +40,7 @@ from kipe.measurements import (
 )
 from kipe.options import EstimationOptions, StudyFileError, StudyOptions
 from kipe.parameters import Parameterization, build_parameterization
+from kipe.provenance import recorded_run
 
 logger = logging.getLogger(__name__)
 
@@ -316,7 +318,7 @@ class Estimation:
 
 
 def estimate(study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD) -> Parameters:
-    """Estimate the parameters of a study and write the estimation history.
+    """Estimate the parameters of a study; write the estimation history and the provenance.
 
     Builds the forward solver, the estimated parameters and the measurements (with their data)
     from the study file, then runs the :class:`Estimation`.
@@ -338,10 +340,13 @@ def estimate(study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD) -> Parameters
     parameterization = build_parameterization(study.parameters, solver.nominal_parameters())
     measurements = _build_measurements(study, solver.state_spec)
     output = Path(study.output.path) / "estimation"
-
-    return Estimation(
+    estimation = Estimation(
         solver, parameterization, measurements, study.estimation, output, comm
-    ).run()
+    )
+
+    times = {"assimilation_times": _common_times(measurements).tolist()}  # maybe from the data
+    with recorded_run(output, study, times, comm):
+        return estimation.run()
 
 
 def _table_header(names: list[str]) -> str:

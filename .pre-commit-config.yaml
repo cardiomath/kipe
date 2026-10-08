@@ -32,4 +32,4 @@ repos:
       - id: conventional-pre-commit
         stages: [commit-msg]
         args:
-          - --scopes=cli,options,forward-solver,parameters,measurements,sampling,synthesis,estimation,roukf,plot,fenicsx,examples,docs,ci,pre-commit
+          - --scopes=cli,options,forward-solver,parameters,measurements,sampling,synthesis,estimation,roukf,plot,provenance,fenicsx,examples,docs,ci,pre-commit

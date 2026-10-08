@@ -188,6 +188,7 @@ def _synthesis(args: argparse.Namespace) -> None:
     study = _load_study(args.study)
     log_file = Path(study.output.path) / "synthesis" / "kipe.log"
     _setup_logging(args.log_level or study.output.log_level, log_file)
+    logging.getLogger("kipe").info("%-11s%s", "study", args.study.resolve())
     synthesize(study)
     logging.getLogger("kipe").info("%-11s%s", "log", log_file)
 
@@ -201,6 +202,7 @@ def _estimation(args: argparse.Namespace) -> None:
     study = _load_study(args.study)
     log_file = Path(study.output.path) / "estimation" / "kipe.log"
     _setup_logging(args.log_level or study.output.log_level, log_file)
+    logging.getLogger("kipe").info("%-11s%s", "study", args.study.resolve())
     estimate(study)
     logging.getLogger("kipe").info("%-11s%s", "log", log_file)
 
