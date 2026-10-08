@@ -9,7 +9,20 @@ from pydantic import ValidationError
 
 from kipe.cli import main
 from kipe.forward_solver import ForwardSolverError, build_forward_solver
-from kipe.options import ForwardSolverOptions, StudyFileError, load_study
+from kipe.options import (
+    ForwardSolverOptions,
+    MeasurementOptions,
+    NoiseOptions,
+    NumpyDataOptions,
+    OutputOptions,
+    ParameterPrior,
+    ParametersOptions,
+    StudyFileError,
+    StudyOptions,
+    TimeRange,
+    dump_study,
+    load_study,
+)
 
 STUDY = """\
 output:
@@ -154,3 +167,35 @@ def test_load_study_reads_yaml_1_2(tmp_path):
     """YAML 1.2: ``1e-3`` is a float (YAML 1.1 reads a string), passed to the solver as is."""
     study = load_study(_write(tmp_path, STUDY.replace("dt: 0.05", "dt: 1e-3")))
     assert study.forward_solver.arguments["dt"] == pytest.approx(1e-3)
+
+
+def test_dump_study_round_trip(tmp_path):
+    """load_study reads back what dump_study writes, unions included (times, priors)."""
+    study = StudyOptions(
+        output=OutputOptions(path="results"),
+        forward_solver=ForwardSolverOptions(factory="kipe.examples.fitzhugh_nagumo:Solver"),
+        parameters=ParametersOptions(
+            reparameterization="log",
+            select={
+                "a": ParameterPrior(initial=0.25, relative_stddev=0.1),
+                "c": ParameterPrior(reparameterization="additive", stddev=0.5),
+            },
+        ),
+        measurements={
+            "v": MeasurementOptions(
+                fields=["v"],
+                times=[0.5, 1.0],
+                data=NumpyDataOptions(type="numpy", path="v.npz"),
+                noise=NoiseOptions(stddev=0.05, seed=0),
+            ),
+            "w": MeasurementOptions(
+                fields=["w"],
+                times=TimeRange(start=0.5, stop=2.0, step=0.5),
+                data=NumpyDataOptions(type="numpy", path="w.npz"),
+                noise=NoiseOptions(stddev=0.05, seed=1),
+            ),
+        },
+    )
+    path = tmp_path / "study.yaml"
+    dump_study(study, path)
+    assert load_study(path) == study
