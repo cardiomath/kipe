@@ -54,7 +54,7 @@ def test_estimation_writes_provenance(tmp_path):
     assert run["assimilation_times"] == [0.5, 1.0]
 
     written = _read(output / "study.yaml")
-    assert written["estimation"]["particles"] == "simplex"  # defaults filled in
+    assert written["estimation"]["sigma_points"] == "simplex"  # defaults filled in
     assert load_study(output / "study.yaml") == load_study(study)
 
     environment = _read(output / "environment.yaml")
