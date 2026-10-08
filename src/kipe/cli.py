@@ -10,6 +10,7 @@ from mpi4py import MPI
 
 from pydantic import ValidationError
 
+import kipe
 from kipe._formatting import format_table
 from kipe.estimation import estimate
 from kipe.forward_solver import ForwardSolverError, build_forward_solver
@@ -35,6 +36,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         exit code
     """
     parser = argparse.ArgumentParser(prog="kipe", description=__doc__)
+    parser.add_argument("--version", action="version", version=f"kipe {kipe.__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     list_parameters = subparsers.add_parser(
