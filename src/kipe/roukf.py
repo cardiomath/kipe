@@ -227,7 +227,12 @@ def initial_state(
 
     L_x = np.zeros((len(x0), p))
     L_theta = np.diag(stddev_theta)
-    U_inv = np.linalg.inv(P_alpha) if P_alpha.any() else np.zeros((p, p))
+    # float64 explicitly: some NumPy stubs type inv() as any floating type
+    U_inv = (
+        np.asarray(np.linalg.inv(P_alpha), dtype=np.float64)
+        if P_alpha.any()
+        else np.zeros((p, p))
+    )
 
     return FilterState(x0.copy(), theta0.copy(), L_x, L_theta, U_inv)
 
@@ -328,7 +333,7 @@ def gain(
     if not P_alpha.any():  # unique: no spread, no correction
         return np.zeros((p, p)), np.zeros(p)
 
-    U_inv = np.linalg.inv(P_alpha + LtL)
+    U_inv = np.asarray(np.linalg.inv(P_alpha + LtL), dtype=np.float64)  # see initial_state
     M = U_inv @ LtG
 
     return U_inv, M

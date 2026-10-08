@@ -134,3 +134,16 @@ warn_return_any = false
 [[tool.mypy.overrides]]
 module = "plotext"  # no type information
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# unknown (Any) everywhere, installed or not, so that mypy gives the same result with and
+# without them (they are missing in the core checks; petsc4py's stubs lack names that exist
+# at runtime, dolfinx's assemble_* dispatch at runtime): kipe.fenicsx is checked without
+# their types
+module = ["dolfinx", "dolfinx.*", "ufl", "petsc4py", "petsc4py.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
+
+[[tool.mypy.overrides]]
+module = "kipe.fenicsx.*"
+disallow_any_unimported = false  # dolfinx's types are unknown without dolfinx
