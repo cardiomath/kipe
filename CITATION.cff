@@ -9,7 +9,7 @@ abstract: >-
   Kalman filtering (ROUKF), Fisher-information sensitivity analysis and synthetic
   observations, with an optional FEniCSx backend.
 license: MIT
-repository-code: "https://github.com/cardiomath/kipe"   # TODO: update if moved to an organization
+repository-code: "https://github.com/cardiomath/kipe"
 keywords:
   - ROUKF
   - unscented Kalman filter
@@ -28,7 +28,6 @@ authors:
     given-names: Cristóbal
     affiliation: "University of Groningen"
     orcid: "https://orcid.org/0000-0001-5049-1707"
-# Add on release (or let Zenodo add the DOI):
-# version: 0.1.0
-# date-released: YYYY-MM-DD
-# doi: 10.5281/zenodo.TODO
+version: 0.1.0  # update on each release
+date-released: 2026-10-08
+# doi: added by Zenodo, if connected
