@@ -1,4 +1,6 @@
 ---
+name: Bug report
+about: Report a reproducible problem
 title: "fix: <WRITE DESCRIPTION HERE> "
 labels: bug
 ---
