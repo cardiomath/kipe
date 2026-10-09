@@ -1,4 +1,6 @@
 ---
+name: Chore
+about: Propose a maintenance or housekeeping task
 title: "chore: <WRITE DESCRIPTION HERE> "
 labels: chore
 ---
