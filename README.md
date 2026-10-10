@@ -1,16 +1,31 @@
 # kipe
 
+[![CI](https://github.com/cardiomath/kipe/actions/workflows/ci.yml/badge.svg)](https://github.com/cardiomath/kipe/actions/workflows/ci.yml)
+![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 ***K**alman-based **i**dentifiability and **p**arameter **e**stimation*
 
-kipe estimates parameters of dynamical models, e.g., PDE models, from time series of
-measurements, with the reduced-order unscented Kalman filter (ROUKF). The filter needs only
-forward runs of your model, no derivatives and no changes to the solver. kipe also generates
-synthetic measurement data from a model run, for twin experiments.
+Estimate parameters of dynamical models from time-series measurements with the reduced-order
+unscented Kalman filter (ROUKF). kipe works with forward runs of your model—no derivatives or
+solver changes required—and can generate synthetic measurements for twin experiments.
+
+| **Solver-agnostic**<br>Connect your model through a small forward-solver interface. | **Derivative-free**<br>Use your existing solver; kipe needs only forward runs. |
+|:--|:--|
+| **Twin experiments**<br>Generate synthetic measurements from a model run. | **Reproducible runs**<br>Keep results, logs, and run provenance together. |
 
 > **Status: early development.** The core works (ROUKF estimation, synthetic data, plotting,
 > run provenance), but the study file format and the Python API may still change. Feedback is
 > very welcome: please open an [issue](https://github.com/cardiomath/kipe/issues).
 > Coming next: a FEniCSx backend for observations of finite element fields.
+
+## Contents
+
+- [Installation](#installation)
+- [First run: the FitzHugh–Nagumo example](#first-run-the-fitzhughnagumo-example)
+- [Your own model](#your-own-model)
+- [Development](#development)
+- [License](#license)
 
 ## Installation
 
