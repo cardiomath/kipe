@@ -19,7 +19,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install ".[check,test,plot]"
+      - run: pip install ".[dev]"
       - run: ruff check .
       - run: ruff format --check .
       - run: mypy
@@ -44,7 +44,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       # non-editable install: with the src layout, tests run against the installed package
       # mpi4py loads an MPI library at runtime; the runner has none, so install MPICH from PyPI
-      - run: pip install ".[test,plot]" mpich
+      - run: pip install ".[dev]" mpich
       # MPI problems of the runner show up here, not as a puzzling failure in pytest
       - name: MPI start
         run: python -c "from mpi4py import MPI; print(MPI.Get_library_version().splitlines()[0])"

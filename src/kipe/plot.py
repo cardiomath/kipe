@@ -8,7 +8,7 @@ from the start, with all outer iterations marked.
 
 Draws with matplotlib (:func:`plot_histories`) or as text in the terminal with plotext
 (:func:`render_histories`), e.g., to follow an estimation on a cluster (:func:`watch_histories`).
-Both are optional dependencies: ``pip install 'kipe[plot]'``.
+Plotting dependencies are included in the default installation.
 """
 
 import sys
@@ -400,6 +400,6 @@ def _import_plotext() -> ModuleType:
     try:
         import plotext
     except ImportError as err:
-        raise PlotError("kipe plot --terminal needs plotext: pip install 'kipe[plot]'") from err
+        raise PlotError("kipe plot --terminal needs plotext: pip install kipe") from err
 
     return plotext

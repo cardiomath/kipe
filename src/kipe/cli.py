@@ -242,7 +242,7 @@ def _plot(args: argparse.Namespace) -> None:
         import matplotlib.pyplot as plt
         from matplotlib.figure import Figure
     except ImportError as err:
-        raise PlotError("kipe plot needs matplotlib: pip install 'kipe[plot]'") from err
+        raise PlotError("kipe plot needs matplotlib: pip install kipe") from err
 
     figure = Figure(layout="constrained") if args.save else plt.figure(layout="constrained")
     figure.set_size_inches(4 * len(next(iter(histories.values())).names), 3.5)

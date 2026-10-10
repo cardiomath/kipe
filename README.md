@@ -33,15 +33,14 @@ kipe needs Python ≥ 3.12 and an MPI library (for `mpi4py`). Use your system's 
 with pip:
 
 ```bash
-pip install "kipe[plot]"
+pip install kipe
 pip install mpich  # only if there is no MPI library on your system
 ```
 
-The `plot` extra adds matplotlib and plotext for `kipe plot`. The latest development version
-installs from GitHub:
+Plotting support is included by default. The latest development version installs from GitHub:
 
 ```bash
-pip install "kipe[plot] @ git+https://github.com/cardiomath/kipe"
+pip install "kipe @ git+https://github.com/cardiomath/kipe"
 ```
 
 ## First run: the FitzHugh–Nagumo example
@@ -89,7 +88,7 @@ is a complete example in about 150 lines, docstrings included.
 ```bash
 git clone https://github.com/cardiomath/kipe
 cd kipe
-pip install -e ".[test,plot,check]"
+pip install -e ".[dev]"
 pre-commit install --hook-type pre-commit --hook-type commit-msg
 pytest
 ```
