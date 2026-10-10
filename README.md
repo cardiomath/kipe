@@ -4,11 +4,11 @@
 ![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-***K**alman-based **i**dentifiability and **p**arameter **e**stimation*
+***K**alman-backed **p**arameter **i**dentifiability and  **e**stimation*
 
 Estimate parameters of dynamical models from time-series measurements with the reduced-order
-unscented Kalman filter (ROUKF). kipe works with forward runs of your model—no derivatives or
-solver changes required—and can generate synthetic measurements for twin experiments.
+unscented Kalman filter (ROUKF). `kipe` works with forward runs of your model - no derivatives or
+solver changes required - and can generate synthetic measurements for twin experiments.
 
 | **Solver-agnostic**<br>Connect your model through a small forward-solver interface. | **Derivative-free**<br>Use your existing solver; kipe needs only forward runs. |
 |:--|:--|
@@ -37,7 +37,7 @@ pip install kipe
 pip install mpich  # only if there is no MPI library on your system
 ```
 
-Plotting support is included by default. The latest development version installs from GitHub:
+The latest development version installs from GitHub:
 
 ```bash
 pip install "kipe @ git+https://github.com/cardiomath/kipe"
