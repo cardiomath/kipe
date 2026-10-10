@@ -10,26 +10,16 @@ Estimate parameters of dynamical models from time-series measurements with the r
 unscented Kalman filter (ROUKF). `kipe` works with forward runs of your model - no derivatives or
 solver changes required - and can generate synthetic measurements for twin experiments.
 
-| **Solver-agnostic**<br>Connect your model through a small forward-solver interface. | **Derivative-free**<br>Use your existing solver; kipe needs only forward runs. |
-|:--|:--|
-| **Twin experiments**<br>Generate synthetic measurements from a model run. | **Reproducible runs**<br>Keep results, logs, and run provenance together. |
++ **Solver-agnostic**: Connect your model through a small forward-solver interface.
++ **Derivative-free**: Use your existing solver; `kipe` needs only forward runs.
++ **Twin experiments**: Generate synthetic measurements from a model run.
++ **Reproducible runs**: Keep results, logs, and run provenance together.
 
-> **Status: early development.** The core works (ROUKF estimation, synthetic data, plotting,
-> run provenance), but the study file format and the Python API may still change. Feedback is
-> very welcome: please open an [issue](https://github.com/cardiomath/kipe/issues).
-> Coming next: a FEniCSx backend for observations of finite element fields.
-
-## Contents
-
-- [Installation](#installation)
-- [First run: the FitzHugh–Nagumo example](#first-run-the-fitzhughnagumo-example)
-- [Your own model](#your-own-model)
-- [Development](#development)
-- [License](#license)
+> **Status: early development.** The core works (ROUKF estimation, synthetic data, plotting, run provenance), but the study file format and the Python API may still change. Feedback is very welcome: please open an [issue](https://github.com/cardiomath/kipe/issues). Coming next: a FEniCSx backend for observations of finite element fields.
 
 ## Installation
 
-kipe needs Python ≥ 3.12 and an MPI library (for `mpi4py`). Use your system's MPI, or install one
+`kipe` needs Python ≥ 3.12 and an MPI library (for `mpi4py`). Use your system's MPI, or install one
 with pip:
 
 ```bash
@@ -46,7 +36,7 @@ pip install "kipe @ git+https://github.com/cardiomath/kipe"
 ## First run: the FitzHugh–Nagumo example
 
 The example estimates the three parameters of the FitzHugh–Nagumo model from noisy measurements
-that kipe generated itself with the true parameters (a twin experiment):
+that `kipe` generated itself with the true parameters (a twin experiment):
 
 ```bash
 git clone https://github.com/cardiomath/kipe
@@ -67,10 +57,10 @@ Other subcommands: `kipe list-parameters study.yaml` shows the parameters a solv
 
 ## Your own model
 
-kipe calls your model through a small interface, the `ForwardSolver` protocol in
-[`kipe/forward_solver.py`](https://github.com/cardiomath/kipe/blob/main/src/kipe/forward_solver.py):
-the initial state, the nominal parameters, and a `propagate` that advances a state from one time
-to the next with given parameters. The study file names a factory that builds your solver:
+`kipe` calls your model through a small interface, the `ForwardSolver` protocol in
+[`kipe/forward_solver.py`](https://github.com/cardiomath/kipe/blob/main/src/kipe/forward_solver.py).
+
+The study file names a factory that builds your solver:
 
 ```yaml
 forward_solver:
