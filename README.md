@@ -6,12 +6,12 @@
 
 ***K**alman-backed **p**arameter **e**stimation* and **i**dentifiability analysis for **p**artial differential **e**quations
 
-Estimate parameters of dynamical models from time-series measurements with the reduced-order
-unscented Kalman filter (ROUKF). `kipe` works with forward runs of your model - no derivatives or
-solver changes required - and can generate synthetic measurements for twin experiments.
+Key features:
 
-+ **Solver-agnostic**: Connect your model through a small forward-solver interface.
-+ **Derivative-free**: Use your existing solver; `kipe` needs only forward runs.
++ **Solver-agnostic**: Connect your model through a small forward-solver interface
++ **Derivative-free**: Optimizer is based on the reduced-order
+unscented Kalman filter (ROUKF) and hence it needs only forward runs.
++ **Modular observation operators**: Reuse existing library of observation operator and contribute to it. Concatenation of measurements is straightforward.
 + **Twin experiments**: Generate synthetic measurements from a model run.
 + **Reproducible runs**: Keep results, logs, and run provenance together.
 
