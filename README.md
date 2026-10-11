@@ -4,7 +4,7 @@
 ![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-***K**alman-backed **p**arameter **i**dentifiability and  **e**stimation* for **p**artial differential **e**quations
+***K**alman-backed **p**arameter **e**stimation* and **i**dentifiability analysis for **p**artial differential **e**quations
 
 Estimate parameters of dynamical models from time-series measurements with the reduced-order
 unscented Kalman filter (ROUKF). `kipe` works with forward runs of your model - no derivatives or
