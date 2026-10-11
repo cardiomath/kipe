@@ -6,7 +6,7 @@
 
 ***K**alman-backed **p**arameter **e**stimation* and **i**dentifiability analysis for **p**artial differential **e**quations
 
-Key features:
+## Key features
 
 + **Solver-agnostic**: Connect your model through a small forward-solver interface
 + **Derivative-free**: Optimizer is based on the reduced-order
