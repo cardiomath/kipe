@@ -8,12 +8,15 @@ pytest.importorskip("dolfinx")
 
 from mpi4py import MPI
 
+import basix.ufl
 import numpy as np
+import ufl
 from dolfinx import fem, io, mesh
 
 from kipe._types import NDArray_f64
 from kipe.cli import main
 from kipe.examples.fitzhugh_nagumo import Solver as FitzHughNagumo
+from kipe.fenicsx.examples.heat import FieldSpec as HeatFieldSpec
 from kipe.fenicsx.examples.heat import Solver as Heat
 from kipe.fenicsx.sampling import MeshSampler, build_mesh_sampler
 from kipe.options import (
@@ -203,3 +206,112 @@ def test_solver_without_function_spaces_is_rejected():
     options = MeshSamplingOptions(type="fenicsx.mesh", mesh="unused.xdmf")
     with pytest.raises(StudyFileError, match="no function_space method"):
         build_mesh_sampler(options, ["u"], WithoutSpaces())  # type: ignore[arg-type]
+
+
+# vector fields and projections
+
+
+class _VectorField:
+    """Stand-in for a solver with one vector field on the unit square: what samplers use."""
+
+    def __init__(self, n: int = 12) -> None:
+        self._V = fem.functionspace(mesh.create_unit_square(COMM, n, n), ("Lagrange", 1, (2,)))
+        self._n_owned = self._V.dofmap.index_map.size_local * 2
+        self.state_spec = {"u": HeatFieldSpec(self._n_owned)}
+
+    def function_space(self, field: str) -> fem.FunctionSpace:
+        return self._V
+
+    def owned(self) -> NDArray_f64:
+        """The owned entries of the linear vector field _vector."""
+        u = fem.Function(self._V)
+        u.interpolate(_vector)
+        return u.x.array[: self._n_owned].copy()
+
+
+def _vector(x: NDArray_f64) -> NDArray_f64:
+    """A linear vector field, (x + 10 y, 2 x - y): P1 interpolates it exactly."""
+    return np.vstack([x[0] + 10 * x[1], 2 * x[0] - x[1]])
+
+
+def _sample_vector(path: Path, element: str = "P1", projection=None) -> NDArray_f64:
+    """Sample the linear vector field onto a measurement mesh, gathered on every rank."""
+    solver = _VectorField()
+    options = MeshSamplingOptions(
+        type="fenicsx.mesh", mesh=str(path), element=element, projection=projection
+    )
+    sampler = build_mesh_sampler(options, ["u"], solver)
+    return _gathered(sampler, sampler.sample({"u": solver.owned()}))
+
+
+def _write_line_mesh(path: Path, k: int) -> tuple[NDArray_f64, NDArray_f64]:
+    """Write the right edge of the unit square, x = 1, as a line mesh in 2D with k cells.
+
+    Returns:
+        its vertex coordinates and cells, in the order of the file (see _reference_geometry)
+    """
+    reference = None
+    if COMM.rank == 0:
+        x = np.column_stack([np.ones(k + 1), np.linspace(0.0, 1.0, k + 1)])
+        cells = np.column_stack([np.arange(k), np.arange(1, k + 1)]).astype(np.int64)
+        element = ufl.Mesh(basix.ufl.element("Lagrange", "interval", 1, shape=(2,)))
+        written = mesh.create_mesh(MPI.COMM_SELF, cells, x, element)
+        with io.XDMFFile(MPI.COMM_SELF, path, "w") as f:
+            f.write_mesh(written)
+        reference = (written.geometry.x[:, :2].copy(), written.geometry.dofmap.copy())
+    COMM.barrier()
+
+    return COMM.bcast(reference, root=0)
+
+
+def test_vector_field_without_projection(shared_tmp_path):
+    """All components, those of each vertex one after another."""
+    path = _write_mesh(shared_tmp_path / "measurement.xdmf", 5)
+    coordinates, _ = _reference_geometry(5)
+
+    values = _sample_vector(path)
+    expected = _vector(coordinates.T).T.ravel()
+    np.testing.assert_allclose(values, expected, rtol=0, atol=1e-12)
+
+
+def test_projection_onto_a_direction(shared_tmp_path):
+    path = _write_mesh(shared_tmp_path / "measurement.xdmf", 5)
+    coordinates, _ = _reference_geometry(5)
+
+    values = _sample_vector(path, projection=[1.0, 1.0])
+    expected = _vector(coordinates.T).sum(axis=0) / np.sqrt(2)  # normalized direction
+    np.testing.assert_allclose(values, expected, rtol=0, atol=1e-12)
+
+    values = _sample_vector(path, projection=[0.0, 2.0])  # the y component
+    np.testing.assert_allclose(values, _vector(coordinates.T)[1], rtol=0, atol=1e-12)
+
+
+def test_projection_onto_the_surface_normal(shared_tmp_path):
+    """On x = 1, u . n = ±(1 + 10 y), with one sign for all cells, as they are oriented alike."""
+    path = shared_tmp_path / "edge.xdmf"
+    coordinates, cells = _write_line_mesh(path, 4)
+    midpoints = coordinates[cells].mean(axis=1)
+
+    values = _sample_vector(path, element="DG0", projection="surface_normal")
+    normal_component = _vector(midpoints.T)[0]
+    sign = np.sign(values[0])
+    np.testing.assert_allclose(values, sign * normal_component, rtol=0, atol=1e-12)
+
+
+def test_projection_needs_a_vector_field(shared_tmp_path):
+    path = _write_mesh(shared_tmp_path / "measurement.xdmf", 3)
+    options = MeshSamplingOptions(type="fenicsx.mesh", mesh=str(path), projection=[1.0])
+    with pytest.raises(StudyFileError, match="needs a vector field"):
+        build_mesh_sampler(options, ["u"], Heat(n=4))
+
+
+def test_direction_needs_one_entry_per_component(shared_tmp_path):
+    path = _write_mesh(shared_tmp_path / "measurement.xdmf", 3)
+    with pytest.raises(StudyFileError, match="has 3 entries"):
+        _sample_vector(path, projection=[1.0, 0.0, 0.0])
+
+
+def test_surface_normal_needs_a_surface_mesh(shared_tmp_path):
+    path = _write_mesh(shared_tmp_path / "measurement.xdmf", 3)
+    with pytest.raises(StudyFileError, match="needs a surface mesh"):
+        _sample_vector(path, element="DG0", projection="surface_normal")

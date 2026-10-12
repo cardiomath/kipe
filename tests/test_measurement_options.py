@@ -7,6 +7,7 @@ from kipe.options import (
     ArraySamplingOptions,
     DifferenceModelOptions,
     MeasurementOptions,
+    MeshSamplingOptions,
     RunTruthOptions,
     StudyOptions,
     TimeRange,
@@ -82,3 +83,36 @@ def test_measurements_without_seeds():
         "w": MEASUREMENT | {"fields": ["w"], "noise": noise},
     })
     assert all(m.noise.seed is None for m in study.measurements.values())
+
+
+def _mesh_sampling(**options) -> MeshSamplingOptions:
+    """The spatial sampling of a study with one fenicsx.mesh measurement."""
+    sampling = {"type": "fenicsx.mesh", "mesh": "data/mesh.xdmf"} | options
+    study = _study({"u": MEASUREMENT | {"fields": ["u"], "spatial_sampling": sampling}})
+    assert study.measurements is not None
+    spatial_sampling = study.measurements["u"].spatial_sampling
+    assert isinstance(spatial_sampling, MeshSamplingOptions)
+    return spatial_sampling
+
+
+def test_mesh_sampling():
+    assert _mesh_sampling().element == "P1"
+    assert _mesh_sampling().projection is None
+    assert _mesh_sampling(projection=[0, 0, 1]).projection == [0.0, 0.0, 1.0]
+    assert _mesh_sampling(element="DG0", projection="surface_normal").projection == (
+        "surface_normal"
+    )
+
+
+@pytest.mark.parametrize(
+    ("options", "message"),
+    [
+        ({"projection": "surface_normal"}, "needs element DG0"),  # P1, the default
+        ({"projection": [0, 0]}, "must not be zero"),
+        ({"projection": "normal"}, "valid list"),
+        ({"element": "P2"}, "element"),
+    ],
+)
+def test_invalid_mesh_sampling(options, message):
+    with pytest.raises(ValidationError, match=message):
+        _mesh_sampling(**options)
