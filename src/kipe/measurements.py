@@ -14,15 +14,16 @@ to :mod:`kipe.options` and a ``case`` to :func:`build_model`.
 
 import math
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import assert_never
 
+from mpi4py import MPI
+
 import numpy as np
 
-from kipe._types import NDArray_f64
-from kipe.forward_solver import FieldSpec, State
+from kipe._types import NDArray_f64, NDArray_i64
+from kipe.forward_solver import ForwardSolver, State
 from kipe.options import DifferenceModelOptions, MeasurementOptions, StudyFileError, TimeRange
 from kipe.sampling import SpatialSampler, build_sampler
 
@@ -122,6 +123,21 @@ class ObservationOperator:
     model: MeasurementModel
     """The measurement model :math:`M`."""
 
+    @property
+    def size(self) -> int:
+        """Number of entries of the predicted data, over all ranks.
+
+        The models act entry by entry, so the predicted data have the sampler's entries.
+        """
+        return self.sampler.size
+
+    @property
+    def global_indices(self) -> NDArray_i64:
+        """Positions of this rank's entries in the measurement's data, see
+        :attr:`kipe.sampling.SpatialSampler.global_indices`.
+        """
+        return self.sampler.global_indices
+
     def __call__(self, state: State) -> NDArray_f64:
         r"""Return the predicted data :math:`\hat{z} = \mathcal{H}(\chi)` of a model state.
 
@@ -129,7 +145,7 @@ class ObservationOperator:
             state: the model state :math:`\chi`
 
         Returns:
-            predicted data, in the measurement space
+            this rank's entries of the predicted data, at the positions :attr:`global_indices`
         """
         y = self.sampler.sample({name: state[name] for name in self.fields})
 
@@ -137,21 +153,27 @@ class ObservationOperator:
 
 
 def build_observation_operator(
-    name: str, options: MeasurementOptions, state_spec: Mapping[str, FieldSpec]
+    name: str,
+    options: MeasurementOptions,
+    solver: ForwardSolver,
+    comm: MPI.Comm = MPI.COMM_WORLD,
 ) -> ObservationOperator:
     """Construct the observation operator of a measurement.
 
     Args:
         name: name of the measurement, for error messages
         options: the measurement options
-        state_spec: the forward solver's state fields
+        solver: the forward solver
+        comm: communicator of the run
 
     Returns:
         the observation operator
 
     Raises:
-        StudyFileError: if the measurement observes a field the solver does not have
+        StudyFileError: if the measurement observes a field the solver does not have, or one
+            its sampler cannot sample
     """
+    state_spec = solver.state_spec
     unknown = [f for f in options.fields if f not in state_spec]
     if unknown:
         raise StudyFileError(
@@ -159,10 +181,13 @@ def build_observation_operator(
             f"Available: {', '.join(state_spec)}"
         )
 
+    try:
+        sampler = build_sampler(options.spatial_sampling, options.fields, solver, comm)
+    except StudyFileError as err:
+        raise StudyFileError(f"measurements.{name}: {err}") from err
+
     return ObservationOperator(
-        fields=options.fields,
-        sampler=build_sampler(options.spatial_sampling, options.fields),
-        model=build_model(options.model),
+        fields=options.fields, sampler=sampler, model=build_model(options.model)
     )
 
 
@@ -183,7 +208,8 @@ class Measurement:
     """The measurement times, shape ``(n,)``."""
 
     values: NDArray_f64
-    """The measured data: m values at each of the n times, shape ``(n, m)``."""
+    """This rank's entries of the measured data at each of the n times, at the positions
+    ``operator.global_indices``, shape ``(n, number of this rank's entries)``."""
 
     stddev: float
     """Standard deviation of the measurement noise, in the unit of the data."""

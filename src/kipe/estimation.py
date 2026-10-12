@@ -59,8 +59,7 @@ class Estimation:
         comm: communicator over which the model state is distributed
 
     Raises:
-        StudyFileError: if the measurements have different times, or one observes a
-            distributed field (not supported yet)
+        StudyFileError: if the measurements have different times
     """
 
     def __init__(
@@ -81,7 +80,6 @@ class Estimation:
         self._comm = comm
 
         self._times = _common_times(measurements)
-        self._rank_contributes = _rank_contributes(measurements, solver.state_spec, comm)
         self._layout = _StateLayout(solver.state_spec)
         self._stencil = roukf.sigma_point_stencil(
             options.sigma_points, len(parameterization.names)
@@ -203,14 +201,7 @@ class Estimation:
             )
 
             # 4. correction
-            filter_state = roukf.update(
-                x_sigma,
-                theta_sigma,
-                Gamma,
-                self._stencil,
-                self._comm,
-                contributes=self._rank_contributes,
-            )
+            filter_state = roukf.update(x_sigma, theta_sigma, Gamma, self._stencil, self._comm)
             t = float(t_next)
             self._history.record(iteration, t, filter_state, parameterization)
             physical = parameterization.to_physical(filter_state.theta)
@@ -305,7 +296,7 @@ class Estimation:
             the RMS of the mean innovation
         """
         mean = roukf.mean(Gamma, self._stencil)
-        local = np.array([mean @ mean, mean.size] if self._rank_contributes else [0.0, 0.0])
+        local = np.array([mean @ mean, mean.size])  # each entry is held by exactly one rank
         self._comm.Allreduce(MPI.IN_PLACE, local, op=MPI.SUM)
 
         return float(np.sqrt(local[0] / local[1]))
@@ -340,7 +331,7 @@ def estimate(study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD) -> Parameters
 
     solver = build_forward_solver(study.forward_solver)
     parameterization = build_parameterization(study.parameters, solver.nominal_parameters())
-    measurements = _build_measurements(study, solver.state_spec)
+    measurements = _build_measurements(study, solver, comm)
     output = Path(study.output.path) / "estimation"
     estimation = Estimation(
         solver, parameterization, measurements, study.estimation, output, comm
@@ -404,28 +395,40 @@ def _estimate_rows(
 
 
 def _build_measurements(
-    study: StudyOptions, state_spec: Mapping[str, FieldSpec]
+    study: StudyOptions, solver: ForwardSolver, comm: MPI.Comm
 ) -> list[Measurement]:
     """Read the data of the study's measurements and build their observation operators.
 
+    Every rank reads the whole data and keeps the entries it holds (``global_indices``).
+
     Args:
         study: the study options
-        state_spec: the solver's state fields
+        solver: the forward solver
+        comm: communicator of the run
 
     Returns:
-        the measurements, with their data at the selected times
+        the measurements, with this rank's entries of their data at the selected times
 
     Raises:
         StudyFileError: if there are no measurements, a measurement observes a field the solver
-            does not have, or a selected time is not in the data
+            does not have, its data do not have its number of entries, or a selected time is
+            not in the data
     """
     if not study.measurements:
         raise StudyFileError("estimation needs a measurements section")
 
     measurements = []
     for name, options in study.measurements.items():
-        operator = build_observation_operator(name, options, state_spec)
+        operator = build_observation_operator(name, options, solver, comm)
         times, values = read_numpy(options.data.path)
+
+        if values.shape[1] != operator.size:
+            raise StudyFileError(
+                f"measurements.{name}: the data have {values.shape[1]} values per time, the "
+                f"measurement has {operator.size}"
+            )
+        values = values[:, operator.global_indices]
+
         if options.times is not None:
             indices = [_index_of(t, times, name) for t in measurement_times(options.times)]
             times, values = times[indices], values[indices]
@@ -479,36 +482,6 @@ def _common_times(measurements: list[Measurement]) -> NDArray_f64:
             )
 
     return times
-
-
-def _rank_contributes(
-    measurements: list[Measurement], state_spec: Mapping[str, FieldSpec], comm: MPI.Comm
-) -> bool:
-    """Return whether this rank's innovation entries count in the gain.
-
-    Measurements of replicated fields are held in full by every rank, so only rank 0
-    contributes.
-
-    Args:
-        measurements: the measurements
-        state_spec: the solver's state fields
-        comm: the communicator
-
-    Returns:
-        whether this rank contributes
-
-    Raises:
-        StudyFileError: if a measurement observes a distributed field (not supported yet)
-    """
-    for measurement in measurements:
-        for name in measurement.operator.fields:
-            if state_spec[name].kind == "distributed":
-                raise StudyFileError(
-                    f"measurements.{measurement.name}: field {name} is distributed over the "
-                    "MPI ranks; measurements of distributed fields are not supported yet"
-                )
-
-    return comm.rank == 0
 
 
 class _StateLayout:

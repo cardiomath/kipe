@@ -15,7 +15,7 @@ unscented Kalman filter (ROUKF) and hence it needs only forward runs.
 + **Twin experiments**: Generate synthetic measurements from a model run.
 + **Reproducible runs**: Keep results, logs, and run provenance together.
 
-> **Status: early development.** The core works (ROUKF estimation, synthetic data, plotting, run provenance), but the study file format and the Python API may still change. Feedback is very welcome: please open an [issue](https://github.com/cardiomath/kipe/issues). Coming next: a FEniCSx backend for observations of finite element fields.
+> **Status: early development.** The core works (ROUKF estimation, synthetic data, plotting, run provenance), as does a first FEniCSx backend for measurements on finite element meshes, but the study file format and the Python API may still change. Feedback is very welcome: please open an [issue](https://github.com/cardiomath/kipe/issues).
 
 ## Installation
 
@@ -32,6 +32,10 @@ The latest development version installs from GitHub:
 ```bash
 pip install "kipe @ git+https://github.com/cardiomath/kipe"
 ```
+
+For FEniCSx models, kipe also needs dolfinx (0.9), which pip does not install: use your FEniCSx
+installation (e.g., Spack, conda or the `dolfinx/dolfinx` Docker image) and install kipe into its
+Python environment. Its MPI is then the one kipe uses.
 
 ## First run: the FitzHugh–Nagumo example
 
@@ -70,8 +74,44 @@ forward_solver:
 
 The `arguments` are those passed to the factory, i.e., `MySolver(dt=0.01)`.
 
-The FitzHugh–Nagumo solver in [`kipe/examples/fitzhugh_nagumo.py`](https://github.com/cardiomath/kipe/blob/main/src/kipe/examples/fitzhugh_nagumo.py)
+The FitzHugh–Nagumo solver in
+[`kipe/examples/fitzhugh_nagumo.py`](https://github.com/cardiomath/kipe/blob/main/src/kipe/examples/fitzhugh_nagumo.py)
 is a complete example in about 150 lines, docstrings included.
+
+## FEniCSx models
+
+A FEniCSx solver exchanges the owned degrees of freedom of its fields as arrays, like any other
+state, and additionally provides their function spaces, `function_space(field)` (see
+[`kipe/fenicsx/forward_solver.py`](https://github.com/cardiomath/kipe/blob/main/src/kipe/fenicsx/forward_solver.py)).
+A measurement can then interpolate a field onto a measurement mesh, which need not match the
+solver's:
+
+```yaml
+measurements:
+  u:
+    fields: [u]
+    spatial_sampling: {type: fenicsx.mesh, mesh: data/measurement_mesh.xdmf, element: P1}
+    ...
+```
+
+A vector field is measured as a whole, as its component along a direction
+(`projection: [0, 0, 1]`), or normal to a surface mesh (`projection: surface_normal`, with
+`element: DG0`).
+
+The measurement data are in the order of the measurement mesh file (one value per vertex for
+`P1`, per cell for `DG0`), so synthesis and estimation can run on different numbers of MPI ranks;
+they must use the same mesh file. The heat equation example shows a complete setup:
+
+```bash
+cd kipe/examples/heat
+python measurement_mesh.py         # the measurement mesh
+kipe synthesis study.yaml
+mpirun -n 2 kipe estimation study.yaml
+```
+
+Its solver,
+[`kipe/fenicsx/examples/heat.py`](https://github.com/cardiomath/kipe/blob/main/src/kipe/fenicsx/examples/heat.py),
+is a template for your own.
 
 ## Development
 

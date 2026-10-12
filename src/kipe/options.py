@@ -214,6 +214,60 @@ class NoiseOptions:
     depend on the other times. Measurements must have different seeds."""
 
 
+# FEniCSx backend (kipe.fenicsx): its options are plain options like all others, so that the
+# study file's schema is complete in this module; nothing here imports dolfinx.
+
+
+@dataclass(frozen=True, config=_CONFIG)
+class MeshSamplingOptions:
+    """Interpolate the observed field onto a measurement mesh (FEniCSx backend).
+
+    The field must be a distributed field whose function space the forward solver provides
+    (:class:`kipe.fenicsx.forward_solver.SupportsFunctionSpaces`). The measurement mesh need
+    not match the solver's mesh. The data are in the order of the mesh file: by vertex for
+    ``P1``, by cell for ``DG0``, independent of the number of ranks; for a vector field without
+    projection, the components of each vertex or cell one after another.
+    """
+
+    type: Literal["fenicsx.mesh"]
+    """Kind of spatial sampling."""
+
+    mesh: str
+    """Path to the measurement mesh, an XDMF file with a mesh named ``mesh``."""
+
+    element: Literal["P1", "DG0"] = "P1"
+    """Finite element on the measurement mesh: vertex values (``P1``) or cell values
+    (``DG0``)."""
+
+    projection: (
+        Annotated[list[float], Field(min_length=1)] | Literal["surface_normal"] | None
+    ) = None
+    """What is measured of a vector field; all components if not given. A direction, e.g.,
+    ``[0, 0, 1]`` for the z component (normalized by kipe), or ``surface_normal``: the
+    component along the cell normal of a surface mesh (needs ``element: DG0``, one normal per
+    cell). The normal's orientation follows the order of each cell's vertices in the mesh file,
+    as ``ufl.CellNormal``: the right-hand rule for triangles in 3D, the tangent rotated by +90°
+    for lines in 2D; it is outward only if the mesh's cells are oriented that way."""
+
+    def __post_init__(self) -> None:
+        """Check the projection.
+
+        Raises:
+            ValueError: if the direction is zero, or ``surface_normal`` is combined with ``P1``
+        """
+        if isinstance(self.projection, list) and not any(self.projection):
+            raise ValueError("projection: the direction must not be zero")
+        if self.projection == "surface_normal" and self.element != "DG0":
+            raise ValueError("projection surface_normal needs element DG0 (one normal per cell)")
+
+
+# the choices of a measurement, from the core and the backends
+
+type SpatialSamplingOptions = Annotated[
+    ArraySamplingOptions | MeshSamplingOptions, Field(discriminator="type")
+]
+
+
 @dataclass(frozen=True, config=_CONFIG)
 class MeasurementOptions:
     """One measurement: which fields it observes, its data, and how to compare them."""
@@ -232,8 +286,9 @@ class MeasurementOptions:
     generate); for ``estimation`` a selection from the times in the data, all if not
     given."""
 
-    spatial_sampling: ArraySamplingOptions = field(default_factory=ArraySamplingOptions)
-    """How the observed fields are brought to the measurement locations."""
+    spatial_sampling: SpatialSamplingOptions = field(default_factory=ArraySamplingOptions)
+    """How the observed fields are brought to the measurement locations; the kind is selected
+    by ``type``, ``array`` by default."""
 
     model: DifferenceModelOptions = field(default_factory=DifferenceModelOptions)
     """How predicted data are computed from the sampled fields and compared with the data."""

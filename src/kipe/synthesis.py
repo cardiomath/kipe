@@ -4,6 +4,10 @@ The forward solver runs with its nominal parameters through all measurement time
 time, the observation operator gives the predicted data and noise is added. The resulting
 measurements are written to their ``data`` files, and returned. The provenance of the run is
 written to ``<output.path>/synthesis/`` (:mod:`kipe.provenance`).
+
+In parallel, each rank generates the entries of the data it holds (``global_indices``); the
+noise of an entry depends only on its position, so the data do not depend on the number of
+ranks. Rank 0 writes the files.
 """
 
 import logging
@@ -11,6 +15,8 @@ import time
 from collections.abc import Mapping
 from pathlib import Path
 from typing import assert_never
+
+from mpi4py import MPI
 
 import numpy as np
 
@@ -30,14 +36,15 @@ from kipe.provenance import recorded_run
 logger = logging.getLogger(__name__)
 
 
-def synthesize(study: StudyOptions) -> list[Measurement]:
+def synthesize(study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD) -> list[Measurement]:
     """Generate the data of all measurements of the study; write them and the provenance.
 
     Args:
         study: the study options
+        comm: communicator over which the model state is distributed
 
     Returns:
-        the generated measurements
+        the generated measurements, with this rank's entries of their data
 
     Raises:
         StudyFileError: if a measurement lacks what synthesis needs, or observes a field the
@@ -49,12 +56,12 @@ def synthesize(study: StudyOptions) -> list[Measurement]:
     started = time.perf_counter()
     solver = build_forward_solver(study.forward_solver)
     operators = {
-        name: build_observation_operator(name, options, solver.state_spec)
+        name: build_observation_operator(name, options, solver, comm)
         for name, options in study.measurements.items()
     }
 
     output = Path(study.output.path) / "synthesis"
-    with recorded_run(output, study):
+    with recorded_run(output, study, comm=comm):
         logger.info("synthesis")
         logger.info("  %-16s%s", "forward solver", study.forward_solver.factory)
         logger.info("  %-16s%s", "truth", study.synthesis.truth.type)
@@ -74,7 +81,7 @@ def synthesize(study: StudyOptions) -> list[Measurement]:
 
         for measurement in measurements:
             path = study.measurements[measurement.name].data.path
-            write_numpy(path, measurement.times, measurement.values)
+            _write(path, measurement, comm)
             logger.info(
                 "wrote %s: %d times to %s", measurement.name, len(measurement.times), path
             )
@@ -126,16 +133,36 @@ def _generate_from_run(
             # same time (up to round-off): sample the current state, no solver call
             pass
 
-        z = operators[name](state)
+        # the noise of all entries, the same on every rank; each keeps those it holds
+        operator = operators[name]
         noise = np.random.default_rng([seeds[name], k]).normal(
-            0.0, options[name].noise.stddev, z.shape
+            0.0, options[name].noise.stddev, operator.size
         )
-        values[name].append(z + noise)
+        values[name].append(operator(state) + noise[operator.global_indices])
 
     return [
         Measurement(name, operators[name], times[name], np.array(values[name]), o.noise.stddev)
         for name, o in options.items()
     ]
+
+
+def _write(path: str, measurement: Measurement, comm: MPI.Comm) -> None:
+    """Write a measurement's data, gathered from all ranks, on rank 0.
+
+    Args:
+        path: path to the ``.npz`` file
+        measurement: the measurement, with this rank's entries of its data
+        comm: communicator over which the entries are distributed
+    """
+    parts = comm.gather((measurement.operator.global_indices, measurement.values), root=0)
+    if comm.rank != 0:
+        return
+
+    assert parts is not None
+    values = np.empty((len(measurement.times), measurement.operator.size))
+    for global_indices, local_values in parts:
+        values[:, global_indices] = local_values
+    write_numpy(path, measurement.times, values)
 
 
 def _times(name: str, options: MeasurementOptions) -> NDArray_f64:
