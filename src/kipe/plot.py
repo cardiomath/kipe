@@ -8,7 +8,6 @@ from the start, with all outer iterations marked.
 
 Draws with matplotlib (:func:`plot_histories`) or as text in the terminal with plotext
 (:func:`render_histories`), e.g., to follow an estimation on a cluster (:func:`watch_histories`).
-Plotting dependencies are included in the default installation.
 """
 
 import sys
