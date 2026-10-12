@@ -63,7 +63,7 @@ jobs:
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       # into the image's own Python environment, which has dolfinx, petsc4py and mpi4py (built
       # for the image's MPI); a separate venv would not see them
-      - run: python3 -m pip install ".[test]"
+      - run: python3 -m pip install ".[dev]"
       # for the optional check of the mesh file's content (test_reference_is_the_file_content):
       # a binary wheel only, so that pip never builds HDF5; nothing to do if the image has h5py
       - run: "python3 -m pip install --only-binary=:all: h5py"
