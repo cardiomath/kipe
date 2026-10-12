@@ -216,7 +216,7 @@ def _plot(args: argparse.Namespace) -> None:
         args: parsed command line arguments: the study files and the plot options
 
     Raises:
-        PlotError: if matplotlib or plotext is not installed, or a history cannot be read
+        PlotError: if matplotlib is not installed, or a history cannot be read
     """
     studies = [_load_study(path) for path in args.studies]
     paths = {

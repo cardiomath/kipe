@@ -15,7 +15,6 @@ import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from types import ModuleType
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -211,9 +210,10 @@ def render_histories(
         the rendered plot
 
     Raises:
-        PlotError: if plotext is not installed, or the histories estimate different parameters
+        PlotError: if the histories estimate different parameters
     """
-    plotext = _import_plotext()
+    import plotext
+
     names = _common_names(histories)
 
     # as in plot_histories: a legend with several histories or a truth
@@ -291,9 +291,10 @@ def watch_histories(
         interval: seconds between redraws
 
     Raises:
-        PlotError: if plotext is not installed, or the histories estimate different parameters
+        PlotError: if the histories estimate different parameters
     """
-    plotext = _import_plotext()
+    import plotext
+
     color = sys.stdout.isatty()
 
     try:
@@ -385,20 +386,3 @@ def _color(k: int) -> tuple[int, int, int]:
         RGB color
     """
     return _COLORS[k % len(_COLORS)]
-
-
-def _import_plotext() -> ModuleType:
-    """Import plotext, an optional dependency.
-
-    Returns:
-        the plotext module
-
-    Raises:
-        PlotError: if plotext is not installed
-    """
-    try:
-        import plotext
-    except ImportError as err:
-        raise PlotError("kipe plot --terminal needs plotext: pip install kipe") from err
-
-    return plotext

@@ -11,7 +11,7 @@
 + **Solver-agnostic**: Connect your model through a small forward-solver interface
 + **Derivative-free**: Optimizer is based on the reduced-order
 unscented Kalman filter (ROUKF) and hence it needs only forward runs.
-+ **Modular observation operators**: Reuse an existing library of observation operators and contribute new ones. Concatenation of measurements is straightforward.
++ **Modular observation operators**: New observation operators can be implemented easily by extending the library.
 + **Twin experiments**: Generate synthetic measurements from a model run.
 + **Reproducible runs**: Keep results, logs, and run provenance together.
 
