@@ -331,7 +331,7 @@ def estimate(study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD) -> Parameters
 
     solver = build_forward_solver(study.forward_solver)
     parameterization = build_parameterization(study.parameters, solver.nominal_parameters())
-    measurements = _build_measurements(study, solver.state_spec, comm)
+    measurements = _build_measurements(study, solver, comm)
     output = Path(study.output.path) / "estimation"
     estimation = Estimation(
         solver, parameterization, measurements, study.estimation, output, comm
@@ -395,7 +395,7 @@ def _estimate_rows(
 
 
 def _build_measurements(
-    study: StudyOptions, state_spec: Mapping[str, FieldSpec], comm: MPI.Comm
+    study: StudyOptions, solver: ForwardSolver, comm: MPI.Comm
 ) -> list[Measurement]:
     """Read the data of the study's measurements and build their observation operators.
 
@@ -403,7 +403,7 @@ def _build_measurements(
 
     Args:
         study: the study options
-        state_spec: the solver's state fields
+        solver: the forward solver
         comm: communicator of the run
 
     Returns:
@@ -419,7 +419,7 @@ def _build_measurements(
 
     measurements = []
     for name, options in study.measurements.items():
-        operator = build_observation_operator(name, options, state_spec, comm)
+        operator = build_observation_operator(name, options, solver, comm)
         times, values = read_numpy(options.data.path)
 
         if values.shape[1] != operator.size:

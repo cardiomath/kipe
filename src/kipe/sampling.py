@@ -25,7 +25,7 @@ from mpi4py import MPI
 import numpy as np
 
 from kipe._types import NDArray_f64, NDArray_i64
-from kipe.forward_solver import FieldSpec
+from kipe.forward_solver import FieldSpec, ForwardSolver
 from kipe.options import ArraySamplingOptions, StudyFileError
 
 
@@ -108,7 +108,7 @@ class ArraySampler(SpatialSampler):
 def build_sampler(
     options: ArraySamplingOptions,
     fields: list[str],
-    state_spec: Mapping[str, FieldSpec],
+    solver: ForwardSolver,
     comm: MPI.Comm = MPI.COMM_WORLD,
 ) -> SpatialSampler:
     """Construct the sampler given by the ``spatial_sampling`` options of a measurement.
@@ -116,7 +116,8 @@ def build_sampler(
     Args:
         options: ``spatial_sampling`` options of the measurement
         fields: names of the fields the measurement observes
-        state_spec: the forward solver's state fields
+        solver: the forward solver; backend samplers take what they need from it, e.g., the
+            function spaces
         comm: communicator of the run
 
     Returns:
@@ -124,6 +125,6 @@ def build_sampler(
     """
     match options:
         case ArraySamplingOptions():
-            return ArraySampler(fields, state_spec, comm)
+            return ArraySampler(fields, solver.state_spec, comm)
         case _:
             assert_never(options)

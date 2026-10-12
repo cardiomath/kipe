@@ -56,7 +56,7 @@ def synthesize(study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD) -> list[Mea
     started = time.perf_counter()
     solver = build_forward_solver(study.forward_solver)
     operators = {
-        name: build_observation_operator(name, options, solver.state_spec, comm)
+        name: build_observation_operator(name, options, solver, comm)
         for name, options in study.measurements.items()
     }
 
