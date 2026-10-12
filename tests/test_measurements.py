@@ -1,5 +1,6 @@
 """Measurement models, observation operators, numpy data, measurement times and samplers."""
 
+from importlib.util import find_spec
 from types import SimpleNamespace
 
 import numpy as np
@@ -19,6 +20,7 @@ from kipe.options import (
     ArraySamplingOptions,
     DifferenceModelOptions,
     MeasurementOptions,
+    MeshSamplingOptions,
     StudyFileError,
     TimeRange,
 )
@@ -138,3 +140,11 @@ def test_observation_operator_unknown_field():
         StudyFileError, match=r"measurements\.u: the forward solver has no field u"
     ):
         build_observation_operator("u", _options(["u"]), Solver())
+
+
+@pytest.mark.skipif(find_spec("dolfinx") is not None, reason="dolfinx is installed")
+def test_mesh_sampler_without_dolfinx():
+    """A study with a fenicsx.* sampler fails clearly where dolfinx is missing."""
+    options = MeshSamplingOptions(type="fenicsx.mesh", mesh="unused.xdmf")
+    with pytest.raises(StudyFileError, match=r"fenicsx\.mesh needs dolfinx"):
+        build_sampler(options, ["u"], Solver())

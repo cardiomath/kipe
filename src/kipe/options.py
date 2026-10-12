@@ -214,6 +214,38 @@ class NoiseOptions:
     depend on the other times. Measurements must have different seeds."""
 
 
+# FEniCSx backend (kipe.fenicsx): its options are plain options like all others, so that the
+# study file's schema is complete in this module; nothing here imports dolfinx.
+
+
+@dataclass(frozen=True, config=_CONFIG)
+class MeshSamplingOptions:
+    """Interpolate the observed field onto a measurement mesh (FEniCSx backend).
+
+    The field must be a scalar, distributed field whose function space the forward solver
+    provides (:class:`kipe.fenicsx.forward_solver.SupportsFunctionSpaces`). The measurement
+    mesh need not match the solver's mesh. The data are in the order of the mesh file: one
+    value per vertex for ``P1``, one per cell for ``DG0``, independent of the number of ranks.
+    """
+
+    type: Literal["fenicsx.mesh"]
+    """Kind of spatial sampling."""
+
+    mesh: str
+    """Path to the measurement mesh, an XDMF file with a mesh named ``mesh``."""
+
+    element: Literal["P1", "DG0"] = "P1"
+    """Finite element on the measurement mesh: vertex values (``P1``) or cell values
+    (``DG0``)."""
+
+
+# the choices of a measurement, from the core and the backends
+
+type SpatialSamplingOptions = Annotated[
+    ArraySamplingOptions | MeshSamplingOptions, Field(discriminator="type")
+]
+
+
 @dataclass(frozen=True, config=_CONFIG)
 class MeasurementOptions:
     """One measurement: which fields it observes, its data, and how to compare them."""
@@ -232,8 +264,9 @@ class MeasurementOptions:
     generate); for ``estimation`` a selection from the times in the data, all if not
     given."""
 
-    spatial_sampling: ArraySamplingOptions = field(default_factory=ArraySamplingOptions)
-    """How the observed fields are brought to the measurement locations."""
+    spatial_sampling: SpatialSamplingOptions = field(default_factory=ArraySamplingOptions)
+    """How the observed fields are brought to the measurement locations; the kind is selected
+    by ``type``, ``array`` by default."""
 
     model: DifferenceModelOptions = field(default_factory=DifferenceModelOptions)
     """How predicted data are computed from the sampled fields and compared with the data."""
