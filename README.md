@@ -109,6 +109,11 @@ Its solver,
 [`kipe/fenicsx/examples/heat.py`](https://github.com/cardiomath/kipe/blob/main/src/kipe/fenicsx/examples/heat.py),
 is a template for your own.
 
+Existing data in PETSc binary files, one per time and rank, are read with
+`data: {type: fenicsx.petscbinary, path: "data/{i}/u_np{mpi_size}-{mpi_rank}.dat"}` and a
+`fenicsx.mesh` sampling that matches the one the data were written with. They hold each rank's
+part of the data, so estimation must run on the same number of ranks.
+
 ## Development
 
 ```bash

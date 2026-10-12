@@ -24,7 +24,15 @@ import numpy as np
 
 from kipe._types import NDArray_f64, NDArray_i64
 from kipe.forward_solver import ForwardSolver, State
-from kipe.options import DifferenceModelOptions, MeasurementOptions, StudyFileError, TimeRange
+from kipe.options import (
+    DataOptions,
+    DifferenceModelOptions,
+    MeasurementOptions,
+    NumpyDataOptions,
+    PetscBinaryDataOptions,
+    StudyFileError,
+    TimeRange,
+)
 from kipe.sampling import SpatialSampler, build_sampler
 
 
@@ -228,6 +236,55 @@ def measurement_times(times: list[float] | TimeRange) -> NDArray_f64:
         n = math.floor((times.stop - times.start) / times.step + 1e-9)
         return times.start + times.step * np.arange(n + 1, dtype=np.float64)
     return np.array(times, dtype=np.float64)
+
+
+def read_data(
+    name: str,
+    options: DataOptions,
+    operator: ObservationOperator,
+    comm: MPI.Comm = MPI.COMM_WORLD,
+) -> tuple[NDArray_f64, NDArray_f64]:
+    """Read this rank's entries of a measurement's data, at all times in the data.
+
+    Args:
+        name: name of the measurement, for error messages
+        options: the ``data`` options of the measurement
+        operator: its observation operator, which says which entries this rank holds
+        comm: communicator of the run
+
+    Returns:
+        - times, shape ``(n,)``
+        - this rank's entries at the positions ``operator.global_indices``, shape
+          ``(n, number of this rank's entries)``
+
+    Raises:
+        StudyFileError: if the data cannot be read or do not have the measurement's number of
+            entries
+    """
+    match options:
+        case NumpyDataOptions():
+            # every rank reads the whole data and keeps its entries
+            times, values = read_numpy(options.path)
+            if values.shape[1] != operator.size:
+                raise StudyFileError(
+                    f"measurements.{name}: the data have {values.shape[1]} values per time, "
+                    f"the measurement has {operator.size}"
+                )
+            return times, values[:, operator.global_indices]
+        case PetscBinaryDataOptions():
+            try:
+                from kipe.fenicsx.data import read_petsc_binary
+            except ImportError as err:
+                raise StudyFileError(
+                    f"measurements.{name}: fenicsx.petscbinary needs petsc4py: {err}"
+                ) from err
+            try:
+                # the files hold this rank's entries already
+                return read_petsc_binary(options, len(operator.global_indices), comm)
+            except StudyFileError as err:
+                raise StudyFileError(f"measurements.{name}: {err}") from err
+        case _:
+            assert_never(options)
 
 
 def read_numpy(path: str | Path) -> tuple[NDArray_f64, NDArray_f64]:

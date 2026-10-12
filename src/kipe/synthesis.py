@@ -30,7 +30,13 @@ from kipe.measurements import (
     measurement_times,
     write_numpy,
 )
-from kipe.options import MeasurementOptions, RunTruthOptions, StudyFileError, StudyOptions
+from kipe.options import (
+    MeasurementOptions,
+    NumpyDataOptions,
+    RunTruthOptions,
+    StudyFileError,
+    StudyOptions,
+)
 from kipe.provenance import recorded_run
 
 logger = logging.getLogger(__name__)
@@ -47,11 +53,13 @@ def synthesize(study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD) -> list[Mea
         the generated measurements, with this rank's entries of their data
 
     Raises:
-        StudyFileError: if a measurement lacks what synthesis needs, or observes a field the
-            solver does not have
+        StudyFileError: if a measurement lacks what synthesis needs, has data in a format
+            synthesis does not write, or observes a field the solver does not have
     """
     if not study.measurements:
         raise StudyFileError("synthesis needs a measurements section")
+
+    paths = {name: _numpy_path(name, options) for name, options in study.measurements.items()}
 
     started = time.perf_counter()
     solver = build_forward_solver(study.forward_solver)
@@ -80,7 +88,7 @@ def synthesize(study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD) -> list[Mea
                 assert_never(study.synthesis.truth)
 
         for measurement in measurements:
-            path = study.measurements[measurement.name].data.path
+            path = paths[measurement.name]
             _write(path, measurement, comm)
             logger.info(
                 "wrote %s: %d times to %s", measurement.name, len(measurement.times), path
@@ -163,6 +171,27 @@ def _write(path: str, measurement: Measurement, comm: MPI.Comm) -> None:
     for global_indices, local_values in parts:
         values[:, global_indices] = local_values
     write_numpy(path, measurement.times, values)
+
+
+def _numpy_path(name: str, options: MeasurementOptions) -> str:
+    """Return the path of a measurement's data, which synthesis writes as ``numpy`` only.
+
+    Args:
+        name: name of the measurement
+        options: its options
+
+    Returns:
+        the path of the ``.npz`` file
+
+    Raises:
+        StudyFileError: if the data are not ``numpy`` data
+    """
+    if not isinstance(options.data, NumpyDataOptions):
+        raise StudyFileError(
+            f"measurements.{name}: synthesis writes numpy data only, not {options.data.type}"
+        )
+
+    return options.data.path
 
 
 def _times(name: str, options: MeasurementOptions) -> NDArray_f64:

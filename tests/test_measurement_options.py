@@ -8,6 +8,7 @@ from kipe.options import (
     DifferenceModelOptions,
     MeasurementOptions,
     MeshSamplingOptions,
+    PetscBinaryDataOptions,
     RunTruthOptions,
     StudyOptions,
     TimeRange,
@@ -116,3 +117,36 @@ def test_mesh_sampling():
 def test_invalid_mesh_sampling(options, message):
     with pytest.raises(ValidationError, match=message):
         _mesh_sampling(**options)
+
+
+PETSC_BINARY = {"type": "fenicsx.petscbinary", "path": "data/{i}/u_np{mpi_size}-{mpi_rank}.dat"}
+MESH_SAMPLING = {"type": "fenicsx.mesh", "mesh": "data/mesh.xdmf"}
+
+
+def _petsc_binary(**change) -> MeasurementOptions:
+    """A measurement with fenicsx.petscbinary data on a fenicsx.mesh sampling."""
+    measurement = MEASUREMENT | {"data": PETSC_BINARY, "spatial_sampling": MESH_SAMPLING}
+    return TypeAdapter(MeasurementOptions).validate_python(measurement | change)
+
+
+def test_petsc_binary_data():
+    assert isinstance(_petsc_binary().data, PetscBinaryDataOptions)
+    # a format spec on a placeholder is allowed
+    path = "data/{i:04d}/u_np{mpi_size}-{mpi_rank}.dat"
+    assert _petsc_binary(data=PETSC_BINARY | {"path": path}).data.path == path
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        ({"spatial_sampling": {"type": "array"}}, "needs spatial_sampling fenicsx.mesh"),
+        ({"data": PETSC_BINARY | {"path": "data/{i}/u.dat"}}, "missing placeholder mpi_rank"),
+        (
+            {"data": PETSC_BINARY | {"path": "data/{i}/u_np{mpi_size}-{mpi_rank}-{seed}.dat"}},
+            "unknown placeholder seed",
+        ),
+    ],
+)
+def test_invalid_petsc_binary_data(change, message):
+    with pytest.raises(ValidationError, match=message):
+        _petsc_binary(**change)

@@ -128,3 +128,19 @@ def test_synthesis_errors(tmp_path, capsys, measurement, message):
     )
     assert main(["synthesis", str(study)]) == 1
     assert message in capsys.readouterr().err
+
+
+def test_synthesis_writes_numpy_data_only(tmp_path, capsys):
+    study = _study(
+        tmp_path,
+        """\
+  u:
+    fields: [u]
+    times: [1.0]
+    noise: {stddev: 0.1, seed: 0}
+    data: {type: fenicsx.petscbinary, path: "data/{i}/u_np{mpi_size}-{mpi_rank}.dat"}
+    spatial_sampling: {type: fenicsx.mesh, mesh: data/mesh.xdmf}
+""",
+    )
+    assert main(["synthesis", str(study)]) == 1
+    assert "synthesis writes numpy data only, not fenicsx.petscbinary" in capsys.readouterr().err

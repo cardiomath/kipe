@@ -36,7 +36,7 @@ from kipe.measurements import (
     Measurement,
     build_observation_operator,
     measurement_times,
-    read_numpy,
+    read_data,
 )
 from kipe.options import EstimationOptions, StudyFileError, StudyOptions
 from kipe.parameters import Parameterization, build_parameterization
@@ -399,7 +399,8 @@ def _build_measurements(
 ) -> list[Measurement]:
     """Read the data of the study's measurements and build their observation operators.
 
-    Every rank reads the whole data and keeps the entries it holds (``global_indices``).
+    Each rank keeps the entries of the data it holds (``global_indices``), see
+    :func:`kipe.measurements.read_data`.
 
     Args:
         study: the study options
@@ -420,14 +421,7 @@ def _build_measurements(
     measurements = []
     for name, options in study.measurements.items():
         operator = build_observation_operator(name, options, solver, comm)
-        times, values = read_numpy(options.data.path)
-
-        if values.shape[1] != operator.size:
-            raise StudyFileError(
-                f"measurements.{name}: the data have {values.shape[1]} values per time, the "
-                f"measurement has {operator.size}"
-            )
-        values = values[:, operator.global_indices]
+        times, values = read_data(name, options.data, operator, comm)
 
         if options.times is not None:
             indices = [_index_of(t, times, name) for t in measurement_times(options.times)]

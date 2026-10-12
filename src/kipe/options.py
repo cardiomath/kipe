@@ -18,6 +18,7 @@ See ``examples/fitzhugh_nagumo/study.yaml`` for a complete study file.
 
 from dataclasses import field
 from pathlib import Path
+from string import Formatter
 from typing import Annotated, Any, Literal
 
 from pydantic import ConfigDict, Field, PositiveFloat, TypeAdapter
@@ -261,7 +262,49 @@ class MeshSamplingOptions:
             raise ValueError("projection surface_normal needs element DG0 (one normal per cell)")
 
 
+@dataclass(frozen=True, config=_CONFIG)
+class PetscBinaryDataOptions:
+    """Measurement data in PETSc binary files, one per time and rank (FEniCSx backend).
+
+    The format chimera-synthmeas writes for chimera-roukf. Each file holds the values of the
+    degrees of freedom that one rank owns on the measurement mesh, in dolfinx's local order.
+    kipe uses them as they are, so they match only a ``fenicsx.mesh`` sampling with the same
+    mesh file, element and projection, on the same number of ranks. kipe checks the number of
+    ranks and the number of values per rank, but cannot detect a different numbering of the
+    same size. ``estimation`` reads these data; ``synthesis`` writes ``numpy`` data only.
+    """
+
+    type: Literal["fenicsx.petscbinary"]
+    """Data format."""
+
+    path: str
+    """Path pattern of the files, with the placeholders ``{i}`` (the index of the time),
+    ``{mpi_size}`` and ``{mpi_rank}``, e.g., ``measurements/{i}/u_np{mpi_size}-{mpi_rank}.dat``.
+    The times are in ``timestamps.csv`` (one row per time: index, time), in the directory that
+    contains the first path component with ``{i}``."""
+
+    def __post_init__(self) -> None:
+        """Check the placeholders of the path.
+
+        Raises:
+            ValueError: if the path lacks a placeholder or has an unknown one
+        """
+        placeholders = {
+            name for _, name, _, _ in Formatter().parse(self.path) if name is not None
+        }
+        missing = sorted({"i", "mpi_size", "mpi_rank"} - placeholders)
+        unknown = sorted(placeholders - {"i", "mpi_size", "mpi_rank"})
+        if missing:
+            raise ValueError(f"path: missing placeholder {', '.join(missing)}")
+        if unknown:
+            raise ValueError(f"path: unknown placeholder {', '.join(unknown)}")
+
+
 # the choices of a measurement, from the core and the backends
+
+type DataOptions = Annotated[
+    NumpyDataOptions | PetscBinaryDataOptions, Field(discriminator="type")
+]
 
 type SpatialSamplingOptions = Annotated[
     ArraySamplingOptions | MeshSamplingOptions, Field(discriminator="type")
@@ -275,8 +318,9 @@ class MeasurementOptions:
     fields: Annotated[list[str], Field(min_length=1)]
     """State fields the measurement observes."""
 
-    data: NumpyDataOptions
-    """Where the measured data are: read by ``estimation``, written by ``synthesis``."""
+    data: DataOptions
+    """Where the measured data are: read by ``estimation``, written by ``synthesis``; the format
+    is selected by ``type``."""
 
     noise: NoiseOptions
     """Measurement noise."""
@@ -292,6 +336,18 @@ class MeasurementOptions:
 
     model: DifferenceModelOptions = field(default_factory=DifferenceModelOptions)
     """How predicted data are computed from the sampled fields and compared with the data."""
+
+    def __post_init__(self) -> None:
+        """Check that the data fit the spatial sampling.
+
+        Raises:
+            ValueError: if ``fenicsx.petscbinary`` data are combined with another sampling than
+                ``fenicsx.mesh``
+        """
+        if isinstance(self.data, PetscBinaryDataOptions) and not isinstance(
+            self.spatial_sampling, MeshSamplingOptions
+        ):
+            raise ValueError("data fenicsx.petscbinary needs spatial_sampling fenicsx.mesh")
 
 
 @dataclass(frozen=True, config=_CONFIG)
