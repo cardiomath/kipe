@@ -26,7 +26,7 @@ import numpy as np
 
 from kipe._types import NDArray_f64, NDArray_i64
 from kipe.forward_solver import FieldSpec, ForwardSolver
-from kipe.options import ArraySamplingOptions, StudyFileError
+from kipe.options import ArraySamplingOptions, MeshSamplingOptions, StudyFileError
 
 
 class SpatialSampler(ABC):
@@ -106,7 +106,7 @@ class ArraySampler(SpatialSampler):
 
 
 def build_sampler(
-    options: ArraySamplingOptions,
+    options: ArraySamplingOptions | MeshSamplingOptions,
     fields: list[str],
     solver: ForwardSolver,
     comm: MPI.Comm = MPI.COMM_WORLD,
@@ -122,9 +122,18 @@ def build_sampler(
 
     Returns:
         the spatial sampler
+
+    Raises:
+        StudyFileError: if a backend sampler is used but its backend is not installed
     """
     match options:
         case ArraySamplingOptions():
             return ArraySampler(fields, solver.state_spec, comm)
+        case MeshSamplingOptions():
+            try:  # dolfinx only when a study uses it
+                from kipe.fenicsx.sampling import build_mesh_sampler
+            except ImportError as err:
+                raise StudyFileError(f"fenicsx.mesh needs dolfinx: {err}") from err
+            return build_mesh_sampler(options, fields, solver, comm)
         case _:
             assert_never(options)
