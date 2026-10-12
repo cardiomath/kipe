@@ -1,5 +1,7 @@
 """Measurement models, observation operators, numpy data, measurement times and samplers."""
 
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 
@@ -44,8 +46,8 @@ def test_incomplete_model_cannot_be_instantiated():
 
 
 def test_array_sampler_concatenates_in_order_of_fields():
-    spec = {"v": FieldSpec(1), "w": FieldSpec(2)}
-    sampler = build_sampler(ArraySamplingOptions(), ["w", "v"], spec)
+    solver = SimpleNamespace(state_spec={"v": FieldSpec(1), "w": FieldSpec(2)})
+    sampler = build_sampler(ArraySamplingOptions(), ["w", "v"], solver)
     assert isinstance(sampler, ArraySampler)
     fields = {"v": np.array([1.0]), "w": np.array([2.0, 3.0])}
     np.testing.assert_array_equal(sampler.sample(fields), [2.0, 3.0, 1.0])
@@ -126,7 +128,7 @@ def _options(fields: list[str]) -> MeasurementOptions:
 
 def test_observation_operator_samples_and_predicts():
     """H(state): the observed fields, sampled (array) and predicted (difference: unchanged)."""
-    operator = build_observation_operator("vw", _options(["w", "v"]), Solver().state_spec)
+    operator = build_observation_operator("vw", _options(["w", "v"]), Solver())
     state = {"v": np.array([1.0]), "w": np.array([2.0])}
     np.testing.assert_array_equal(operator(state), [2.0, 1.0])
 
@@ -135,4 +137,4 @@ def test_observation_operator_unknown_field():
     with pytest.raises(
         StudyFileError, match=r"measurements\.u: the forward solver has no field u"
     ):
-        build_observation_operator("u", _options(["u"]), Solver().state_spec)
+        build_observation_operator("u", _options(["u"]), Solver())

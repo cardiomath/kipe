@@ -14,7 +14,6 @@ to :mod:`kipe.options` and a ``case`` to :func:`build_model`.
 
 import math
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import assert_never
@@ -24,7 +23,7 @@ from mpi4py import MPI
 import numpy as np
 
 from kipe._types import NDArray_f64, NDArray_i64
-from kipe.forward_solver import FieldSpec, State
+from kipe.forward_solver import ForwardSolver, State
 from kipe.options import DifferenceModelOptions, MeasurementOptions, StudyFileError, TimeRange
 from kipe.sampling import SpatialSampler, build_sampler
 
@@ -156,7 +155,7 @@ class ObservationOperator:
 def build_observation_operator(
     name: str,
     options: MeasurementOptions,
-    state_spec: Mapping[str, FieldSpec],
+    solver: ForwardSolver,
     comm: MPI.Comm = MPI.COMM_WORLD,
 ) -> ObservationOperator:
     """Construct the observation operator of a measurement.
@@ -164,7 +163,7 @@ def build_observation_operator(
     Args:
         name: name of the measurement, for error messages
         options: the measurement options
-        state_spec: the forward solver's state fields
+        solver: the forward solver
         comm: communicator of the run
 
     Returns:
@@ -174,6 +173,7 @@ def build_observation_operator(
         StudyFileError: if the measurement observes a field the solver does not have, or one
             its sampler cannot sample
     """
+    state_spec = solver.state_spec
     unknown = [f for f in options.fields if f not in state_spec]
     if unknown:
         raise StudyFileError(
@@ -182,7 +182,7 @@ def build_observation_operator(
         )
 
     try:
-        sampler = build_sampler(options.spatial_sampling, options.fields, state_spec, comm)
+        sampler = build_sampler(options.spatial_sampling, options.fields, solver, comm)
     except StudyFileError as err:
         raise StudyFileError(f"measurements.{name}: {err}") from err
 
