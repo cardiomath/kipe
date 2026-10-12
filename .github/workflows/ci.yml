@@ -49,3 +49,25 @@ jobs:
       - name: MPI start
         run: python -c "from mpi4py import MPI; print(MPI.Get_library_version().splitlines()[0])"
       - run: pytest -q
+
+  test-fenicsx:
+    runs-on: ubuntu-latest
+    container: dolfinx/dolfinx:v0.9.0
+    env:
+      UCX_TLS: self,sm,tcp  # as in the test job, in case the image's MPI uses UCX
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # all tags, for the version (hatch-vcs)
+      # the checkout belongs to another user than the container's root: let git read it
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      # into the image's own Python environment, which has dolfinx, petsc4py and mpi4py (built
+      # for the image's MPI); a separate venv would not see them
+      - run: python3 -m pip install ".[test]"
+      # fail here if dolfinx is missing, instead of skipping all tests
+      - name: dolfinx and MPI
+        run: |
+          python3 -c "import dolfinx; print('dolfinx', dolfinx.__version__)"
+          python3 -c "from mpi4py import MPI; print(MPI.Get_library_version().splitlines()[0])"
+      - run: python3 -m pytest -q tests/fenicsx
+      - run: mpirun -n 2 python3 -m pytest -q tests/fenicsx
