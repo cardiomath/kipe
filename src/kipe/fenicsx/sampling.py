@@ -1,10 +1,12 @@
 """Spatial samplers on meshes: ``fenicsx.mesh``.
 
 :class:`MeshSampler` interpolates a field of the solver onto a measurement mesh, which need not
-match the solver's mesh. Its entries are in the order of the measurement mesh file: one value
-per vertex for ``P1`` (by the vertex's row in the file), one per cell for ``DG0`` (by the
-cell's row). dolfinx keeps these rows however it distributes and renumbers the mesh, so the
-data do not depend on the number of ranks (see :mod:`kipe.sampling`).
+match the solver's mesh, optionally projected onto a direction or the surface normal. Its
+entries are in the order of the measurement mesh file: one value per vertex for ``P1`` (by the
+vertex's row in the file), one per cell for ``DG0`` (by the cell's row); for a vector field
+without projection, the components of each vertex or cell one after another. dolfinx keeps
+these rows however it distributes and renumbers the mesh, so the data do not depend on the
+number of ranks (see :mod:`kipe.sampling`).
 """
 
 from collections.abc import Mapping
@@ -13,7 +15,10 @@ from typing import Literal
 from mpi4py import MPI
 
 import numpy as np
+import ufl
 from dolfinx import fem, io
+from dolfinx.mesh import Mesh
+from ufl.core.expr import Expr
 
 from kipe._types import NDArray_f64, NDArray_i64
 from kipe.fenicsx.forward_solver import SupportsFunctionSpaces
@@ -22,21 +27,25 @@ from kipe.options import MeshSamplingOptions, StudyFileError
 from kipe.sampling import SpatialSampler
 
 type Element = Literal["P1", "DG0"]
+type Projection = list[float] | Literal["surface_normal"] | None
 
 
 class MeshSampler(SpatialSampler):
-    """Interpolates a scalar field onto a measurement mesh.
+    """Interpolates a field onto a measurement mesh, optionally projected.
 
     Args:
         field: name of the observed field
         source: the field's function space, on the solver's mesh
         mesh: path to the measurement mesh, an XDMF file with a mesh named ``mesh``
         element: finite element on the measurement mesh
+        projection: a direction (one entry per component of the field) or
+            ``"surface_normal"`` (the measurement mesh must be a surface); all components if
+            None
         comm: communicator of the run
 
     Raises:
         StudyFileError: if the measurement mesh has curved cells (``P1`` needs a linear
-            geometry)
+            geometry), or the projection does not fit the field or the mesh
     """
 
     def __init__(
@@ -45,6 +54,7 @@ class MeshSampler(SpatialSampler):
         source: fem.FunctionSpace,
         mesh: str,
         element: Element,
+        projection: Projection = None,
         comm: MPI.Comm = MPI.COMM_WORLD,
     ) -> None:
         with io.XDMFFile(comm, mesh, "r") as f:
@@ -54,9 +64,14 @@ class MeshSampler(SpatialSampler):
             raise StudyFileError(
                 f"the measurement mesh {mesh} has curved cells; P1 needs linear ones"
             )
+        shape = source.value_shape
+        if len(shape) > 1:
+            raise StudyFileError(
+                f"fenicsx.mesh supports scalar and vector fields, {field} is not"
+            )
 
         family = ("Lagrange", 1) if element == "P1" else ("DG", 0)
-        target = fem.functionspace(measurement_mesh, family)
+        target = fem.functionspace(measurement_mesh, (*family, shape))
 
         tdim = measurement_mesh.topology.dim
         cells = measurement_mesh.topology.index_map(tdim)
@@ -66,14 +81,29 @@ class MeshSampler(SpatialSampler):
         self._field = field
         self._source = fem.Function(source)
         self._target = fem.Function(target)
-        self._n_source = source.dofmap.index_map.size_local
-        self._n_owned = target.dofmap.index_map.size_local
+        self._n_source = source.dofmap.index_map.size_local * source.dofmap.index_map_bs
 
-        self.size = target.dofmap.index_map.size_global
-        self.global_indices = _file_index(target, element)[: self._n_owned]
+        # the projection: u . d interpolated into a scalar space on the measurement mesh; exact
+        # for P1 and DG0, which evaluate at the vertices and midpoints, where u's values are
+        self._projected: fem.Function | None = None
+        output = target
+        if projection is not None:
+            vector = _projection_vector(projection, field, shape, measurement_mesh, mesh)
+            output = fem.functionspace(measurement_mesh, family)
+            self._projected = fem.Function(output)
+            self._expression = fem.Expression(
+                ufl.dot(self._target, vector), output.element.interpolation_points()
+            )
+
+        bs = output.dofmap.index_map_bs
+        n_owned = output.dofmap.index_map.size_local
+        self._n_values = n_owned * bs
+        self.size = output.dofmap.index_map.size_global * bs
+        rows = _file_index(output, element)[:n_owned]
+        self.global_indices = (rows[:, np.newaxis] * bs + np.arange(bs)).ravel()
 
     def sample(self, fields: Mapping[str, NDArray_f64]) -> NDArray_f64:
-        """Interpolate the field onto the measurement mesh.
+        """Interpolate the field onto the measurement mesh, and project it.
 
         Args:
             fields: the observed state field, this rank's owned degrees of freedom
@@ -86,7 +116,12 @@ class MeshSampler(SpatialSampler):
         self._source.x.scatter_forward()
         self._target.interpolate_nonmatching(self._source, self._cells, self._interpolation)
 
-        return self._target.x.array[: self._n_owned].copy()
+        output = self._target
+        if self._projected is not None:
+            self._projected.interpolate(self._expression)
+            output = self._projected
+
+        return output.x.array[: self._n_values].copy()
 
 
 def build_mesh_sampler(
@@ -107,8 +142,8 @@ def build_mesh_sampler(
         the sampler
 
     Raises:
-        StudyFileError: if the measurement does not observe exactly one distributed, scalar
-            field whose function space the solver provides
+        StudyFileError: if the measurement does not observe exactly one distributed field whose
+            function space the solver provides
     """
     if len(fields) != 1:
         raise StudyFileError(f"fenicsx.mesh samples one field, got {', '.join(fields)}")
@@ -122,15 +157,63 @@ def build_mesh_sampler(
             "function_space method (see kipe.fenicsx.forward_solver)"
         )
 
-    source = solver.function_space(field)
-    if source.dofmap.index_map_bs != 1:
-        raise StudyFileError(f"fenicsx.mesh supports scalar fields only, {field} is not scalar")
+    return MeshSampler(
+        field,
+        solver.function_space(field),
+        options.mesh,
+        options.element,
+        options.projection,
+        comm,
+    )
 
-    return MeshSampler(field, source, options.mesh, options.element, comm)
+
+def _projection_vector(
+    projection: list[float] | Literal["surface_normal"],
+    field: str,
+    shape: tuple[int, ...],
+    mesh: Mesh,
+    path: str,
+) -> Expr:
+    """Return the vector a field is projected onto: the normalized direction, or the cell normal.
+
+    Args:
+        projection: a direction or ``"surface_normal"``
+        field: name of the field, for errors
+        shape: the field's value shape
+        mesh: the measurement mesh
+        path: its file, for errors
+
+    Returns:
+        the UFL vector
+
+    Raises:
+        StudyFileError: if the field is not a vector field, the direction does not have one
+            entry per component, or the surface normal is asked for on a mesh that is not a
+            surface with one dimension less than its space
+    """
+    if not shape:
+        raise StudyFileError(f"projection needs a vector field, {field} is scalar")
+
+    if projection == "surface_normal":
+        tdim, gdim = mesh.topology.dim, mesh.geometry.dim
+        if tdim != gdim - 1 or shape != (gdim,):
+            raise StudyFileError(
+                f"projection surface_normal needs a surface mesh ({path} has cells of dimension "
+                f"{tdim} in {gdim}D) and a field with {gdim} components ({field}: {shape[0]})"
+            )
+        return ufl.CellNormal(mesh)
+
+    if len(projection) != shape[0]:
+        raise StudyFileError(
+            f"projection: the direction has {len(projection)} entries, {field} has "
+            f"{shape[0]} components"
+        )
+    direction = np.asarray(projection, dtype=np.float64)
+    return ufl.as_vector((direction / np.linalg.norm(direction)).tolist())
 
 
 def _file_index(V: fem.FunctionSpace, element: Element) -> NDArray_i64:
-    """Return, for each local degree of freedom of V, its row in the mesh file.
+    """Return, for each local degree of freedom (block) of V, its row in the mesh file.
 
     P1 on a linear mesh: per cell, the degrees of freedom and the geometry nodes are listed in
     the same order, and each node knows its row (``input_global_indices``). DG0: one degree of

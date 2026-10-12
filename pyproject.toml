@@ -140,7 +140,7 @@ ignore_missing_imports = true
 # without them (they are missing in the core checks; petsc4py's stubs lack names that exist
 # at runtime, dolfinx's assemble_* dispatch at runtime): kipe.fenicsx is checked without
 # their types
-module = ["dolfinx", "dolfinx.*", "ufl", "petsc4py", "petsc4py.*"]
+module = ["dolfinx", "dolfinx.*", "ufl", "ufl.*", "petsc4py", "petsc4py.*"]
 ignore_missing_imports = true
 follow_imports = "skip"
 

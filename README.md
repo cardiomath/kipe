@@ -70,15 +70,17 @@ forward_solver:
 
 The `arguments` are those passed to the factory, i.e., `MySolver(dt=0.01)`.
 
-The FitzHugh–Nagumo solver in [`kipe/examples/fitzhugh_nagumo.py`](https://github.com/cardiomath/kipe/blob/main/src/kipe/examples/fitzhugh_nagumo.py)
+The FitzHugh–Nagumo solver in
+[`kipe/examples/fitzhugh_nagumo.py`](https://github.com/cardiomath/kipe/blob/main/src/kipe/examples/fitzhugh_nagumo.py)
 is a complete example in about 150 lines, docstrings included.
 
 ## FEniCSx models
 
 A FEniCSx solver exchanges the owned degrees of freedom of its fields as arrays, like any other
 state, and additionally provides their function spaces, `function_space(field)` (see
-[`kipe/fenicsx/forward_solver.py`](https://github.com/cardiomath/kipe/blob/main/src/kipe/fenicsx/forward_solver.py)). A measurement
-can then interpolate a field onto a measurement mesh, which need not match the solver's:
+[`kipe/fenicsx/forward_solver.py`](https://github.com/cardiomath/kipe/blob/main/src/kipe/fenicsx/forward_solver.py)).
+A measurement can then interpolate a field onto a measurement mesh, which need not match the
+solver's:
 
 ```yaml
 measurements:
@@ -88,9 +90,13 @@ measurements:
     ...
 ```
 
+A vector field is measured as a whole, as its component along a direction
+(`projection: [0, 0, 1]`), or normal to a surface mesh (`projection: surface_normal`, with
+`element: DG0`).
+
 The measurement data are in the order of the measurement mesh file (one value per vertex for
-`P1`, per cell for `DG0`), so synthesis and estimation can run on different numbers of MPI
-ranks; they must use the same mesh file. The heat equation example shows a complete setup:
+`P1`, per cell for `DG0`), so synthesis and estimation can run on different numbers of MPI ranks;
+they must use the same mesh file. The heat equation example shows a complete setup:
 
 ```bash
 cd kipe/examples/heat
@@ -99,8 +105,9 @@ kipe synthesis study.yaml
 mpirun -n 2 kipe estimation study.yaml
 ```
 
-Its solver, [`kipe/fenicsx/examples/heat.py`](https://github.com/cardiomath/kipe/blob/main/src/kipe/fenicsx/examples/heat.py), is a
-template for your own.
+Its solver,
+[`kipe/fenicsx/examples/heat.py`](https://github.com/cardiomath/kipe/blob/main/src/kipe/fenicsx/examples/heat.py),
+is a template for your own.
 
 ## Development
 
