@@ -10,6 +10,7 @@ from kipe.options import (
     MeshSamplingOptions,
     RunTruthOptions,
     StudyOptions,
+    SynthesisNoiseOptions,
     TimeRange,
 )
 
@@ -67,6 +68,24 @@ def test_times(times, expected):
 def test_invalid_measurement(change):
     with pytest.raises(ValidationError):
         TypeAdapter(MeasurementOptions).validate_python(MEASUREMENT | change)
+
+
+def test_synthesis_noise():
+    noise = {"v": {"stddev": 0}}
+    study = _study({"v": MEASUREMENT}, synthesis={"noise": noise})
+    assert study.synthesis.noise["v"] == SynthesisNoiseOptions(stddev=0.0)
+
+
+@pytest.mark.parametrize(
+    ("noise", "message"),
+    [
+        ({"w": {"stddev": 0.1}}, "synthesis.noise: no measurement w"),
+        ({"v": {"stddev": -0.1}}, "greater than or equal to 0"),
+    ],
+)
+def test_invalid_synthesis_noise(noise, message):
+    with pytest.raises(ValidationError, match=message):
+        _study({"v": MEASUREMENT}, synthesis={"noise": noise})
 
 
 def test_measurements_must_not_share_noise_seeds():
