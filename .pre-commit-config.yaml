@@ -24,6 +24,16 @@ repos:
         pass_filenames: false
         additional_dependencies: [matplotlib, mpi4py, numpy, pytest, pydantic, ruamel.yaml]
 
+  # Needs the docs extra in the active environment: pip install -e ".[docs]"
+  - repo: local
+    hooks:
+      - id: sphinx-build
+        name: sphinx docs build
+        entry: python -m sphinx -q -W --keep-going -b html docs/source docs/build/html
+        language: system
+        files: ^(docs/|src/.*\.py$|pyproject\.toml$)
+        pass_filenames: false
+
   # The scope is optional: the module a commit is about, or the area for non-code changes,
   # e.g., "feat(plot): ...", "fix(estimation,roukf): ..."; no scope for broader commits.
   - repo: https://github.com/compilerla/conventional-pre-commit
