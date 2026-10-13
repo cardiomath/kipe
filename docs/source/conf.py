@@ -1,6 +1,7 @@
 """Sphinx configuration for the kipe documentation."""
 
-from importlib.metadata import PackageNotFoundError, version as _version
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _version
 from pathlib import Path
 
 from sphinx.ext.apidoc import main as apidoc_main
@@ -31,9 +32,14 @@ autodoc_mock_imports = ["mpi4py", "dolfinx", "ufl", "petsc4py", "basix"]
 def _generate_api(app):
     """Generate the API pages from the package, so none are maintained by hand."""
     out = Path(app.srcdir) / "_apidoc"
-    apidoc_main(
-        ["--force", "--separate", "--module-first", "-o", str(out), str(ROOT / "src" / "kipe")]
-    )
+    apidoc_main([
+        "--force",
+        "--separate",
+        "--module-first",
+        "-o",
+        str(out),
+        str(ROOT / "src" / "kipe"),
+    ])
 
 
 def setup(app):
