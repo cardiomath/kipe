@@ -203,15 +203,19 @@ class DifferenceModelOptions:
 
 @dataclass(frozen=True, config=_CONFIG)
 class NoiseOptions:
-    """Measurement noise: assumed by ``estimation``, added by ``synthesis``."""
+    """Measurement noise: assumed by ``estimation``, added by ``synthesis``.
+
+    ``synthesis.noise`` can set another noise for synthesis to add, e.g., none.
+    """
 
     stddev: PositiveFloat
     """Standard deviation of the noise, in the unit of the data."""
 
     seed: Annotated[int, Field(ge=0)] | None = None
-    """Seed of the noise added by ``synthesis`` (required there). The noise of the k-th time
-    of the measurement is drawn from ``numpy.random.default_rng([seed, k])``, so it does not
-    depend on the other times. Measurements must have different seeds."""
+    """Seed of the noise added by ``synthesis`` (required there, unless it adds none, see
+    ``synthesis.noise``). The noise of the k-th time of the measurement is drawn from
+    ``numpy.random.default_rng([seed, k])``, so it does not depend on the other times.
+    Measurements must have different seeds."""
 
 
 # FEniCSx backend (kipe.fenicsx): its options are plain options like all others, so that the
@@ -303,11 +307,25 @@ class RunTruthOptions:
 
 
 @dataclass(frozen=True, config=_CONFIG)
+class SynthesisNoiseOptions:
+    """Noise that synthesis adds to the data of a measurement."""
+
+    stddev: Annotated[float, Field(ge=0)]
+    """Standard deviation of the noise, in the unit of the data; 0 for noise-free data."""
+
+
+@dataclass(frozen=True, config=_CONFIG)
 class SynthesisOptions:
     """Generation of synthetic measurement data."""
 
     truth: RunTruthOptions = field(default_factory=RunTruthOptions)
     """Source of the true state the data are generated from."""
+
+    noise: dict[str, SynthesisNoiseOptions] = field(default_factory=dict)
+    """Noise synthesis adds to the data of the listed measurements (measurement name ->
+    noise), instead of their ``noise.stddev``, which estimation assumes: for noise-free data
+    (``stddev: 0``) or studies with misspecified noise. Measurements not listed get their
+    ``noise.stddev``."""
 
 
 type SigmaPoints = Literal["simplex", "canonical", "unique"]
@@ -354,11 +372,17 @@ class StudyOptions:
     """Parameter estimation."""
 
     def __post_init__(self) -> None:
-        """Check that measurements do not share a noise seed.
+        """Check the synthesis noise's measurement names and that measurements do not share a
+        noise seed.
 
         Raises:
-            ValueError: if two measurements have the same noise seed
+            ValueError: if the synthesis noise names a measurement the study does not have, or
+                two measurements have the same noise seed
         """
+        unknown = sorted(self.synthesis.noise.keys() - (self.measurements or {}).keys())
+        if unknown:
+            raise ValueError(f"synthesis.noise: no measurement {', '.join(unknown)}")
+
         seeds: dict[int, str] = {}
         for name, measurement in (self.measurements or {}).items():
             seed = measurement.noise.seed

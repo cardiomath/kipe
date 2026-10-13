@@ -1,9 +1,10 @@
 """Generation of synthetic measurement data from a forward run: ``kipe synthesis``.
 
 The forward solver runs with its nominal parameters through all measurement times. At each
-time, the observation operator gives the predicted data and noise is added. The resulting
-measurements are written to their ``data`` files, and returned. The provenance of the run is
-written to ``<output.path>/synthesis/`` (:mod:`kipe.provenance`).
+time, the observation operator gives the predicted data and noise is added: the measurement's
+``noise.stddev``, or ``synthesis.noise`` where given (e.g., none, for noise-free data). The
+resulting measurements are written to their ``data`` files, and returned. The provenance of the
+run is written to ``<output.path>/synthesis/`` (:mod:`kipe.provenance`).
 
 In parallel, each rank generates the entries of the data it holds (``global_indices``); the
 noise of an entry depends only on its position, so the data do not depend on the number of
@@ -30,7 +31,13 @@ from kipe.measurements import (
     measurement_times,
     write_numpy,
 )
-from kipe.options import MeasurementOptions, RunTruthOptions, StudyFileError, StudyOptions
+from kipe.options import (
+    MeasurementOptions,
+    RunTruthOptions,
+    StudyFileError,
+    StudyOptions,
+    SynthesisOptions,
+)
 from kipe.provenance import recorded_run
 
 logger = logging.getLogger(__name__)
@@ -66,16 +73,23 @@ def synthesize(study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD) -> list[Mea
         logger.info("  %-16s%s", "forward solver", study.forward_solver.factory)
         logger.info("  %-16s%s", "truth", study.synthesis.truth.type)
         logger.info("")
+        stddevs = {
+            name: _added_stddev(name, options, study.synthesis)
+            for name, options in study.measurements.items()
+        }
         rows = [("measurement", "fields", "σ", "seed")]
         for name, options in study.measurements.items():
             seed = "" if options.noise.seed is None else str(options.noise.seed)
-            rows.append((name, ", ".join(options.fields), f"{options.noise.stddev:g}", seed))
+            sigma = f"{stddevs[name]:g}"
+            if stddevs[name] != options.noise.stddev:
+                sigma += f" (assumes {options.noise.stddev:g})"
+            rows.append((name, ", ".join(options.fields), sigma, seed))
         for line in format_table(rows, "<<>>"):
             logger.info("  %s", line)
 
         match study.synthesis.truth:
             case RunTruthOptions():
-                measurements = _generate_from_run(solver, study.measurements, operators)
+                measurements = _generate_from_run(solver, study.measurements, operators, stddevs)
             case _:
                 assert_never(study.synthesis.truth)
 
@@ -94,16 +108,18 @@ def _generate_from_run(
     solver: ForwardSolver,
     options: Mapping[str, MeasurementOptions],
     operators: Mapping[str, ObservationOperator],
+    stddevs: Mapping[str, float],
 ) -> list[Measurement]:
     """Generate the data by running the solver with its nominal parameters.
 
     The noise of the k-th time of a measurement is drawn from
-    ``numpy.random.default_rng([seed, k])``.
+    ``numpy.random.default_rng([seed, k])``; none is drawn for a standard deviation of 0.
 
     Args:
         solver: the forward solver
-        options: the measurement options: times, noise
+        options: the measurement options: times, noise seed, assumed noise
         operators: the observation operators of the measurements
+        stddevs: standard deviations of the noise added to each measurement's data
 
     Returns:
         the generated measurements
@@ -113,7 +129,7 @@ def _generate_from_run(
             before the solver's start time
     """
     times = {name: _times(name, o) for name, o in options.items()}
-    seeds = {name: _seed(name, o) for name, o in options.items()}
+    seeds = {name: _seed(name, o) for name, o in options.items() if stddevs[name] > 0}
     values: dict[str, list[NDArray_f64]] = {name: [] for name in options}
 
     # all (time, measurement, index) events, in the order they occur
@@ -133,12 +149,15 @@ def _generate_from_run(
             # same time (up to round-off): sample the current state, no solver call
             pass
 
-        # the noise of all entries, the same on every rank; each keeps those it holds
         operator = operators[name]
-        noise = np.random.default_rng([seeds[name], k]).normal(
-            0.0, options[name].noise.stddev, operator.size
-        )
-        values[name].append(operator(state) + noise[operator.global_indices])
+        z = operator(state)
+        if stddevs[name] > 0:
+            # the noise of all entries, the same on every rank; each keeps those it holds
+            noise = np.random.default_rng([seeds[name], k]).normal(
+                0.0, stddevs[name], operator.size
+            )
+            z = z + noise[operator.global_indices]
+        values[name].append(z)
 
     return [
         Measurement(name, operators[name], times[name], np.array(values[name]), o.noise.stddev)
@@ -182,6 +201,24 @@ def _times(name: str, options: MeasurementOptions) -> NDArray_f64:
         raise StudyFileError(f"measurements.{name}: synthesis needs 'times'")
 
     return measurement_times(options.times)
+
+
+def _added_stddev(name: str, options: MeasurementOptions, synthesis: SynthesisOptions) -> float:
+    """Return the standard deviation of the noise synthesis adds to a measurement's data.
+
+    Args:
+        name: name of the measurement
+        options: its options
+        synthesis: the synthesis options
+
+    Returns:
+        the standard deviation from ``synthesis.noise`` if it lists the measurement, else the
+        measurement's ``noise.stddev``
+    """
+    if name in synthesis.noise:
+        return synthesis.noise[name].stddev
+
+    return options.noise.stddev
 
 
 def _seed(name: str, options: MeasurementOptions) -> int:
