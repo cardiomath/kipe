@@ -215,8 +215,6 @@ def _plot(args: argparse.Namespace) -> None:
     Args:
         args: parsed command line arguments: the study files and the plot options
 
-    Raises:
-        PlotError: if matplotlib or plotext is not installed, or a history cannot be read
     """
     studies = [_load_study(path) for path in args.studies]
     paths = {
@@ -238,11 +236,8 @@ def _plot(args: argparse.Namespace) -> None:
         print(render_histories(histories, truth, color=sys.stdout.isatty()))
         return
 
-    try:
-        import matplotlib.pyplot as plt
-        from matplotlib.figure import Figure
-    except ImportError as err:
-        raise PlotError("kipe plot needs matplotlib: pip install 'kipe[plot]'") from err
+    import matplotlib.pyplot as plt
+    from matplotlib.figure import Figure
 
     figure = Figure(layout="constrained") if args.save else plt.figure(layout="constrained")
     figure.set_size_inches(4 * len(next(iter(histories.values())).names), 3.5)

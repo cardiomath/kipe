@@ -1,4 +1,4 @@
-# Install: pip install ".[check]" && pre-commit install --hook-type pre-commit --hook-type commit-msg
+# Install: pip install ".[dev]" && pre-commit install --hook-type pre-commit --hook-type commit-msg
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -10,14 +10,14 @@ repos:
       - id: check-added-large-files
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.9  # keep in sync with the ruff pin in pyproject.toml [check]
+    rev: v0.16.9  # keep in sync with the ruff pin in pyproject.toml [dev]
     hooks:
       - id: ruff-check
         args: [--fix]
       - id: ruff-format
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v2.3.1  # keep in sync with the mypy pin in pyproject.toml [check]
+    rev: v2.3.1  # keep in sync with the mypy pin in pyproject.toml [dev]
     hooks:
       - id: mypy
         files: ^(src|tests)/

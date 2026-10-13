@@ -27,21 +27,17 @@ dependencies = [
   "numpy>=1.26",
   "pydantic>=2.7",  # use_attribute_docstrings
   "ruamel.yaml>=0.18",  # YAML 1.2: 1e-3 is a float
+  "matplotlib>=3.8",  # kipe plot
+  "plotext>=6.1,<7",  # kipe plot --terminal, --watch
 ]
 
 [project.scripts]
 kipe = "kipe.cli:main"
 
 [project.optional-dependencies]
-test = [
+dev = [
   "pytest>=8",
   "scipy>=1.12",  # reference solutions in tests only
-]
-plot = [
-  "matplotlib>=3.8",  # kipe plot
-  "plotext>=6.1,<7",  # kipe plot --terminal, --watch
-]
-check = [
   "ruff==0.16.9",  # pinned: preview formatting differs between versions
   "mypy==2.3.1",
   "pre-commit",

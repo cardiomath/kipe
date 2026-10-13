@@ -1,32 +1,36 @@
 # kipe
 
-***K**alman-based **i**dentifiability and **p**arameter **e**stimation*
+[![CI](https://github.com/cardiomath/kipe/actions/workflows/ci.yml/badge.svg)](https://github.com/cardiomath/kipe/actions/workflows/ci.yml)
+![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-kipe estimates parameters of dynamical models, e.g., PDE models, from time series of
-measurements, with the reduced-order unscented Kalman filter (ROUKF). The filter needs only
-forward runs of your model, no derivatives and no changes to the solver. kipe also generates
-synthetic measurement data from a model run, for twin experiments.
+***K**alman-backed **p**arameter **e**stimation* and **i**dentifiability analysis for **p**artial differential **e**quations
 
-> **Status: early development.** The core works (ROUKF estimation, synthetic data, plotting,
-> run provenance), as does a first FEniCSx backend for measurements on finite element meshes,
-> but the study file format and the Python API may still change. Feedback is very welcome:
-> please open an [issue](https://github.com/cardiomath/kipe/issues).
+## Key features
+
++ **Solver-agnostic**: Connect your model through a small forward-solver interface
++ **Derivative-free**: Optimizer is based on the reduced-order
+unscented Kalman filter (ROUKF) and hence it needs only forward runs.
++ **Modular observation operators**: New observation operators can be implemented easily by extending the library.
++ **Twin experiments**: Generate synthetic measurements from a model run.
++ **Reproducible runs**: Keep results, logs, and run provenance together.
+
+> **Status: early development.** The core works (ROUKF estimation, synthetic data, plotting, run provenance), as does a first FEniCSx backend for measurements on finite element meshes, but the study file format and the Python API may still change. Feedback is very welcome: please open an [issue](https://github.com/cardiomath/kipe/issues).
 
 ## Installation
 
-kipe needs Python ≥ 3.12 and an MPI library (for `mpi4py`). Use your system's MPI, or install one
+`kipe` needs Python ≥ 3.12 and an MPI library (for `mpi4py`). Use your system's MPI, or install one
 with pip:
 
 ```bash
-pip install "kipe[plot]"
+pip install kipe
 pip install mpich  # only if there is no MPI library on your system
 ```
 
-The `plot` extra adds matplotlib and plotext for `kipe plot`. The latest development version
-installs from GitHub:
+The latest development version installs from GitHub:
 
 ```bash
-pip install "kipe[plot] @ git+https://github.com/cardiomath/kipe"
+pip install "kipe @ git+https://github.com/cardiomath/kipe"
 ```
 
 For FEniCSx models, kipe also needs dolfinx (0.9), which pip does not install: use your FEniCSx
@@ -36,7 +40,7 @@ Python environment. Its MPI is then the one kipe uses.
 ## First run: the FitzHugh–Nagumo example
 
 The example estimates the three parameters of the FitzHugh–Nagumo model from noisy measurements
-that kipe generated itself with the true parameters (a twin experiment):
+that `kipe` generated itself with the true parameters (a twin experiment):
 
 ```bash
 git clone https://github.com/cardiomath/kipe
@@ -57,10 +61,10 @@ Other subcommands: `kipe list-parameters study.yaml` shows the parameters a solv
 
 ## Your own model
 
-kipe calls your model through a small interface, the `ForwardSolver` protocol in
-[`kipe/forward_solver.py`](https://github.com/cardiomath/kipe/blob/main/src/kipe/forward_solver.py):
-the initial state, the nominal parameters, and a `propagate` that advances a state from one time
-to the next with given parameters. The study file names a factory that builds your solver:
+`kipe` calls your model through a small interface, the `ForwardSolver` protocol in
+[`kipe/forward_solver.py`](https://github.com/cardiomath/kipe/blob/main/src/kipe/forward_solver.py).
+
+The study file names a factory that builds your solver:
 
 ```yaml
 forward_solver:
@@ -114,7 +118,7 @@ is a template for your own.
 ```bash
 git clone https://github.com/cardiomath/kipe
 cd kipe
-pip install -e ".[test,plot,check]"
+pip install -e ".[dev]"
 pre-commit install --hook-type pre-commit --hook-type commit-msg
 pytest
 ```
