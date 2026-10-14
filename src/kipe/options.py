@@ -275,10 +275,28 @@ class MeshSamplingOptions:
             raise ValueError("projection surface_normal needs element DG0 (one normal per cell)")
 
 
+@dataclass(frozen=True, config=_CONFIG)
+class PointSamplingOptions:
+    """Evaluate the observed field at given points (FEniCSx backend).
+
+    The field must be a distributed field whose function space the forward solver provides
+    (:class:`kipe.fenicsx.forward_solver.SupportsFunctionSpaces`). The data are in the order of
+    ``points``; for a vector field, the components of each point one after another.
+    """
+
+    type: Literal["fenicsx.points"]
+    """Kind of spatial sampling."""
+
+    points: Annotated[list[list[float]], Field(min_length=1)]
+    """Coordinates of the measurement points, one list per point, e.g., ``[[0.5, 0.5], [0.2,
+    0.8]]`` in 2D. Each point must lie in the solver's mesh."""
+
+
 # the choices of a measurement, from the core and the backends
 
 type SpatialSamplingOptions = Annotated[
-    ArraySamplingOptions | MeshSamplingOptions, Field(discriminator="type")
+    ArraySamplingOptions | MeshSamplingOptions | PointSamplingOptions,
+    Field(discriminator="type"),
 ]
 
 
@@ -370,7 +388,8 @@ class EstimationOptions:
     """Parameter estimation with the reduced-order unscented Kalman filter (ROUKF)."""
 
     sigma_points: SigmaPoints = "simplex"
-    r"""Sigma-point stencil, the pattern along which the estimates are perturbed:
+    r"""Sigma-point stencil, the pattern along which the estimates are perturbed. Each sigma
+    point costs one forward run per measurement time:
 
     - ``simplex``: :math:`p + 1` sigma points, the cheapest.
     - ``canonical``: :math:`2p` sigma points, :math:`\pm` along each parameter.
