@@ -28,6 +28,6 @@ authors:
     given-names: Cristóbal
     affiliation: "University of Groningen"
     orcid: "https://orcid.org/0000-0001-5049-1707"
-version: 0.2.0  # update on each release
-date-released: 2026-10-13
+version: 0.3.0  # update on each release
+date-released: 2026-10-14
 # doi: added by Zenodo, if connected
