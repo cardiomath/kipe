@@ -40,8 +40,10 @@ the correction, since they need no solver.
       \hat{\chi}_{(i)} = \hat{\chi}_+ + L_\chi C I_{(i)}, \qquad
       \hat{\theta}_{(i)} = \hat{\theta}_+ + L_\theta C I_{(i)}.
 
-   Note that in many publications, the formula used :math:`C^T`. This is incorrect for a *lower*
-   Cholesky factor :math:`C`.
+   Some publications, e.g., [Ber12]_ and [NB22]_, write :math:`C^T` here, with :math:`C` *a*
+   Cholesky factor of :math:`U^{-1}`: that holds for the upper factor
+   (:math:`C^T C = U^{-1}`, e.g., MATLAB's ``chol``), not for the lower one used here
+   (:math:`C C^T = U^{-1}`, numpy's ``cholesky``).
 
 2. **Propagation:** each sigma point is propagated with the forward model to the next
    measurement time (:mod:`kipe.estimation`), the parameters stay constant.
@@ -83,6 +85,10 @@ the ranks).
 
 .. [Ber12] Bertoglio, C. (2012). Forward and Inverse Problems in Fluid-Structure Interaction.
    Application to Hemodynamics (PhD thesis). Université Pierre et Marie Curie - Paris VI.
+
+.. [NB22] Nolte, D., & Bertoglio, C. (2022). Inverse problems in blood flow modeling: A
+   review. International Journal for Numerical Methods in Biomedical Engineering, 38(8),
+   e3613. https://doi.org/10.1002/cnm.3613
 
 .. [NAB26] Nolte, D., Aróstica, R., & Bertoglio, C. Parameter estimation and identifiability
    in biventricular cardiac fluid-structure interaction from displacement and flow
@@ -247,8 +253,10 @@ def sample(state: FilterState, stencil: SigmaPointStencil) -> tuple[NDArray_f64,
 
     with :math:`C` the lower Cholesky factor of :math:`U^{-1}`.
 
-    Note that in many publications, the formula used :math:`C^T`. This is incorrect for a *lower*
-    Cholesky factor :math:`C`.
+    Some publications, e.g., [Ber12]_ and [NB22]_, write :math:`C^T` here, with :math:`C` *a*
+    Cholesky factor of :math:`U^{-1}`: that holds for the upper factor
+    (:math:`C^T C = U^{-1}`, e.g., MATLAB's ``chol``), not for the lower one used here
+    (:math:`C C^T = U^{-1}`, numpy's ``cholesky``).
 
     Args:
         state: the filter state, around whose estimate the sigma points are sampled

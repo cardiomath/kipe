@@ -17,6 +17,8 @@ unscented Kalman filter (ROUKF) and hence it needs only forward runs.
 
 > **Status: early development.** The core works (ROUKF estimation, synthetic data, plotting, run provenance), as does a first FEniCSx backend for measurements on finite element meshes, but the study file format and the Python API may still change. Feedback is very welcome: please open an [issue](https://github.com/cardiomath/kipe/issues).
 
+<!-- docs: start of the part included in the documentation (getting_started.md) -->
+
 ## Installation
 
 `kipe` needs Python ≥ 3.12 and an MPI library (for `mpi4py`). Use your system's MPI, or install one
@@ -39,7 +41,8 @@ Python environment. Its MPI is then the one kipe uses.
 
 ## First run: the FitzHugh–Nagumo example
 
-The example estimates the three parameters of the FitzHugh–Nagumo model from noisy measurements
+The example estimates the three parameters of the
+[FitzHugh–Nagumo model](https://cardiomath.github.io/kipe/_apidoc/kipe.examples.fitzhugh_nagumo.html) from noisy measurements
 that `kipe` generated itself with the true parameters (a twin experiment):
 
 ```bash
@@ -74,8 +77,9 @@ forward_solver:
 
 The `arguments` are those passed to the factory, i.e., `MySolver(dt=0.01)`.
 
-The FitzHugh–Nagumo solver in
-[`kipe/examples/fitzhugh_nagumo.py`](https://github.com/cardiomath/kipe/blob/main/src/kipe/examples/fitzhugh_nagumo.py)
+The FitzHugh–Nagumo solver,
+[`kipe.examples.fitzhugh_nagumo`](https://cardiomath.github.io/kipe/_apidoc/kipe.examples.fitzhugh_nagumo.html)
+([source](https://github.com/cardiomath/kipe/blob/main/src/kipe/examples/fitzhugh_nagumo.py)),
 is a complete example in about 150 lines, docstrings included.
 
 ## FEniCSx models
@@ -100,7 +104,8 @@ A vector field is measured as a whole, as its component along a direction
 
 The measurement data are in the order of the measurement mesh file (one value per vertex for
 `P1`, per cell for `DG0`), so synthesis and estimation can run on different numbers of MPI ranks;
-they must use the same mesh file. The heat equation example shows a complete setup:
+they must use the same mesh file. The [heat equation example](https://cardiomath.github.io/kipe/_apidoc/kipe.fenicsx.examples.heat.html)
+shows a complete setup:
 
 ```bash
 cd kipe/examples/heat
@@ -110,10 +115,15 @@ mpirun -n 2 kipe estimation study.yaml
 ```
 
 Its solver,
-[`kipe/fenicsx/examples/heat.py`](https://github.com/cardiomath/kipe/blob/main/src/kipe/fenicsx/examples/heat.py),
+[`kipe.fenicsx.examples.heat`](https://cardiomath.github.io/kipe/_apidoc/kipe.fenicsx.examples.heat.html)
+([source](https://github.com/cardiomath/kipe/blob/main/src/kipe/fenicsx/examples/heat.py)),
 is a template for your own.
 
+<!-- docs: end of the part included in the documentation -->
+
 ## Development
+
+<!-- docs: start of the development part (development.md) -->
 
 ```bash
 git clone https://github.com/cardiomath/kipe
@@ -126,6 +136,8 @@ pytest
 The pre-commit hooks run ruff, mypy and a check of the commit message, which follows
 [Conventional Commits](https://www.conventionalcommits.org), e.g., `fix(roukf): ...`; the
 allowed scopes are listed in `.pre-commit-config.yaml`.
+
+<!-- docs: end of the development part -->
 
 ## License
 

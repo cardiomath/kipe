@@ -1,17 +1,13 @@
 """Options of the kipe study file.
 
-A study file is a YAML file with one section per concern. Each subcommand reads the sections
-it needs. Relative paths are relative to the working directory kipe is run from.
+A study file is a YAML file with one section per concern: ``output``, ``forward_solver``,
+``parameters``, ``measurements``, ``synthesis`` and ``estimation`` (:class:`StudyOptions`).
+Each command reads the sections it needs. Relative paths are relative to the working directory
+kipe is run from.
 
-================== ==================================================== =====================
-section            content                                              read by
-================== ==================================================== =====================
-``output``         result directory, logging                            all
-``forward_solver`` how to construct the forward solver                  all
-``parameters``     estimated parameters, initial estimate, uncertainty  estimation
-``measurements``   observed fields, data, sampling, model, noise        estimation, synthesis
-``synthesis``      source of the true state                             synthesis
-================== ==================================================== =====================
+The dataclasses of this module are the only definition of the study file: pydantic validates
+study files against them, unknown keys are an error, and the documentation's study file
+reference is generated from them, with their attribute docstrings as the descriptions.
 
 See ``examples/fitzhugh_nagumo/study.yaml`` for a complete study file.
 """
@@ -122,7 +118,10 @@ class ParametersOptions:
       absolute ``stddev``. :math:`\theta` is the deviation from the initial estimate, in the
       parameter's physical unit. Accepts any initial estimate, including zero."""
 
-    select: Annotated[dict[str, ParameterPrior], Field(min_length=1)]
+    select: Annotated[
+        dict[str, ParameterPrior],
+        Field(min_length=1, json_schema_extra={"keys": "a parameter of the solver"}),
+    ]
     """Estimated parameters: parameter name -> initial estimate and uncertainty. All other
     parameters keep their nominal values."""
 
@@ -373,7 +372,10 @@ class SynthesisOptions:
     """Source of the true state the data are generated from: a run of the forward solver, or
     its checkpoints."""
 
-    noise: dict[str, SynthesisNoiseOptions] = field(default_factory=dict)
+    noise: Annotated[
+        dict[str, SynthesisNoiseOptions],
+        Field(json_schema_extra={"keys": "one of the measurements"}),
+    ] = field(default_factory=dict)
     """Noise synthesis adds to the data of the listed measurements (measurement name ->
     noise), instead of their ``noise.stddev``, which estimation assumes: for noise-free data
     (``stddev: 0``) or studies with misspecified noise. Measurements not listed get their
@@ -415,7 +417,13 @@ class StudyOptions:
     parameters: ParametersOptions | None = None
     """Estimated parameters."""
 
-    measurements: Annotated[dict[str, MeasurementOptions], Field(min_length=1)] | None = None
+    measurements: (
+        Annotated[
+            dict[str, MeasurementOptions],
+            Field(min_length=1, json_schema_extra={"keys": "a name you choose"}),
+        ]
+        | None
+    ) = None
     """Measurements: name -> measurement. The names appear in logs, output and errors."""
 
     synthesis: SynthesisOptions = field(default_factory=SynthesisOptions)

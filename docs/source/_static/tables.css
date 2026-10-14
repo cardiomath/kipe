@@ -1,0 +1,14 @@
+/* The Read the Docs theme keeps table cells on one line; wrap them, e.g., long descriptions. */
+.wy-table-responsive table td,
+.wy-table-responsive table th {
+    white-space: normal;
+}
+
+/* Code in tables: monospace only, without the theme's colored boxes. */
+.wy-table-responsive table code.literal {
+    color: inherit;
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 90%;  /* the theme's 75% is small without the box */
+}
