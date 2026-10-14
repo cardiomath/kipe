@@ -25,11 +25,13 @@ repos:
         additional_dependencies: [matplotlib, mpi4py, numpy, pytest, pydantic, ruamel.yaml]
 
   # Needs the docs extra in the active environment: pip install -e ".[docs]"
+  # Manual stage: skipped on commit; run with: pre-commit run sphinx-build --hook-stage manual
   - repo: local
     hooks:
       - id: sphinx-build
         name: sphinx docs build
-        entry: python -m sphinx -q -W --keep-going -b html docs/source docs/build/html
+        stages: [manual]
+        entry: bash -c 'python -m sphinx -q -W --keep-going -b html docs/source docs/build/html && python -m webbrowser -t "file://$(pwd)/docs/build/html/index.html"'
         language: system
         files: ^(docs/|src/.*\.py$|pyproject\.toml$)
         pass_filenames: false
