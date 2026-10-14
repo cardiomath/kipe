@@ -68,7 +68,7 @@ def test_synthesis(tmp_path):
         np.testing.assert_allclose(values, _exact(times, name) + noise, atol=1e-12)
 
 
-def test_synthesis_noise(tmp_path, caplog):
+def test_synthesis_noise(tmp_path, kipe_caplog):
     """synthesis.noise: none for v (no seed needed), 5 times the assumed noise for w."""
     study = _study(
         tmp_path,
@@ -99,8 +99,8 @@ synthesis:
     noise = np.array([np.random.default_rng([4, k]).normal(0.0, 0.5, 1) for k in range(2)])
     np.testing.assert_allclose(w, _exact(times, "w") + noise, atol=1e-12)
 
-    assert "0 (assumes 0.1)" in caplog.text
-    assert "0.5 (assumes 0.1)" in caplog.text
+    assert "0 (assumes 0.1)" in kipe_caplog.text
+    assert "0.5 (assumes 0.1)" in kipe_caplog.text
 
 
 def test_synthesize_returns_the_written_measurements(tmp_path):
