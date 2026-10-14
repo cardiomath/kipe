@@ -18,3 +18,19 @@ def kipe_caplog(caplog: pytest.LogCaptureFixture) -> Iterator[pytest.LogCaptureF
     logger.addHandler(caplog.handler)
     yield caplog
     logger.removeHandler(caplog.handler)
+
+
+@pytest.fixture(autouse=True)
+def _reset_kipe_logger() -> Iterator[None]:
+    """Undo the logging setup of ``kipe`` on the command line after each test.
+
+    Its console handler writes to the ``sys.stderr`` of the test that ran ``main``, which
+    pytest may have replaced and closed since (``capsys``).
+    """
+    yield
+    logger = logging.getLogger("kipe")
+    for handler in [h for h in logger.handlers if h.name in ("kipe.console", "kipe.file")]:
+        logger.removeHandler(handler)
+        handler.close()
+    logger.setLevel(logging.NOTSET)
+    logger.propagate = True
