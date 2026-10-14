@@ -27,7 +27,8 @@ examples/**/data/
 examples/**/results/
 
 # Docs build
-doc/build/
+docs/build/
+docs/source/_apidoc/
 docs/_build/
 
 # Editors / OS
