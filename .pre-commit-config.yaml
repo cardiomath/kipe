@@ -25,7 +25,8 @@ repos:
         additional_dependencies: [matplotlib, mpi4py, numpy, pytest, pydantic, ruamel.yaml]
 
   # Needs the docs extra in the active environment: pip install -e ".[docs]"
-  # Manual stage: skipped on commit; run with: pre-commit run sphinx-build --hook-stage manual
+  # Manual stage: skipped on commit; run with: pre-commit run sphinx-build --all-files --hook-stage manual
+  # (the --hook-stage manual flag is required, otherwise: "No hook with id `sphinx-build` in stage `pre-commit`")
   - repo: local
     hooks:
       - id: sphinx-build
