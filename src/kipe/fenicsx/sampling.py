@@ -16,7 +16,7 @@ from mpi4py import MPI
 
 import numpy as np
 import ufl
-from dolfinx import fem, io
+from dolfinx import fem, geometry, io
 from dolfinx.mesh import Mesh
 from ufl.core.expr import Expr
 
@@ -41,6 +41,7 @@ class MeshSampler(SpatialSampler):
         projection: a direction (one entry per component of the field) or
             ``"surface_normal"`` (the measurement mesh must be a surface); all components if
             None
+        padding: distance by which a measurement point may lie outside the solver's mesh
         comm: communicator of the run
 
     Raises:
@@ -55,6 +56,7 @@ class MeshSampler(SpatialSampler):
         mesh: str,
         element: Element,
         projection: Projection = None,
+        padding: float = 0.0,
         comm: MPI.Comm = MPI.COMM_WORLD,
     ) -> None:
         with io.XDMFFile(comm, mesh, "r") as f:
@@ -76,7 +78,18 @@ class MeshSampler(SpatialSampler):
         tdim = measurement_mesh.topology.dim
         cells = measurement_mesh.topology.index_map(tdim)
         self._cells = np.arange(cells.size_local + cells.num_ghosts, dtype=np.int32)
-        self._interpolation = fem.create_interpolation_data(target, source, self._cells)
+        # dolfinx's default padding at the least, for round-off
+        self._interpolation = fem.create_interpolation_data(
+            target, source, self._cells, padding=max(padding, 1e-14)
+        )
+        _check_inside(
+            self._interpolation,
+            len(self._cells),
+            cells.size_local,
+            cells.size_global,
+            padding,
+            comm,
+        )
 
         self._field = field
         self._source = fem.Function(source)
@@ -163,8 +176,47 @@ def build_mesh_sampler(
         options.mesh,
         options.element,
         options.projection,
+        options.padding,
         comm,
     )
+
+
+def _check_inside(
+    interpolation: geometry.PointOwnershipData,
+    n_cells: int,
+    n_owned: int,
+    n_global: int,
+    padding: float,
+    comm: MPI.Comm,
+) -> None:
+    """Check that all points of the measurement mesh lie in the solver's mesh, within padding.
+
+    dolfinx gives a point it does not find the value 0, without a warning.
+
+    Args:
+        interpolation: the interpolation data: the owner of each point (-1: not found), the
+            points of each cell one after another
+        n_cells: number of cells interpolated on this rank, owned and ghost
+        n_owned: number of owned cells among them, the first ones
+        n_global: number of cells of the measurement mesh
+        padding: the padding the points were searched with
+        comm: communicator of the run
+
+    Raises:
+        StudyFileError: if a cell has a point outside the solver's mesh
+    """
+    outside = 0
+    if n_cells:
+        owners = np.asarray(interpolation.src_owner()).reshape(n_cells, -1)
+        outside = int(np.any(owners[:n_owned] < 0, axis=1).sum())
+    outside = comm.allreduce(outside)
+    if outside:
+        beyond = f"farther than padding {padding:g} " if padding else ""
+        raise StudyFileError(
+            f"{outside} of {n_global} cells of the measurement mesh lie (partly) {beyond}"
+            "outside the solver's mesh; spatial_sampling.padding lets points within a distance "
+            "take the value of the nearest cell"
+        )
 
 
 def _projection_vector(
