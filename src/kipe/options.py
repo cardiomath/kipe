@@ -253,6 +253,12 @@ class MeshSamplingOptions:
     as ``ufl.CellNormal``: the right-hand rule for triangles in 3D, the tangent rotated by +90°
     for lines in 2D; it is outward only if the mesh's cells are oriented that way."""
 
+    padding: Annotated[float, Field(ge=0)] = 0.0
+    """Distance, in mesh units, by which a measurement point may lie outside the solver's mesh,
+    e.g., where a surface mesh cuts slightly across the solver's boundary. Such a point takes
+    the value of the field in the nearest cell, extrapolated; a point farther out is an
+    error."""
+
     def __post_init__(self) -> None:
         """Check the projection.
 

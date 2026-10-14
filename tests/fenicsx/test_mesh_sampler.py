@@ -89,14 +89,18 @@ def _linear(x: NDArray_f64) -> NDArray_f64:
     return x[0] + 10 * x[1]
 
 
-def _sample_linear(path: Path, element: str) -> tuple[MeshSampler, NDArray_f64]:
+def _sample_linear(
+    path: Path, element: str, padding: float = 0.0
+) -> tuple[MeshSampler, NDArray_f64]:
     """Sample the linear function, given on the heat solver's mesh, onto a measurement mesh."""
     heat = Heat(n=12)
     u = fem.Function(heat.function_space("u"))
     u.interpolate(_linear)
     owned = u.x.array[: heat.state_spec["u"].local_size]
 
-    options = MeshSamplingOptions(type="fenicsx.mesh", mesh=str(path), element=element)
+    options = MeshSamplingOptions(
+        type="fenicsx.mesh", mesh=str(path), element=element, padding=padding
+    )
     sampler = build_mesh_sampler(options, ["u"], heat)
 
     return sampler, _gathered(sampler, sampler.sample({"u": owned}))
@@ -244,15 +248,16 @@ def _sample_vector(path: Path, element: str = "P1", projection=None) -> NDArray_
     return _gathered(sampler, sampler.sample({"u": solver.owned()}))
 
 
-def _write_line_mesh(path: Path, k: int) -> tuple[NDArray_f64, NDArray_f64]:
-    """Write the right edge of the unit square, x = 1, as a line mesh in 2D with k cells.
+def _write_line_mesh(path: Path, k: int, x0: float = 1.0) -> tuple[NDArray_f64, NDArray_f64]:
+    """Write the vertical line x = x0, by default the right edge of the unit square, as a line
+    mesh in 2D with k cells.
 
     Returns:
         its vertex coordinates and cells, in the order of the file (see _reference_geometry)
     """
     reference = None
     if COMM.rank == 0:
-        x = np.column_stack([np.ones(k + 1), np.linspace(0.0, 1.0, k + 1)])
+        x = np.column_stack([np.full(k + 1, x0), np.linspace(0.0, 1.0, k + 1)])
         cells = np.column_stack([np.arange(k), np.arange(1, k + 1)]).astype(np.int64)
         element = ufl.Mesh(basix.ufl.element("Lagrange", "interval", 1, shape=(2,)))
         written = mesh.create_mesh(MPI.COMM_SELF, cells, x, element)
@@ -315,3 +320,31 @@ def test_surface_normal_needs_a_surface_mesh(shared_tmp_path):
     path = _write_mesh(shared_tmp_path / "measurement.xdmf", 3)
     with pytest.raises(StudyFileError, match="needs a surface mesh"):
         _sample_vector(path, element="DG0", projection="surface_normal")
+
+
+# --- measurement points outside the solver's mesh ----------------------------------------------
+
+
+@pytest.mark.parametrize("element", ["P1", "DG0"])
+def test_points_outside_the_mesh_are_an_error(shared_tmp_path, element):
+    """A line 2e-3 to the right of the solver's unit square: by default, and with too small a
+    padding, an error (dolfinx would give these points the value 0)."""
+    path = shared_tmp_path / "outside.xdmf"
+    _write_line_mesh(path, 4, x0=1.002)
+
+    with pytest.raises(StudyFileError, match="4 of 4 cells of the measurement mesh lie"):
+        _sample_linear(path, element)
+    with pytest.raises(StudyFileError, match=r"farther than padding 0\.001 outside"):
+        _sample_linear(path, element, padding=1e-3)
+
+
+@pytest.mark.parametrize("element", ["P1", "DG0"])
+def test_padding_takes_the_value_of_the_nearest_cell(shared_tmp_path, element):
+    """Within the padding, a point takes the value of the field in the nearest cell,
+    extrapolated: for the linear function, its exact value."""
+    path = shared_tmp_path / "outside.xdmf"
+    coordinates, cells = _write_line_mesh(path, 4, x0=1.002)
+    points = coordinates if element == "P1" else coordinates[cells].mean(axis=1)
+
+    _, values = _sample_linear(path, element, padding=1e-2)
+    np.testing.assert_allclose(values, _linear(points.T), rtol=0, atol=1e-12)
