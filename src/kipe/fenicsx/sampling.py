@@ -36,17 +36,20 @@ class MeshSampler(SpatialSampler):
     Args:
         field: name of the observed field
         source: the field's function space, on the solver's mesh
-        mesh: path to the measurement mesh, an XDMF file with a mesh named ``mesh``
+        mesh: path to the measurement mesh, an XDMF file
         element: finite element on the measurement mesh
         projection: a direction (one entry per component of the field) or
             ``"surface_normal"`` (the measurement mesh must be a surface); all components if
             None
         padding: distance by which a measurement point may lie outside the solver's mesh
+        mesh_name: name of the mesh in the XDMF file
         comm: communicator of the run
 
     Raises:
-        StudyFileError: if the measurement mesh has curved cells (``P1`` needs a linear
-            geometry), or the projection does not fit the field or the mesh
+        StudyFileError: if the file has no mesh named ``mesh_name``, the measurement mesh has
+            curved cells (``P1`` needs a linear geometry), the projection does not fit the field
+            or the mesh, or points of the measurement mesh lie outside the solver's mesh,
+            beyond the padding
     """
 
     def __init__(
@@ -57,10 +60,17 @@ class MeshSampler(SpatialSampler):
         element: Element,
         projection: Projection = None,
         padding: float = 0.0,
+        mesh_name: str = "mesh",
         comm: MPI.Comm = MPI.COMM_WORLD,
     ) -> None:
         with io.XDMFFile(comm, mesh, "r") as f:
-            measurement_mesh = f.read_mesh(name="mesh")
+            try:
+                measurement_mesh = f.read_mesh(name=mesh_name)
+            except RuntimeError as err:
+                raise StudyFileError(
+                    f"cannot read the mesh {mesh_name!r} of {mesh} (spatial_sampling.mesh_name, "
+                    f"e.g., Grid for meshio's files): {err}"
+                ) from err
 
         if element == "P1" and measurement_mesh.geometry.cmap.degree != 1:
             raise StudyFileError(
@@ -177,6 +187,7 @@ def build_mesh_sampler(
         options.element,
         options.projection,
         options.padding,
+        options.mesh_name,
         comm,
     )
 
