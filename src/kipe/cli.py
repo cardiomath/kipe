@@ -269,6 +269,9 @@ def _setup_logging(level: str, log_file: Path) -> None:
     logged. Rank 0 also writes all messages, from the debug level on and with their location, to
     ``log_file`` (overwritten).
 
+    The messages don't propagate to the root logger: an imported library may have given it a
+    handler on stderr (UFL does, with ``logging.debug``), which would show them at all levels.
+
     Args:
         level: minimum level of the messages on stderr of rank 0, e.g., ``"info"``
         log_file: path of the log file
@@ -279,10 +282,12 @@ def _setup_logging(level: str, log_file: Path) -> None:
 
     logger = logging.getLogger("kipe")
     for handler in list(logger.handlers):  # main() may run several times in one process
-        logger.removeHandler(handler)
-        handler.close()
+        if handler.name in ("kipe.console", "kipe.file"):
+            logger.removeHandler(handler)
+            handler.close()
 
     console = logging.StreamHandler()
+    console.name = "kipe.console"
     console.setFormatter(
         logging.Formatter(f"{prefix}: {location if level == 'debug' else ''}%(message)s")
     )
@@ -292,12 +297,14 @@ def _setup_logging(level: str, log_file: Path) -> None:
     if rank == 0:
         log_file.parent.mkdir(parents=True, exist_ok=True)
         file = logging.FileHandler(log_file, mode="w", encoding="utf-8")
+        file.name = "kipe.file"
         file.setFormatter(
             logging.Formatter(f"%(asctime)s %(levelname)-7s {location}%(message)s")
         )
         logger.addHandler(file)
 
     logger.setLevel(logging.DEBUG if rank == 0 else logging.WARNING)
+    logger.propagate = False
 
 
 if __name__ == "__main__":
