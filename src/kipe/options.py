@@ -237,7 +237,11 @@ class MeshSamplingOptions:
     """Kind of spatial sampling."""
 
     mesh: str
-    """Path to the measurement mesh, an XDMF file with a mesh named ``mesh``."""
+    """Path to the measurement mesh, an XDMF file."""
+
+    mesh_name: str = "mesh"
+    """Name of the mesh in the XDMF file (its grid): ``mesh`` as dolfinx writes it; meshio
+    writes ``Grid``."""
 
     element: Literal["P1", "DG0"] = "P1"
     """Finite element on the measurement mesh: vertex values (``P1``) or cell values

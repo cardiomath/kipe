@@ -38,15 +38,18 @@ from kipe.options import (
 COMM = MPI.COMM_WORLD
 
 
-def _write_mesh(path: Path, n: int) -> Path:
-    """Write a unit square mesh with n cells per side to an XDMF file; return its path.
+def _write_mesh(path: Path, n: int, name: str = "mesh") -> Path:
+    """Write a unit square mesh with n cells per side to an XDMF file, under a name; return its
+    path.
 
     Written by rank 0 alone: dolfinx writes the vertices in an order that depends on the number
     of ranks, so this gives the same file, and the same noise per vertex, on any number.
     """
     if COMM.rank == 0:
+        square = mesh.create_unit_square(MPI.COMM_SELF, n, n)
+        square.name = name
         with io.XDMFFile(MPI.COMM_SELF, path, "w") as f:
-            f.write_mesh(mesh.create_unit_square(MPI.COMM_SELF, n, n))
+            f.write_mesh(square)
     COMM.barrier()
 
     return path
@@ -90,7 +93,7 @@ def _linear(x: NDArray_f64) -> NDArray_f64:
 
 
 def _sample_linear(
-    path: Path, element: str, padding: float = 0.0
+    path: Path, element: str, padding: float = 0.0, mesh_name: str = "mesh"
 ) -> tuple[MeshSampler, NDArray_f64]:
     """Sample the linear function, given on the heat solver's mesh, onto a measurement mesh."""
     heat = Heat(n=12)
@@ -99,7 +102,11 @@ def _sample_linear(
     owned = u.x.array[: heat.state_spec["u"].local_size]
 
     options = MeshSamplingOptions(
-        type="fenicsx.mesh", mesh=str(path), element=element, padding=padding
+        type="fenicsx.mesh",
+        mesh=str(path),
+        mesh_name=mesh_name,
+        element=element,
+        padding=padding,
     )
     sampler = build_mesh_sampler(options, ["u"], heat)
 
@@ -348,3 +355,14 @@ def test_padding_takes_the_value_of_the_nearest_cell(shared_tmp_path, element):
 
     _, values = _sample_linear(path, element, padding=1e-2)
     np.testing.assert_allclose(values, _linear(points.T), rtol=0, atol=1e-12)
+
+
+def test_mesh_name(shared_tmp_path):
+    """A mesh named Grid, as meshio writes it: an error by default, read with mesh_name."""
+    path = _write_mesh(shared_tmp_path / "grid.xdmf", 5, name="Grid")
+    coordinates, _ = _reference_geometry(5)
+
+    with pytest.raises(StudyFileError, match=r"cannot read the mesh 'mesh' .*mesh_name"):
+        _sample_linear(path, "P1")
+    _, values = _sample_linear(path, "P1", mesh_name="Grid")
+    np.testing.assert_allclose(values, _linear(coordinates.T), rtol=0, atol=1e-12)
