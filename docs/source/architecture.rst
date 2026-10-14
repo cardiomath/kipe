@@ -1,5 +1,5 @@
-Design
-======
+Architecture
+============
 
 This page is for those who want to extend kipe: use it with a new kind of measurement (e.g.,
 MRI phase images instead of velocities on a mesh), compare model and data differently, read
@@ -155,7 +155,8 @@ spatial sampler           :class:`kipe.sampling.SpatialSampler`            :func
 measurement model         :class:`kipe.measurements.MeasurementModel`      :func:`kipe.measurements.build_model`
 ========================= ================================================ =====================================================
 
-**A spatial sampler** sets ``size`` and ``global_indices`` and implements
+**A spatial sampler**: :doc:`write_a_sampler` walks through a complete one. It sets ``size``
+and ``global_indices`` and implements
 :meth:`~kipe.sampling.SpatialSampler.sample`, which takes the observed fields (rank-local
 arrays) and returns this rank's sampled entries. It may take what it needs from the solver at
 construction, e.g., function spaces, through a backend capability.

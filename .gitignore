@@ -29,6 +29,7 @@ examples/**/results/
 # Docs build
 docs/build/
 docs/source/_apidoc/
+docs/source/_generated/
 docs/_build/
 
 # Editors / OS
