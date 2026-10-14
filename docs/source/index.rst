@@ -7,4 +7,5 @@ identifiability analysis, for PDE models.
 .. toctree::
    :maxdepth: 2
 
+   design
    api
