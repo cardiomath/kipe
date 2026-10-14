@@ -120,6 +120,37 @@ class ForwardSolver(Protocol):
         ...
 
 
+@runtime_checkable
+class SupportsCheckpoints(Protocol):
+    """A forward solver that reads states from the checkpoints of an earlier run.
+
+    Synthesis uses it (``synthesis.truth: {type: checkpoints, path: ...}``) to generate data
+    from an existing run instead of running the solver. The run may differ from the solver's
+    own configuration (e.g., in its time step), as long as its checkpoints can be read into
+    the solver's state layout.
+    """
+
+    def read_checkpoint(self, path: str, t: float) -> State:
+        """Return the state at time ``t`` from the checkpoints at ``path``.
+
+        The checkpoint need not hold the full state: the fields it has, in the layout of
+        :attr:`ForwardSolver.state_spec`. Synthesis checks that the fields a measurement
+        observes are among them.
+
+        Args:
+            path: location of the checkpoints, as the solver understands it (e.g., the output
+                directory of the run)
+            t: time of the checkpoint
+
+        Returns:
+            the fields of the checkpoint at ``t``, valid until the next call
+
+        Raises:
+            ValueError: if there is no checkpoint at ``t``, or none can be read at ``path``
+        """
+        ...
+
+
 # --- construction ------------------------------------------------------------------------------
 
 

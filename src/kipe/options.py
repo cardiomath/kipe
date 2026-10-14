@@ -307,6 +307,29 @@ class RunTruthOptions:
 
 
 @dataclass(frozen=True, config=_CONFIG)
+class CheckpointsTruthOptions:
+    """Generate the data from the checkpoints of an earlier run of the forward solver.
+
+    The solver reads the true states at the measurement times from the checkpoints at
+    ``path``; it needs :class:`kipe.forward_solver.SupportsCheckpoints`. The run may differ
+    from the model of the ``forward_solver`` section (e.g., in its time step or parameters), as
+    long as the solver can read its checkpoints into the model's state.
+    """
+
+    type: Literal["checkpoints"]
+    """Source of the true state."""
+
+    path: str
+    """Location of the checkpoints, as the solver understands it (e.g., the output directory of
+    the run)."""
+
+
+type TruthOptions = Annotated[
+    RunTruthOptions | CheckpointsTruthOptions, Field(discriminator="type")
+]
+
+
+@dataclass(frozen=True, config=_CONFIG)
 class SynthesisNoiseOptions:
     """Noise that synthesis adds to the data of a measurement."""
 
@@ -318,8 +341,9 @@ class SynthesisNoiseOptions:
 class SynthesisOptions:
     """Generation of synthetic measurement data."""
 
-    truth: RunTruthOptions = field(default_factory=RunTruthOptions)
-    """Source of the true state the data are generated from."""
+    truth: TruthOptions = field(default_factory=RunTruthOptions)
+    """Source of the true state the data are generated from: a run of the forward solver, or
+    its checkpoints."""
 
     noise: dict[str, SynthesisNoiseOptions] = field(default_factory=dict)
     """Noise synthesis adds to the data of the listed measurements (measurement name ->

@@ -5,6 +5,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from kipe.options import (
     ArraySamplingOptions,
+    CheckpointsTruthOptions,
     DifferenceModelOptions,
     MeasurementOptions,
     MeshSamplingOptions,
@@ -38,6 +39,14 @@ def test_defaults():
     assert measurement.spatial_sampling == ArraySamplingOptions()
     assert measurement.model == DifferenceModelOptions()
     assert study.synthesis.truth == RunTruthOptions()
+
+
+def test_synthesis_truth_checkpoints():
+    truth = {"type": "checkpoints", "path": "results/reference"}
+    study = _study({"v": MEASUREMENT}, synthesis={"truth": truth})
+    assert study.synthesis.truth == CheckpointsTruthOptions(**truth)
+    with pytest.raises(ValidationError, match="path"):
+        _study({"v": MEASUREMENT}, synthesis={"truth": {"type": "checkpoints"}})
 
 
 @pytest.mark.parametrize(

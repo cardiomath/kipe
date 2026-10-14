@@ -6,9 +6,23 @@ import numpy as np
 import pytest
 
 from kipe.cli import main
+from kipe.examples import fitzhugh_nagumo
 from kipe.examples.fitzhugh_nagumo import Solver
 from kipe.measurements import read_numpy
-from kipe.options import load_study
+from kipe.options import (
+    CheckpointsTruthOptions,
+    ForwardSolverOptions,
+    MeasurementOptions,
+    NoiseOptions,
+    NumpyDataOptions,
+    OutputOptions,
+    RunTruthOptions,
+    StudyFileError,
+    StudyOptions,
+    SynthesisOptions,
+    TimeRange,
+    load_study,
+)
 from kipe.synthesis import synthesize
 
 
@@ -163,3 +177,115 @@ def test_synthesis_errors(tmp_path, capsys, measurement, message):
     )
     assert main(["synthesis", str(study)]) == 1
     assert message in capsys.readouterr().err
+
+
+# --- truth from checkpoints --------------------------------------------------------------------
+
+
+def _options(
+    tmp_path: Path,
+    truth: RunTruthOptions | CheckpointsTruthOptions,
+    folder: str,
+    solver: str = "Checkpointed",
+) -> StudyOptions:
+    """A study measuring v and w at interleaved times, with noise, writing to ``folder``.
+
+    ``solver`` is a factory in :mod:`kipe.examples.fitzhugh_nagumo`; ``Checkpointed`` is made
+    by :func:`_checkpoints`.
+    """
+    measurements = {
+        "v": MeasurementOptions(
+            fields=["v"],
+            times=[0.0, 0.5, 1.0],
+            data=NumpyDataOptions(type="numpy", path=str(tmp_path / folder / "v.npz")),
+            noise=NoiseOptions(stddev=0.1, seed=3),
+        ),
+        "w": MeasurementOptions(
+            fields=["w"],
+            times=TimeRange(start=0.25, stop=1.0, step=0.25),
+            data=NumpyDataOptions(type="numpy", path=str(tmp_path / folder / "w.npz")),
+            noise=NoiseOptions(stddev=0.2, seed=4),
+        ),
+    }
+    return StudyOptions(
+        output=OutputOptions(path=str(tmp_path / folder)),
+        forward_solver=ForwardSolverOptions(
+            factory=f"kipe.examples.fitzhugh_nagumo:{solver}", arguments={"dt": 0.05}
+        ),
+        measurements=measurements,
+        synthesis=SynthesisOptions(truth=truth),
+    )
+
+
+CHECKPOINTS = CheckpointsTruthOptions(type="checkpoints", path="reference")
+
+
+def _checkpoints(
+    monkeypatch: pytest.MonkeyPatch, fields: list[str], times: list[float]
+) -> list[tuple[str, float]]:
+    """Make the factory ``kipe.examples.fitzhugh_nagumo:Checkpointed``: the FitzHugh-Nagumo
+    solver, reading checkpoints of the given fields at the given times from a run with its
+    nominal parameters. Return the paths and times it reads.
+
+    A new class each time: ``isinstance`` checks against protocols are cached per class.
+    """
+    read = []
+
+    class Checkpointed(Solver):
+        def read_checkpoint(self, path: str, t: float) -> dict[str, np.ndarray]:
+            if not np.isclose(times, t).any():
+                raise ValueError(f"no checkpoint at t = {t:g}")
+            read.append((path, t))
+            return {field: _exact([t], field)[0] for field in fields}
+
+    monkeypatch.setattr(fitzhugh_nagumo, "Checkpointed", Checkpointed, raising=False)
+    return read
+
+
+def test_synthesis_from_checkpoints(tmp_path, monkeypatch):
+    """The same data as from a run, reading each time once, also when shared by v and w."""
+    run = synthesize(_options(tmp_path, RunTruthOptions(), "run", solver="Solver"))
+    read = _checkpoints(monkeypatch, ["v", "w"], [0.0, 0.25, 0.5, 0.75, 1.0])
+    checkpoints = synthesize(_options(tmp_path, CHECKPOINTS, "checkpoints"))
+
+    assert read == [("reference", t) for t in [0.0, 0.25, 0.5, 0.75, 1.0]]
+    for a, b in zip(checkpoints, run, strict=True):
+        np.testing.assert_array_equal(a.times, b.times)
+        np.testing.assert_allclose(a.values, b.values, rtol=1e-14)
+    _, v = read_numpy(tmp_path / "checkpoints" / "v.npz")
+    np.testing.assert_array_equal(v, checkpoints[0].values)
+
+
+def test_synthesis_from_partial_checkpoints(tmp_path, monkeypatch):
+    """Checkpoints need only the observed fields."""
+    _checkpoints(monkeypatch, ["v", "w"], [0.0, 0.25, 0.5, 0.75, 1.0])
+    expected = synthesize(_options(tmp_path, CHECKPOINTS, "a"))
+
+    _checkpoints(monkeypatch, ["v"], [0.0, 0.5, 1.0])
+    options = _options(tmp_path, CHECKPOINTS, "b")
+    assert options.measurements is not None
+    options.measurements.pop("w")
+    (v,) = synthesize(options)
+    np.testing.assert_array_equal(v.values, expected[0].values)
+
+
+@pytest.mark.parametrize(
+    ("fields", "times", "message"),
+    [
+        (None, None, "the forward solver cannot read checkpoints"),
+        (
+            ["v"],
+            [0.0, 0.25, 0.5, 0.75, 1.0],
+            "measurements.w: the checkpoint at t = 0.25 has no field w",
+        ),
+        (["v", "w"], [0.0, 0.25, 0.5, 1.0], "measurements.w: no checkpoint at t = 0.75"),
+    ],
+)
+def test_synthesis_from_checkpoints_errors(tmp_path, monkeypatch, fields, times, message):
+    solver = "Solver"  # without read_checkpoint
+    if fields is not None:
+        _checkpoints(monkeypatch, fields, times)
+        solver = "Checkpointed"
+    options = _options(tmp_path, CHECKPOINTS, "c", solver)
+    with pytest.raises(StudyFileError, match=message):
+        synthesize(options)
