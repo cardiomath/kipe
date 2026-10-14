@@ -1,0 +1,4 @@
+/* Diagrams fill the column width, but tall ones no more than this height. */
+pre.mermaid > svg {
+    max-height: 30em;
+}
