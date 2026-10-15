@@ -1,0 +1,615 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "kipe study file",
+  "$defs": {
+    "ArraySamplingOptions": {
+      "additionalProperties": false,
+      "description": "Sample all entries of the observed fields, concatenated in the order of ``fields``.",
+      "properties": {
+        "type": {
+          "const": "array",
+          "default": "array",
+          "description": "Kind of spatial sampling.",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "title": "ArraySamplingOptions",
+      "type": "object"
+    },
+    "CheckpointsTruthOptions": {
+      "additionalProperties": false,
+      "description": "Generate the data from the checkpoints of an earlier run of the forward solver.\n\nThe solver reads the true states at the measurement times from the checkpoints at\n``path``; it needs :class:`kipe.forward_solver.SupportsCheckpoints`. The run may differ\nfrom the model of the ``forward_solver`` section (e.g., in its time step or parameters), as\nlong as the solver can read its checkpoints into the model's state.",
+      "properties": {
+        "type": {
+          "const": "checkpoints",
+          "description": "Source of the true state.",
+          "title": "Type",
+          "type": "string"
+        },
+        "path": {
+          "description": "Location of the checkpoints, as the solver understands it (e.g., the output directory of\nthe run).",
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "path"
+      ],
+      "title": "CheckpointsTruthOptions",
+      "type": "object"
+    },
+    "DifferenceModelOptions": {
+      "additionalProperties": false,
+      "description": "Measured data are the sampled fields; innovation = measured - predicted.",
+      "properties": {
+        "type": {
+          "const": "difference",
+          "default": "difference",
+          "description": "Kind of measurement model.",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "title": "DifferenceModelOptions",
+      "type": "object"
+    },
+    "EstimationOptions": {
+      "additionalProperties": false,
+      "description": "Parameter estimation with the reduced-order unscented Kalman filter (ROUKF).",
+      "properties": {
+        "sigma_points": {
+          "$ref": "#/$defs/SigmaPoints",
+          "default": "simplex",
+          "description": "Sigma-point stencil, the pattern along which the estimates are perturbed. Each sigma\npoint costs one forward run per measurement time:\n\n- ``simplex``: :math:`p + 1` sigma points, the cheapest.\n- ``canonical``: :math:`2p` sigma points, :math:`\\pm` along each parameter.\n- ``unique``: one sigma point at the estimate, no spread: no correction. A sanity check\n  of the whole pipeline (with the true parameters, the innovations are pure noise)."
+        },
+        "iterations": {
+          "default": 1,
+          "description": "Number of passes over the measurements. Each pass after the first starts from the\nprevious estimate, with the initial uncertainty.",
+          "minimum": 1,
+          "title": "Iterations",
+          "type": "integer"
+        }
+      },
+      "title": "EstimationOptions",
+      "type": "object"
+    },
+    "ForwardSolverOptions": {
+      "additionalProperties": false,
+      "description": "How to construct the forward solver.\n\nkipe imports ``factory`` and calls it with ``arguments`` as keyword arguments. The factory\ncan be a class or a function; it must return an object that conforms to\n:class:`kipe.forward_solver.ForwardSolver`.",
+      "properties": {
+        "factory": {
+          "description": "Import path of the factory, ``\"module:name\"``, e.g.,\n``\"kipe.examples.fitzhugh_nagumo:Solver\"``.",
+          "pattern": "^[\\w.]+:\\w+$",
+          "title": "Factory",
+          "type": "string"
+        },
+        "arguments": {
+          "additionalProperties": true,
+          "description": "Keyword arguments passed to the factory, as given (no path resolution).",
+          "title": "Arguments",
+          "type": "object"
+        }
+      },
+      "required": [
+        "factory"
+      ],
+      "title": "ForwardSolverOptions",
+      "type": "object"
+    },
+    "MeasurementOptions": {
+      "additionalProperties": false,
+      "description": "One measurement: which fields it observes, its data, and how to compare them.",
+      "properties": {
+        "fields": {
+          "description": "State fields the measurement observes.",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Fields",
+          "type": "array"
+        },
+        "data": {
+          "$ref": "#/$defs/NumpyDataOptions",
+          "description": "Where the measured data are: read by ``estimation``, written by ``synthesis``."
+        },
+        "noise": {
+          "$ref": "#/$defs/NoiseOptions",
+          "description": "Measurement noise."
+        },
+        "times": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "$ref": "#/$defs/TimeRange"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Measurement times: a list or a range. Required by ``synthesis`` (the times to\ngenerate); for ``estimation`` a selection from the times in the data, all if not\ngiven.",
+          "title": "Times"
+        },
+        "spatial_sampling": {
+          "$ref": "#/$defs/SpatialSamplingOptions",
+          "description": "How the observed fields are brought to the measurement locations; the kind is selected\nby ``type``, ``array`` by default."
+        },
+        "model": {
+          "$ref": "#/$defs/DifferenceModelOptions",
+          "description": "How predicted data are computed from the sampled fields and compared with the data."
+        }
+      },
+      "required": [
+        "fields",
+        "data",
+        "noise"
+      ],
+      "title": "MeasurementOptions",
+      "type": "object"
+    },
+    "MeshSamplingOptions": {
+      "additionalProperties": false,
+      "description": "Interpolate the observed field onto a measurement mesh (FEniCSx backend).\n\nThe field must be a distributed field whose function space the forward solver provides\n(:class:`kipe.fenicsx.forward_solver.SupportsFunctionSpaces`). The measurement mesh need\nnot match the solver's mesh. The data are in the order of the mesh file: by vertex for\n``P1``, by cell for ``DG0``, independent of the number of ranks; for a vector field without\nprojection, the components of each vertex or cell one after another.",
+      "properties": {
+        "type": {
+          "const": "fenicsx.mesh",
+          "description": "Kind of spatial sampling.",
+          "title": "Type",
+          "type": "string"
+        },
+        "mesh": {
+          "description": "Path to the measurement mesh, an XDMF file.",
+          "title": "Mesh",
+          "type": "string"
+        },
+        "mesh_name": {
+          "default": "mesh",
+          "description": "Name of the mesh in the XDMF file (its grid): ``mesh`` as dolfinx writes it; meshio\nwrites ``Grid``.",
+          "title": "Mesh Name",
+          "type": "string"
+        },
+        "element": {
+          "default": "P1",
+          "description": "Finite element on the measurement mesh: vertex values (``P1``) or cell values\n(``DG0``).",
+          "enum": [
+            "P1",
+            "DG0"
+          ],
+          "title": "Element",
+          "type": "string"
+        },
+        "projection": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "const": "surface_normal",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What is measured of a vector field; all components if not given. A direction, e.g.,\n``[0, 0, 1]`` for the z component (normalized by kipe), or ``surface_normal``: the\ncomponent along the cell normal of a surface mesh (needs ``element: DG0``, one normal per\ncell). The normal's orientation follows the order of each cell's vertices in the mesh file,\nas ``ufl.CellNormal``: the right-hand rule for triangles in 3D, the tangent rotated by +90\u00b0\nfor lines in 2D; it is outward only if the mesh's cells are oriented that way.",
+          "title": "Projection"
+        },
+        "padding": {
+          "default": 0.0,
+          "description": "Distance, in mesh units, by which a measurement point may lie outside the solver's mesh,\ne.g., where a surface mesh cuts slightly across the solver's boundary. Such a point takes\nthe value of the field in the nearest cell, extrapolated; a point farther out is an\nerror.",
+          "minimum": 0,
+          "title": "Padding",
+          "type": "number"
+        }
+      },
+      "required": [
+        "type",
+        "mesh"
+      ],
+      "title": "MeshSamplingOptions",
+      "type": "object"
+    },
+    "NoiseOptions": {
+      "additionalProperties": false,
+      "description": "Measurement noise: assumed by ``estimation``, added by ``synthesis``.\n\n``synthesis.noise`` can set another noise for synthesis to add, e.g., none.",
+      "properties": {
+        "stddev": {
+          "description": "Standard deviation of the noise, in the unit of the data.",
+          "exclusiveMinimum": 0,
+          "title": "Stddev",
+          "type": "number"
+        },
+        "seed": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Seed of the noise added by ``synthesis`` (required there, unless it adds none, see\n``synthesis.noise``). The noise of the k-th time of the measurement is drawn from\n``numpy.random.default_rng([seed, k])``, so it does not depend on the other times.\nMeasurements must have different seeds.",
+          "title": "Seed"
+        }
+      },
+      "required": [
+        "stddev"
+      ],
+      "title": "NoiseOptions",
+      "type": "object"
+    },
+    "NumpyDataOptions": {
+      "additionalProperties": false,
+      "description": "Measurement data in a numpy ``.npz`` file.\n\nThe file holds the arrays ``times``, shape ``(n,)``, and ``values``, shape ``(n, m)``: m\nvalues at each of the n times.",
+      "properties": {
+        "type": {
+          "const": "numpy",
+          "description": "Data format.",
+          "title": "Type",
+          "type": "string"
+        },
+        "path": {
+          "description": "Path to the ``.npz`` file.",
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "path"
+      ],
+      "title": "NumpyDataOptions",
+      "type": "object"
+    },
+    "OutputOptions": {
+      "additionalProperties": false,
+      "description": "Where and how kipe writes its results.",
+      "properties": {
+        "path": {
+          "description": "Directory for all results. Subcommands write into subdirectories.",
+          "title": "Path",
+          "type": "string"
+        },
+        "log_level": {
+          "default": "info",
+          "description": "Minimum level of the log messages kipe writes.",
+          "enum": [
+            "debug",
+            "info",
+            "warning",
+            "error"
+          ],
+          "title": "Log Level",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "OutputOptions",
+      "type": "object"
+    },
+    "ParameterPrior": {
+      "additionalProperties": false,
+      "description": "Initial estimate of one estimated parameter and its uncertainty.\n\nThe two define the prior (Gaussian in the estimated parameter :math:`\\theta`) and the\nstarting state of the filter: the standard deviation sets the initial size of the\nsigma-point stencil used for the derivative-free linearization, and the initial weight\nagainst the measurement noise.\n\n``log`` and ``multiplicative`` take a ``relative_stddev``, ``additive`` an absolute\n``stddev``.",
+      "properties": {
+        "initial": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Initial estimate (prior mean), as physical value. The solver's nominal value if not\ngiven.",
+          "title": "Initial"
+        },
+        "relative_stddev": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Standard deviation relative to ``initial``, e.g., ``0.3`` for 30%. For ``log`` and\n``multiplicative``.\n\nConverted to the standard deviation of :math:`\\theta`, to first order around ``initial``:\n:math:`\\sigma_\\theta` = ``relative_stddev`` / ln 2 for ``log``, :math:`\\sigma_\\theta` =\n``relative_stddev`` for ``multiplicative``. So both give the same prior as long as\n``relative_stddev`` is small. For large values they differ: ``log`` keeps the parameter\npositive, at the price of an asymmetric distribution. ``kipe list-parameters`` shows the\nresulting 1\u03c3 range.",
+          "title": "Relative Stddev"
+        },
+        "stddev": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Absolute standard deviation, in the parameter's physical unit. For ``additive``.",
+          "title": "Stddev"
+        },
+        "reparameterization": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Reparameterization"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Overrides the section's ``reparameterization`` for this parameter."
+        }
+      },
+      "title": "ParameterPrior",
+      "type": "object"
+    },
+    "ParametersOptions": {
+      "additionalProperties": false,
+      "description": "Selection, initial estimate and reparameterization of the estimated parameters.\n\n``kipe list-parameters`` shows the names the forward solver accepts.",
+      "properties": {
+        "reparameterization": {
+          "$ref": "#/$defs/Reparameterization",
+          "description": "How the estimated parameter :math:`\\theta` relates to the physical value :math:`\\phi`,\nrelative to the initial estimate :math:`\\phi_0`. Default for all parameters in\n``select``, each can override it.\n\nAvailable reparameterizations:\n\n- ``log``: :math:`\\phi = \\phi_0 2^\\theta`, starting at :math:`\\theta = 0`, with a\n  ``relative_stddev``. Keeps :math:`\\phi` positive; the initial estimate must be positive.\n- ``multiplicative``: :math:`\\phi = \\phi_0 \\theta`, starting at :math:`\\theta = 1`, with\n  a ``relative_stddev``. The initial estimate must not be zero; :math:`\\phi` can change\n  sign.\n- ``additive``: :math:`\\phi = \\phi_0 + \\theta`, starting at :math:`\\theta = 0`, with an\n  absolute ``stddev``. :math:`\\theta` is the deviation from the initial estimate, in the\n  parameter's physical unit. Accepts any initial estimate, including zero."
+        },
+        "select": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ParameterPrior"
+          },
+          "description": "Estimated parameters: parameter name -> initial estimate and uncertainty. All other\nparameters keep their nominal values.",
+          "keys": "a parameter of the solver",
+          "minProperties": 1,
+          "title": "Select",
+          "type": "object"
+        }
+      },
+      "required": [
+        "reparameterization",
+        "select"
+      ],
+      "title": "ParametersOptions",
+      "type": "object"
+    },
+    "PointSamplingOptions": {
+      "additionalProperties": false,
+      "description": "Evaluate the observed field at given points (FEniCSx backend).\n\nThe field must be a distributed field whose function space the forward solver provides\n(:class:`kipe.fenicsx.forward_solver.SupportsFunctionSpaces`). The data are in the order of\n``points``; for a vector field, the components of each point one after another.",
+      "properties": {
+        "type": {
+          "const": "fenicsx.points",
+          "description": "Kind of spatial sampling.",
+          "title": "Type",
+          "type": "string"
+        },
+        "points": {
+          "description": "Coordinates of the measurement points, one list per point, e.g., ``[[0.5, 0.5], [0.2,\n0.8]]`` in 2D. Each point must lie in the solver's mesh.",
+          "items": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "minItems": 1,
+          "title": "Points",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "points"
+      ],
+      "title": "PointSamplingOptions",
+      "type": "object"
+    },
+    "Reparameterization": {
+      "enum": [
+        "log",
+        "multiplicative",
+        "additive"
+      ],
+      "type": "string"
+    },
+    "RunTruthOptions": {
+      "additionalProperties": false,
+      "description": "Generate the data by running the forward solver with its nominal parameters.",
+      "properties": {
+        "type": {
+          "const": "run",
+          "default": "run",
+          "description": "Source of the true state.",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "title": "RunTruthOptions",
+      "type": "object"
+    },
+    "SigmaPoints": {
+      "enum": [
+        "simplex",
+        "canonical",
+        "unique"
+      ],
+      "type": "string"
+    },
+    "SpatialSamplingOptions": {
+      "discriminator": {
+        "mapping": {
+          "array": "#/$defs/ArraySamplingOptions",
+          "fenicsx.mesh": "#/$defs/MeshSamplingOptions",
+          "fenicsx.points": "#/$defs/PointSamplingOptions"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ArraySamplingOptions"
+        },
+        {
+          "$ref": "#/$defs/MeshSamplingOptions"
+        },
+        {
+          "$ref": "#/$defs/PointSamplingOptions"
+        }
+      ]
+    },
+    "SynthesisNoiseOptions": {
+      "additionalProperties": false,
+      "description": "Noise that synthesis adds to the data of a measurement.",
+      "properties": {
+        "stddev": {
+          "description": "Standard deviation of the noise, in the unit of the data; 0 for noise-free data.",
+          "minimum": 0,
+          "title": "Stddev",
+          "type": "number"
+        }
+      },
+      "required": [
+        "stddev"
+      ],
+      "title": "SynthesisNoiseOptions",
+      "type": "object"
+    },
+    "SynthesisOptions": {
+      "additionalProperties": false,
+      "description": "Generation of synthetic measurement data.",
+      "properties": {
+        "truth": {
+          "$ref": "#/$defs/TruthOptions",
+          "description": "Source of the true state the data are generated from: a run of the forward solver, or\nits checkpoints."
+        },
+        "noise": {
+          "additionalProperties": {
+            "$ref": "#/$defs/SynthesisNoiseOptions"
+          },
+          "description": "Noise synthesis adds to the data of the listed measurements (measurement name ->\nnoise), instead of their ``noise.stddev``, which estimation assumes: for noise-free data\n(``stddev: 0``) or studies with misspecified noise. Measurements not listed get their\n``noise.stddev``.",
+          "keys": "one of the measurements",
+          "title": "Noise",
+          "type": "object"
+        }
+      },
+      "title": "SynthesisOptions",
+      "type": "object"
+    },
+    "TimeRange": {
+      "additionalProperties": false,
+      "description": "Equidistant times from ``start`` to ``stop``, both included.",
+      "properties": {
+        "start": {
+          "description": "First time.",
+          "title": "Start",
+          "type": "number"
+        },
+        "stop": {
+          "description": "Last time, included (up to round-off).",
+          "title": "Stop",
+          "type": "number"
+        },
+        "step": {
+          "description": "Distance between successive times.",
+          "exclusiveMinimum": 0,
+          "title": "Step",
+          "type": "number"
+        }
+      },
+      "required": [
+        "start",
+        "stop",
+        "step"
+      ],
+      "title": "TimeRange",
+      "type": "object"
+    },
+    "TruthOptions": {
+      "discriminator": {
+        "mapping": {
+          "checkpoints": "#/$defs/CheckpointsTruthOptions",
+          "run": "#/$defs/RunTruthOptions"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RunTruthOptions"
+        },
+        {
+          "$ref": "#/$defs/CheckpointsTruthOptions"
+        }
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "description": "All sections of a study file.",
+  "properties": {
+    "output": {
+      "$ref": "#/$defs/OutputOptions",
+      "description": "Output location and logging."
+    },
+    "forward_solver": {
+      "$ref": "#/$defs/ForwardSolverOptions",
+      "description": "Construction of the forward solver."
+    },
+    "parameters": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ParametersOptions"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Estimated parameters."
+    },
+    "measurements": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/MeasurementOptions"
+          },
+          "keys": "a name you choose",
+          "minProperties": 1,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Measurements: name -> measurement. The names appear in logs, output and errors.",
+      "title": "Measurements"
+    },
+    "synthesis": {
+      "$ref": "#/$defs/SynthesisOptions"
+    },
+    "estimation": {
+      "$ref": "#/$defs/EstimationOptions",
+      "description": "Parameter estimation."
+    }
+  },
+  "required": [
+    "output",
+    "forward_solver"
+  ],
+  "type": "object"
+}

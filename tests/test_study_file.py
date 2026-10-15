@@ -1,11 +1,15 @@
-"""Loading a study file, constructing the forward solver, and ``kipe list-parameters``."""
+"""Loading a study file, constructing the forward solver, ``kipe list-parameters`` and
+``kipe schema``."""
 
+import json
 import sys
 import types
 from pathlib import Path
 
+import jsonschema
 import pytest
 from pydantic import ValidationError
+from ruamel.yaml import YAML
 
 import kipe
 from kipe.cli import main
@@ -23,7 +27,10 @@ from kipe.options import (
     TimeRange,
     dump_study,
     load_study,
+    study_schema,
 )
+
+EXAMPLES = Path(__file__).parents[1] / "examples"
 
 STUDY = """\
 output:
@@ -207,3 +214,32 @@ def test_version(capsys):
         main(["--version"])
     assert excinfo.value.code == 0
     assert capsys.readouterr().out.strip() == f"kipe {kipe.__version__}"
+
+
+def test_cli_schema(capsys):
+    assert main(["schema"]) == 0
+    schema = json.loads(capsys.readouterr().out)
+    assert schema == study_schema()
+    assert schema["title"] == "kipe study file"
+    jsonschema.Draft202012Validator.check_schema(schema)
+
+
+def test_examples_schema_is_up_to_date():
+    with open(EXAMPLES / "study.schema.json") as f:
+        assert json.load(f) == study_schema(), (
+            "the schema is outdated: run kipe schema > examples/study.schema.json"
+        )
+
+
+@pytest.mark.parametrize(
+    "path", sorted(EXAMPLES.glob("*/study.yaml")), ids=lambda path: path.parent.name
+)
+def test_schema_accepts_the_examples(path):
+    jsonschema.validate(YAML(typ="safe").load(path), study_schema())
+
+
+def test_schema_rejects_unknown_options():
+    study = YAML(typ="safe").load(EXAMPLES / "fitzhugh_nagumo" / "study.yaml")
+    study["estimation"]["sigma_point"] = "simplex"  # a typo
+    with pytest.raises(jsonschema.ValidationError, match="sigma_point"):
+        jsonschema.validate(study, study_schema())
