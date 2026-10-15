@@ -264,7 +264,7 @@
           "type": "string"
         },
         "path": {
-          "description": "Path to the ``.npz`` file.",
+          "description": "Path to the ``.npz`` file. With several noise realizations\n(``synthesis.realizations``), it contains the placeholder ``{realization}``, e.g.,\n``\"data/r{realization}/u.npz\"`` or ``\"data/u_{realization:02d}.npz\"``: each realization has\nits own file. In quotes, since YAML reads braces in ``{type: ..., path: ...}`` as a\nmapping.",
           "title": "Path",
           "type": "string"
         }
@@ -506,6 +506,13 @@
           "keys": "one of the measurements",
           "title": "Noise",
           "type": "object"
+        },
+        "realizations": {
+          "default": 1,
+          "description": "Number of noise realizations, e.g., for the statistics of the estimates over the noise.\nSynthesis computes the true state once and writes the data of realizations\n:math:`r = 0, \\dots, n - 1`, each to the ``data.path`` of the measurements with\n``{realization}`` replaced by :math:`r`; ``kipe estimation --realization r`` estimates from\none of them. Realization 0 has the noise of a study without realizations.",
+          "exclusiveMinimum": 0,
+          "title": "Realizations",
+          "type": "integer"
         }
       },
       "title": "SynthesisOptions",
