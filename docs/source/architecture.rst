@@ -75,7 +75,9 @@ The optional FEniCSx backend has a separate graph to keep the core view readable
    FEniCSx backend module dependencies.
 
 Regenerate these diagrams locally with ``python scripts/generate_diagrams.py`` before building
-the documentation.
+the documentation. This requires the docs extra (which provides Pyreverse) and the Graphviz
+``dot`` executable; install Graphviz separately, for example with ``brew install graphviz`` on
+macOS or ``sudo apt install graphviz`` on Debian and Ubuntu.
 
 The forward solver
 ------------------
