@@ -9,7 +9,9 @@ corrected. Outer iterations repeat the pass, starting from the previous estimate
 The estimation history is written to ``<output.path>/estimation/``: ``history.csv`` (one row
 per assimilation step, written as the filter runs) and ``history.npz`` (all steps, including
 the full parameter covariance). :func:`estimate` also writes the provenance of the run there
-(:mod:`kipe.provenance`).
+(:mod:`kipe.provenance`). With several noise realizations (``synthesis.realizations``), each
+estimation uses the data of one realization and writes to its subdirectory, e.g.,
+``estimation/r07/``.
 """
 
 import logging
@@ -38,7 +40,13 @@ from kipe.measurements import (
     measurement_times,
     read_numpy,
 )
-from kipe.options import EstimationOptions, StudyFileError, StudyOptions
+from kipe.options import (
+    EstimationOptions,
+    StudyFileError,
+    StudyOptions,
+    data_path,
+    estimation_directory,
+)
 from kipe.parameters import Parameterization, build_parameterization
 from kipe.provenance import recorded_run
 
@@ -310,7 +318,9 @@ class Estimation:
         return sum(measurement.values.shape[1] for measurement in self._measurements)
 
 
-def estimate(study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD) -> Parameters:
+def estimate(
+    study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD, realization: int = 0
+) -> Parameters:
     """Estimate the parameters of a study; write the estimation history and the provenance.
 
     Builds the forward solver, the estimated parameters and the measurements (with their data)
@@ -319,26 +329,31 @@ def estimate(study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD) -> Parameters
     Args:
         study: the study options
         comm: communicator over which the model state is distributed
+        realization: number of the noise realization whose data are used
+            (``synthesis.realizations``)
 
     Returns:
         the estimated parameters, as physical values
 
     Raises:
-        StudyFileError: if the study lacks what estimation needs, or the data do not fit
+        StudyFileError: if the study lacks what estimation needs, has no such realization, or
+            the data do not fit
     """
     if study.parameters is None:
         raise StudyFileError("estimation needs a parameters section")
 
+    output = estimation_directory(study, realization)
     solver = build_forward_solver(study.forward_solver)
     parameterization = build_parameterization(study.parameters, solver.nominal_parameters())
-    measurements = _build_measurements(study, solver, comm)
-    output = Path(study.output.path) / "estimation"
+    measurements = _build_measurements(study, solver, comm, realization)
     estimation = Estimation(
         solver, parameterization, measurements, study.estimation, output, comm
     )
 
-    times = {"assimilation_times": _common_times(measurements).tolist()}  # maybe from the data
-    with recorded_run(output, study, times, comm):
+    run = {"assimilation_times": _common_times(measurements).tolist()}  # maybe from the data
+    if study.synthesis.realizations > 1:
+        run["realization"] = realization
+    with recorded_run(output, study, run, comm):
         return estimation.run()
 
 
@@ -395,7 +410,7 @@ def _estimate_rows(
 
 
 def _build_measurements(
-    study: StudyOptions, solver: ForwardSolver, comm: MPI.Comm
+    study: StudyOptions, solver: ForwardSolver, comm: MPI.Comm, realization: int
 ) -> list[Measurement]:
     """Read the data of the study's measurements and build their observation operators.
 
@@ -405,6 +420,7 @@ def _build_measurements(
         study: the study options
         solver: the forward solver
         comm: communicator of the run
+        realization: number of the noise realization whose data are read
 
     Returns:
         the measurements, with this rank's entries of their data at the selected times
@@ -420,7 +436,7 @@ def _build_measurements(
     measurements = []
     for name, options in study.measurements.items():
         operator = build_observation_operator(name, options, solver, comm)
-        times, values = read_numpy(options.data.path)
+        times, values = read_numpy(data_path(options, realization))
 
         if values.shape[1] != operator.size:
             raise StudyFileError(

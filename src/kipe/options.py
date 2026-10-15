@@ -12,11 +12,12 @@ reference is generated from them, with their attribute docstrings as the descrip
 See ``examples/fitzhugh_nagumo/study.yaml`` for a complete study file.
 """
 
+import string
 from dataclasses import field
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from pydantic import ConfigDict, Field, PositiveFloat, TypeAdapter
+from pydantic import ConfigDict, Field, PositiveFloat, PositiveInt, TypeAdapter
 from pydantic.dataclasses import dataclass
 from ruamel.yaml import YAML, YAMLError
 
@@ -181,7 +182,11 @@ class NumpyDataOptions:
     """Data format."""
 
     path: str
-    """Path to the ``.npz`` file."""
+    """Path to the ``.npz`` file. With several noise realizations
+    (``synthesis.realizations``), it contains the placeholder ``{realization}``, e.g.,
+    ``"data/r{realization}/u.npz"`` or ``"data/u_{realization:02d}.npz"``: each realization has
+    its own file. In quotes, since YAML reads braces in ``{type: ..., path: ...}`` as a
+    mapping."""
 
 
 @dataclass(frozen=True, config=_CONFIG)
@@ -381,6 +386,13 @@ class SynthesisOptions:
     (``stddev: 0``) or studies with misspecified noise. Measurements not listed get their
     ``noise.stddev``."""
 
+    realizations: PositiveInt = 1
+    r"""Number of noise realizations, e.g., for the statistics of the estimates over the noise.
+    Synthesis computes the true state once and writes the data of realizations
+    :math:`r = 0, \dots, n - 1`, each to the ``data.path`` of the measurements with
+    ``{realization}`` replaced by :math:`r`; ``kipe estimation --realization r`` estimates from
+    one of them. Realization 0 has the noise of a study without realizations."""
+
 
 type SigmaPoints = Literal["simplex", "canonical", "unique"]
 
@@ -455,6 +467,80 @@ class StudyOptions:
                     "their noise would be identical"
                 )
             seeds[seed] = name
+
+        for name, measurement in (self.measurements or {}).items():
+            _check_data_path(name, measurement.data.path, self.synthesis.realizations)
+
+
+def _check_data_path(name: str, path: str, realizations: int) -> None:
+    """Check the placeholder of a measurement's data path.
+
+    Args:
+        name: name of the measurement
+        path: its data path
+        realizations: number of noise realizations
+
+    Raises:
+        ValueError: if the path has a placeholder other than ``{realization}``, or lacks it
+            although there are several realizations
+    """
+    prefix = f"measurements.{name}.data.path: {path!r}"
+    try:
+        placeholders = {p for _, p, _, _ in string.Formatter().parse(path) if p is not None}
+    except ValueError as err:  # e.g., a single brace
+        raise ValueError(f"{prefix}: {err}") from err
+
+    if placeholders - {"realization"}:
+        raise ValueError(f"{prefix}: the only placeholder is {{realization}}")
+    if realizations > 1 and not placeholders:
+        raise ValueError(
+            f"{prefix} needs the placeholder {{realization}}: with {realizations} "
+            "realizations, each needs its own file"
+        )
+    try:
+        path.format(realization=0)
+    except ValueError as err:  # e.g., {realization:x2}
+        raise ValueError(f"{prefix}: {err}") from err
+
+
+def data_path(measurement: MeasurementOptions, realization: int = 0) -> str:
+    """Return the path to a measurement's data of one noise realization.
+
+    Args:
+        measurement: the measurement options
+        realization: number of the noise realization
+
+    Returns:
+        ``data.path``, with ``{realization}`` replaced
+    """
+    return measurement.data.path.format(realization=realization)
+
+
+def estimation_directory(study: StudyOptions, realization: int = 0) -> Path:
+    """Return the output directory of an estimation.
+
+    Args:
+        study: the study options
+        realization: number of the noise realization the estimation uses
+
+    Returns:
+        ``<output.path>/estimation``; with several realizations, its subdirectory of the
+        realization, e.g., ``r07``, numbered with as many digits as the largest number
+
+    Raises:
+        StudyFileError: if the study has no such realization
+    """
+    n = study.synthesis.realizations
+    if not 0 <= realization < n:
+        raise StudyFileError(
+            f"realization {realization}: the study has realizations 0 to {n - 1} "
+            "(synthesis.realizations)"
+        )
+
+    directory = Path(study.output.path) / "estimation"
+    if n == 1:
+        return directory
+    return directory / f"r{realization:0{len(str(n - 1))}d}"
 
 
 def load_study(path: str | Path) -> StudyOptions:

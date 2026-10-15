@@ -24,6 +24,7 @@ from kipe.options import (
     ParametersOptions,
     SigmaPoints,
     StudyOptions,
+    SynthesisOptions,
     TimeRange,
     dump_study,
 )
@@ -46,8 +47,10 @@ def _options(
     parameters: bool = True,
     relative_stddev: float = 0.2,
     noise: float = 0.05,
+    realizations: int = 1,
 ) -> StudyOptions:
     """Return the options of a FitzHugh-Nagumo study measuring v and w."""
+    data = tmp_path / ("r{realization}" if realizations > 1 else "")
     parameters_options = ParametersOptions(
         reparameterization="log",
         select={
@@ -65,11 +68,12 @@ def _options(
             field: MeasurementOptions(
                 fields=[field],
                 times=times,
-                data=NumpyDataOptions(type="numpy", path=str(tmp_path / f"{field}.npz")),
+                data=NumpyDataOptions(type="numpy", path=str(data / f"{field}.npz")),
                 noise=NoiseOptions(stddev=noise, seed=seed),
             )
             for field, seed in [("v", 0), ("w", 1)]
         },
+        synthesis=SynthesisOptions(realizations=realizations),
         estimation=EstimationOptions(sigma_points=sigma_points, iterations=iterations),
     )
 
@@ -344,3 +348,29 @@ def test_log_file_has_full_detail(tmp_path):
     assert "DEBUG   estimation:_propagate_and_observe:" in log
     assert "sigma point 1/4" in log
     assert (tmp_path / "results" / "synthesis" / "kipe.log").exists()
+
+
+def test_realizations(tmp_path, capsys):
+    """Without --realization, estimation runs each realization, into its own directory; with
+    it, only that one. The plot needs it."""
+    study = str(_study(tmp_path, times=[0.5, 1.0, 1.5, 2.0], realizations=3))
+    assert main(["synthesis", study, "--log-level", "warning"]) == 0
+    assert main(["estimation", study, "--log-level", "warning"]) == 0
+
+    output = tmp_path / "results" / "estimation"
+    estimates = [np.load(output / f"r{r}" / "history.npz")["parameters"][-1] for r in range(3)]
+    assert not np.allclose(estimates[0], estimates[1])  # different noise
+    assert not (output / "history.npz").exists()
+
+    shutil.rmtree(output / "r1")
+    assert main(["estimation", study, "--realization", "1", "--log-level", "warning"]) == 0
+    rerun = np.load(output / "r1" / "history.npz")["parameters"][-1]
+    np.testing.assert_array_equal(rerun, estimates[1])  # the filter is deterministic
+    assert "realization: 1" in (output / "r1" / "run.yaml").read_text()
+
+    assert main(["estimation", study, "--realization", "3"]) == 1
+    assert "realization 3: the study has realizations 0 to 2" in capsys.readouterr().err
+
+    assert main(["plot", study, "--terminal"]) == 1
+    assert "choose one with --realization" in capsys.readouterr().err
+    assert main(["plot", study, "--terminal", "--realization", "2"]) == 0

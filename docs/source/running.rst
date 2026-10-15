@@ -72,7 +72,8 @@ Commands
 ==================================== =========================================================
 
 ``synthesis`` and ``estimation`` take ``--log-level``, which overrides ``output.log_level`` on
-the console. ``plot`` takes several study files, drawn into one figure, and:
+the console; ``estimation`` and ``plot`` take ``--realization`` (`Noise realizations`_).
+``plot`` takes several study files, drawn into one figure, and:
 
 - ``--truth``: the nominal parameters of the first study's solver as reference lines;
 - ``--save FILE``: save the figure instead of showing it;
@@ -116,13 +117,48 @@ measurement's noise:
       noise:
         u: {stddev: 0}
 
+Noise realizations
+^^^^^^^^^^^^^^^^^^
+
+How much an estimate depends on the noise shows only over several noise realizations. With
+``synthesis.realizations``, ``kipe synthesis`` computes the true state once and writes the data
+of each realization to its own files: the measurements' ``data.path`` contains
+``{realization}``, which is replaced by the number of the realization, from 0:
+
+.. code-block:: yaml
+
+    measurements:
+      u:
+        # ...
+        data: {type: numpy, path: "data/r{realization:02d}/u.npz"}  # quoted: braces
+        noise: {stddev: 0.01, seed: 1}
+
+    synthesis:
+      realizations: 30
+
+The noise of realization :math:`r` at the :math:`k`-th time of a measurement is drawn from
+``numpy.random.default_rng([seed, k, r])``. Realization 0 has the noise of the same study
+without realizations.
+
+``kipe estimation study.yaml`` then estimates from each realization in turn, into
+``<output.path>/estimation/r00/`` to ``r29/``. ``--realization r`` estimates from one only,
+e.g., as one task of a SLURM job array:
+
+.. code-block:: bash
+
+    #SBATCH --array=0-29
+    srun kipe estimation study.yaml --realization $SLURM_ARRAY_TASK_ID
+
+``kipe plot study.yaml --realization r`` plots the estimation of one realization.
+
 Results
 -------
 
 Each command writes to its subdirectory of ``output.path``, ``synthesis/`` or ``estimation/``.
 The data that ``synthesis`` generates go to the measurements' ``data`` paths.
 
-``estimation/`` holds the estimation history:
+``estimation/`` holds the estimation history; with noise realizations, each realization's
+subdirectory, e.g., ``estimation/r07/``, holds the history of its estimation:
 
 - ``history.csv``: one row per assimilation step, written as the filter runs: the iteration,
   the time, and per parameter, e.g., ``c``: its estimate ``c``, its 1σ range ``lower_c``,
