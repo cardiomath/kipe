@@ -37,6 +37,7 @@ kipe = "kipe.cli:main"
 [project.optional-dependencies]
 dev = [
   "pytest>=8",
+  "jsonschema>=4",  # the example study files against `kipe schema`, in tests only
   "scipy>=1.12",  # reference solutions in tests only
   "ruff==0.16.9",  # pinned: preview formatting differs between versions
   "mypy==2.3.1",
@@ -143,7 +144,7 @@ ignore_missing_imports = true
 # without them (they are missing in the core checks; petsc4py's stubs lack names that exist
 # at runtime, dolfinx's assemble_* dispatch at runtime): kipe.fenicsx is checked without
 # their types
-module = ["dolfinx", "dolfinx.*", "ufl", "ufl.*", "petsc4py", "petsc4py.*"]
+module = ["basix", "basix.*", "dolfinx", "dolfinx.*", "ufl", "ufl.*", "petsc4py", "petsc4py.*"]
 ignore_missing_imports = true
 follow_imports = "skip"
 

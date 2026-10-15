@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=../study.schema.json
 # Heat equation twin experiment with FEniCSx (needs dolfinx). Run from this directory:
 #   python measurement_mesh.py     # writes data/measurement_mesh.xdmf, a coarser mesh
 #   kipe synthesis study.yaml      # generates data/u.npz on it, with the nominal parameters

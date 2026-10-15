@@ -1,129 +1,68 @@
 # kipe
 
 [![CI](https://github.com/cardiomath/kipe/actions/workflows/ci.yml/badge.svg)](https://github.com/cardiomath/kipe/actions/workflows/ci.yml)
+[![Documentation](https://img.shields.io/badge/docs-cardiomath.github.io%2Fkipe-blue)](https://cardiomath.github.io/kipe/)
 ![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-***K**alman-backed **p**arameter **e**stimation* and **i**dentifiability analysis for **p**artial differential **e**quations
+<!-- docs: start of the introduction (index.md) -->
+
+***K**alman-based **i**dentifiability and **p**arameter **e**stimation*
+
+kipe estimates the parameters of dynamical models, e.g., PDE models, from time series of
+measurements, with the reduced-order unscented Kalman filter (ROUKF). The filter needs only
+forward runs of your model, no derivatives, through a lean interface. Around the estimation,
+kipe generates synthetic measurement data for twin experiments, from a run of the model or from
+the checkpoints of an earlier run, and will analyze the identifiability of the parameters with
+the Fisher information (planned).
 
 ## Key features
 
 + **Solver-agnostic**: Connect your model through a small forward-solver interface
 + **Derivative-free**: Optimizer is based on the reduced-order
 unscented Kalman filter (ROUKF) and hence it needs only forward runs.
-+ **Modular observation operators**: New observation operators can be implemented easily by extending the library.
++ **Modular observation operators**: New observation operators can be implemented easily by
+  extending the library.
 + **Twin experiments**: Generate synthetic measurements from a model run.
 + **Reproducible runs**: Keep results, logs, and run provenance together.
 
-> **Status: early development.** The core works (ROUKF estimation, synthetic data, plotting, run provenance), as does a first FEniCSx backend for measurements on finite element meshes, but the study file format and the Python API may still change. Feedback is very welcome: please open an [issue](https://github.com/cardiomath/kipe/issues).
+> **Status: early development.** The core works (ROUKF estimation, synthetic data, plotting, run
+> provenance), as does a first FEniCSx backend for measurements on finite element meshes, but the
+> study file format and the Python API may still change. Feedback is very welcome: please open an
+> [issue](https://github.com/cardiomath/kipe/issues).
 
-<!-- docs: start of the part included in the documentation (getting_started.md) -->
+<!-- docs: end of the introduction -->
 
 ## Installation
 
-`kipe` needs Python ≥ 3.12 and an MPI library (for `mpi4py`). Use your system's MPI, or install one
-with pip:
+`kipe` needs Python ≥ 3.12 and an MPI library (for `mpi4py`):
 
 ```bash
 pip install kipe
 pip install mpich  # only if there is no MPI library on your system
 ```
 
-The latest development version installs from GitHub:
+For FEniCSx models, install kipe into your FEniCSx (dolfinx 0.9) environment.
 
-```bash
-pip install "kipe @ git+https://github.com/cardiomath/kipe"
-```
+## Quick start
 
-For FEniCSx models, kipe also needs dolfinx (0.9), which pip does not install: use your FEniCSx
-installation (e.g., Spack, conda or the `dolfinx/dolfinx` Docker image) and install kipe into its
-Python environment. Its MPI is then the one kipe uses.
-
-## First run: the FitzHugh–Nagumo example
-
-The example estimates the three parameters of the
-[FitzHugh–Nagumo model](https://cardiomath.github.io/kipe/_apidoc/kipe.examples.fitzhugh_nagumo.html) from noisy measurements
-that `kipe` generated itself with the true parameters (a twin experiment):
+A twin experiment with the FitzHugh–Nagumo model: synthetic data from the true parameters, then
+the estimation from a wrong initial guess.
 
 ```bash
 git clone https://github.com/cardiomath/kipe
 cd kipe/examples/fitzhugh_nagumo
-kipe synthesis study.yaml     # generate the measurement data
-kipe estimation study.yaml    # estimate a, b, c from a wrong initial guess
-kipe plot study.yaml --truth  # estimates with their 1σ range; --terminal without a display
-```
-
-Everything is configured in the study file,
-[`study.yaml`](https://github.com/cardiomath/kipe/blob/main/examples/fitzhugh_nagumo/study.yaml):
-the forward solver, the estimated parameters with their initial guess and uncertainty, the
-measurements and the filter. Results, a log and the provenance of the run (versions, git state,
-environment) go to the `output.path` it names.
-
-Other subcommands: `kipe list-parameters study.yaml` shows the parameters a solver accepts;
-`kipe <subcommand> --help` shows the options.
-
-## Your own model
-
-`kipe` calls your model through a small interface, the `ForwardSolver` protocol in
-[`kipe/forward_solver.py`](https://github.com/cardiomath/kipe/blob/main/src/kipe/forward_solver.py).
-
-The study file names a factory that builds your solver:
-
-```yaml
-forward_solver:
-  factory: "my_package.my_module:MySolver"   # module:name, imported by kipe
-  arguments: {dt: 0.01}                      # arguments passed to MySolver
-```
-
-The `arguments` are those passed to the factory, i.e., `MySolver(dt=0.01)`.
-
-The FitzHugh–Nagumo solver,
-[`kipe.examples.fitzhugh_nagumo`](https://cardiomath.github.io/kipe/_apidoc/kipe.examples.fitzhugh_nagumo.html)
-([source](https://github.com/cardiomath/kipe/blob/main/src/kipe/examples/fitzhugh_nagumo.py)),
-is a complete example in about 150 lines, docstrings included.
-
-## FEniCSx models
-
-A FEniCSx solver exchanges the owned degrees of freedom of its fields as arrays, like any other
-state, and additionally provides their function spaces, `function_space(field)` (see
-[`kipe/fenicsx/forward_solver.py`](https://github.com/cardiomath/kipe/blob/main/src/kipe/fenicsx/forward_solver.py)).
-A measurement can then interpolate a field onto a measurement mesh, which need not match the
-solver's:
-
-```yaml
-measurements:
-  u:
-    fields: [u]
-    spatial_sampling: {type: fenicsx.mesh, mesh: data/measurement_mesh.xdmf, element: P1}
-    ...
-```
-
-A vector field is measured as a whole, as its component along a direction
-(`projection: [0, 0, 1]`), or normal to a surface mesh (`projection: surface_normal`, with
-`element: DG0`).
-
-The measurement data are in the order of the measurement mesh file (one value per vertex for
-`P1`, per cell for `DG0`), so synthesis and estimation can run on different numbers of MPI ranks;
-they must use the same mesh file. The [heat equation example](https://cardiomath.github.io/kipe/_apidoc/kipe.fenicsx.examples.heat.html)
-shows a complete setup:
-
-```bash
-cd kipe/examples/heat
-python measurement_mesh.py         # the measurement mesh
 kipe synthesis study.yaml
-mpirun -n 2 kipe estimation study.yaml
+kipe estimation study.yaml
+kipe plot study.yaml --truth  # --terminal without a display
 ```
 
-Its solver,
-[`kipe.fenicsx.examples.heat`](https://cardiomath.github.io/kipe/_apidoc/kipe.fenicsx.examples.heat.html)
-([source](https://github.com/cardiomath/kipe/blob/main/src/kipe/fenicsx/examples/heat.py)),
-is a template for your own.
+## Documentation
 
-<!-- docs: end of the part included in the documentation -->
+**[cardiomath.github.io/kipe](https://cardiomath.github.io/kipe/)**: getting started, running a
+study, measurements, the study file reference, the theory, and how to extend kipe.
 
 ## Development
-
-<!-- docs: start of the development part (development.md) -->
 
 ```bash
 git clone https://github.com/cardiomath/kipe
@@ -133,11 +72,7 @@ pre-commit install --hook-type pre-commit --hook-type commit-msg
 pytest
 ```
 
-The pre-commit hooks run ruff, mypy and a check of the commit message, which follows
-[Conventional Commits](https://www.conventionalcommits.org), e.g., `fix(roukf): ...`; the
-allowed scopes are listed in `.pre-commit-config.yaml`.
-
-<!-- docs: end of the development part -->
+See [Development](https://cardiomath.github.io/kipe/development.html) in the documentation.
 
 ## License
 

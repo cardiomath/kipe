@@ -484,6 +484,24 @@ def load_study(path: str | Path) -> StudyOptions:
     return TypeAdapter(StudyOptions).validate_python(data)
 
 
+def study_schema() -> dict[str, Any]:
+    """Return the JSON schema of the study file, e.g., for editors (``kipe schema``).
+
+    It is pydantic's schema of :class:`StudyOptions`, in JSON Schema draft 2020-12, with the
+    options' docstrings as descriptions.
+
+    Returns:
+        the JSON schema, as a mapping that :func:`json.dumps` writes
+    """
+    schema = TypeAdapter(StudyOptions).json_schema()
+    del schema["title"]  # "StudyOptions"
+    return {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "kipe study file",
+        **schema,
+    }
+
+
 def dump_study(study: StudyOptions, path: str | Path) -> None:
     """Write study options as a study file, which :func:`load_study` reads back.
 
