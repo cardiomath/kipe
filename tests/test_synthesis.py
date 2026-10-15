@@ -128,7 +128,7 @@ def test_synthesize_returns_the_written_measurements(tmp_path):
     noise: {{stddev: 0.1, seed: 0}}
 """,
     )
-    (measurement,) = synthesize(load_study(study))
+    [(measurement,)] = synthesize(load_study(study))
     times, values = read_numpy(tmp_path / "v.npz")
     assert measurement.name == "v"
     assert measurement.stddev == pytest.approx(0.1)
@@ -187,23 +187,25 @@ def _options(
     truth: RunTruthOptions | CheckpointsTruthOptions,
     folder: str,
     solver: str = "Checkpointed",
+    realizations: int = 1,
 ) -> StudyOptions:
     """A study measuring v and w at interleaved times, with noise, writing to ``folder``.
 
     ``solver`` is a factory in :mod:`kipe.examples.fitzhugh_nagumo`; ``Checkpointed`` is made
-    by :func:`_checkpoints`.
+    by :func:`_checkpoints`. With several realizations, each writes to ``folder/r<r>``.
     """
+    data = tmp_path / folder / ("r{realization}" if realizations > 1 else "")
     measurements = {
         "v": MeasurementOptions(
             fields=["v"],
             times=[0.0, 0.5, 1.0],
-            data=NumpyDataOptions(type="numpy", path=str(tmp_path / folder / "v.npz")),
+            data=NumpyDataOptions(type="numpy", path=str(data / "v.npz")),
             noise=NoiseOptions(stddev=0.1, seed=3),
         ),
         "w": MeasurementOptions(
             fields=["w"],
             times=TimeRange(start=0.25, stop=1.0, step=0.25),
-            data=NumpyDataOptions(type="numpy", path=str(tmp_path / folder / "w.npz")),
+            data=NumpyDataOptions(type="numpy", path=str(data / "w.npz")),
             noise=NoiseOptions(stddev=0.2, seed=4),
         ),
     }
@@ -213,7 +215,7 @@ def _options(
             factory=f"kipe.examples.fitzhugh_nagumo:{solver}", arguments={"dt": 0.05}
         ),
         measurements=measurements,
-        synthesis=SynthesisOptions(truth=truth),
+        synthesis=SynthesisOptions(truth=truth, realizations=realizations),
     )
 
 
@@ -244,9 +246,9 @@ def _checkpoints(
 
 def test_synthesis_from_checkpoints(tmp_path, monkeypatch):
     """The same data as from a run, reading each time once, also when shared by v and w."""
-    run = synthesize(_options(tmp_path, RunTruthOptions(), "run", solver="Solver"))
+    [run] = synthesize(_options(tmp_path, RunTruthOptions(), "run", solver="Solver"))
     read = _checkpoints(monkeypatch, ["v", "w"], [0.0, 0.25, 0.5, 0.75, 1.0])
-    checkpoints = synthesize(_options(tmp_path, CHECKPOINTS, "checkpoints"))
+    [checkpoints] = synthesize(_options(tmp_path, CHECKPOINTS, "checkpoints"))
 
     assert read == [("reference", t) for t in [0.0, 0.25, 0.5, 0.75, 1.0]]
     for a, b in zip(checkpoints, run, strict=True):
@@ -259,13 +261,13 @@ def test_synthesis_from_checkpoints(tmp_path, monkeypatch):
 def test_synthesis_from_partial_checkpoints(tmp_path, monkeypatch):
     """Checkpoints need only the observed fields."""
     _checkpoints(monkeypatch, ["v", "w"], [0.0, 0.25, 0.5, 0.75, 1.0])
-    expected = synthesize(_options(tmp_path, CHECKPOINTS, "a"))
+    [expected] = synthesize(_options(tmp_path, CHECKPOINTS, "a"))
 
     _checkpoints(monkeypatch, ["v"], [0.0, 0.5, 1.0])
     options = _options(tmp_path, CHECKPOINTS, "b")
     assert options.measurements is not None
     options.measurements.pop("w")
-    (v,) = synthesize(options)
+    [(v,)] = synthesize(options)
     np.testing.assert_array_equal(v.values, expected[0].values)
 
 
@@ -289,3 +291,23 @@ def test_synthesis_from_checkpoints_errors(tmp_path, monkeypatch, fields, times,
     options = _options(tmp_path, CHECKPOINTS, "c", solver)
     with pytest.raises(StudyFileError, match=message):
         synthesize(options)
+
+
+def test_realizations(tmp_path, monkeypatch):
+    """Realization 0 has the data of a study without realizations; realization r the noise
+    drawn from default_rng([seed, k, r]) at the k-th time, on the same truth, read once."""
+    [single] = synthesize(_options(tmp_path, RunTruthOptions(), "single", solver="Solver"))
+    read = _checkpoints(monkeypatch, ["v", "w"], [0.0, 0.25, 0.5, 0.75, 1.0])
+    realizations = synthesize(_options(tmp_path, CHECKPOINTS, "multi", realizations=3))
+
+    assert len(read) == 5  # each checkpoint once, not once per realization
+    assert len(realizations) == 3
+    for a, b in zip(realizations[0], single, strict=True):
+        np.testing.assert_allclose(a.values, b.values, rtol=1e-14)
+
+    v = realizations[2][0]
+    times = [0.0, 0.5, 1.0]
+    noise = [np.random.default_rng([3, k, 2]).normal(0.0, 0.1, 1) for k in range(3)]
+    np.testing.assert_allclose(v.values, _exact(times, "v") + noise, rtol=1e-12)
+    _, written = read_numpy(tmp_path / "multi" / "r2" / "v.npz")
+    np.testing.assert_array_equal(written, v.values)

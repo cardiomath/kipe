@@ -15,7 +15,13 @@ import kipe
 from kipe._formatting import format_table
 from kipe.estimation import estimate
 from kipe.forward_solver import ForwardSolverError, build_forward_solver
-from kipe.options import StudyFileError, StudyOptions, load_study, study_schema
+from kipe.options import (
+    StudyFileError,
+    StudyOptions,
+    estimation_directory,
+    load_study,
+    study_schema,
+)
 from kipe.parameters import build_parameterization
 from kipe.plot import (
     PlotError,
@@ -69,6 +75,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="estimate the parameters from the measurement data",
     )
     estimation.add_argument("study", type=Path, help="study file (YAML)")
+    estimation.add_argument(
+        "--realization",
+        type=int,
+        metavar="R",
+        help="estimate from the data of noise realization R only (synthesis.realizations); "
+        "default: all, one after the other",
+    )
     _add_log_level_argument(estimation)
     estimation.set_defaults(func=_estimation)
 
@@ -87,6 +100,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--truth",
         action="store_true",
         help="draw the nominal parameters of the first study's forward solver as reference",
+    )
+    plot.add_argument(
+        "--realization",
+        type=int,
+        metavar="R",
+        help="plot the estimation of noise realization R, for studies with several",
     )
     plot.add_argument("--save", type=Path, metavar="FILE", help="save the figure, don't show it")
     plot.add_argument(
@@ -251,17 +270,25 @@ def _synthesis(args: argparse.Namespace) -> None:
 
 
 def _estimation(args: argparse.Namespace) -> None:
-    """Estimate the parameters of the study.
+    """Estimate the parameters of the study, from one or each of its noise realizations.
 
     Args:
         args: parsed command line arguments, with the path to the study file
     """
     study = _load_study(args.study)
-    log_file = Path(study.output.path) / "estimation" / "kipe.log"
-    _setup_logging(args.log_level or study.output.log_level, log_file)
-    logging.getLogger("kipe").info("%-11s%s", "study", args.study.resolve())
-    estimate(study)
-    logging.getLogger("kipe").info("%-11s%s", "log", log_file)
+    if args.realization is None:
+        realizations = range(study.synthesis.realizations)
+    else:
+        realizations = range(args.realization, args.realization + 1)
+
+    for r in realizations:
+        log_file = estimation_directory(study, r) / "kipe.log"
+        _setup_logging(args.log_level or study.output.log_level, log_file)
+        logging.getLogger("kipe").info("%-11s%s", "study", args.study.resolve())
+        if study.synthesis.realizations > 1:
+            logging.getLogger("kipe").info("%-11s%d", "realization", r)
+        estimate(study, realization=r)
+        logging.getLogger("kipe").info("%-11s%s", "log", log_file)
 
 
 def _plot(args: argparse.Namespace) -> None:
@@ -272,8 +299,14 @@ def _plot(args: argparse.Namespace) -> None:
 
     """
     studies = [_load_study(path) for path in args.studies]
+    for path, study in zip(args.studies, studies, strict=True):
+        if args.realization is None and study.synthesis.realizations > 1:
+            raise StudyFileError(
+                f"{path} has {study.synthesis.realizations} noise realizations: choose one "
+                "with --realization"
+            )
     paths = {
-        str(path): Path(study.output.path) / "estimation" / "history.csv"
+        str(path): estimation_directory(study, args.realization or 0) / "history.csv"
         for path, study in zip(args.studies, studies, strict=True)
     }
 

@@ -5,8 +5,10 @@ it runs with its nominal parameters through all measurement times (``run``), or 
 states from the checkpoints of an earlier run (``checkpoints``). At each time, the observation
 operator gives the predicted data and noise is added: the measurement's
 ``noise.stddev``, or ``synthesis.noise`` where given (e.g., none, for noise-free data). The
-resulting measurements are written to their ``data`` files, and returned. The provenance of the
-run is written to ``<output.path>/synthesis/`` (:mod:`kipe.provenance`).
+resulting measurements are written to their ``data`` files, and returned. With several noise
+realizations (``synthesis.realizations``), the true state is computed once, and each
+realization gets its own noise and data files. The provenance of the run is written to
+``<output.path>/synthesis/`` (:mod:`kipe.provenance`).
 
 In parallel, each rank generates the entries of the data it holds (``global_indices``); the
 noise of an entry depends only on its position, so the data do not depend on the number of
@@ -45,13 +47,15 @@ from kipe.options import (
     StudyFileError,
     StudyOptions,
     SynthesisOptions,
+    TruthOptions,
+    data_path,
 )
 from kipe.provenance import recorded_run
 
 logger = logging.getLogger(__name__)
 
 
-def synthesize(study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD) -> list[Measurement]:
+def synthesize(study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD) -> list[list[Measurement]]:
     """Generate the data of all measurements of the study; write them and the provenance.
 
     Args:
@@ -59,7 +63,8 @@ def synthesize(study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD) -> list[Mea
         comm: communicator over which the model state is distributed
 
     Returns:
-        the generated measurements, with this rank's entries of their data
+        the generated measurements of each noise realization, with this rank's entries of
+        their data: ``synthesize(study)[r][i]`` is measurement i of realization r
 
     Raises:
         StudyFileError: if a measurement lacks what synthesis needs, or observes a field the
@@ -75,78 +80,165 @@ def synthesize(study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD) -> list[Mea
         for name, options in study.measurements.items()
     }
 
+    stddevs = {
+        name: _added_stddev(name, options, study.synthesis)
+        for name, options in study.measurements.items()
+    }
+
     output = Path(study.output.path) / "synthesis"
     with recorded_run(output, study, comm=comm):
-        logger.info("synthesis")
-        logger.info("  %-16s%s", "forward solver", study.forward_solver.factory)
-        truth = study.synthesis.truth
-        if isinstance(truth, CheckpointsTruthOptions):
-            logger.info("  %-16s%s at %s", "truth", truth.type, truth.path)
-        else:
-            logger.info("  %-16s%s", "truth", truth.type)
-        logger.info("")
-        stddevs = {
-            name: _added_stddev(name, options, study.synthesis)
-            for name, options in study.measurements.items()
+        _log_plan(study, stddevs)
+        times = {name: _times(name, o) for name, o in study.measurements.items()}
+        seeds = {
+            name: _seed(name, o) for name, o in study.measurements.items() if stddevs[name] > 0
         }
-        rows = [("measurement", "fields", "σ", "seed")]
-        for name, options in study.measurements.items():
-            seed = "" if options.noise.seed is None else str(options.noise.seed)
-            sigma = f"{stddevs[name]:g}"
-            if stddevs[name] != options.noise.stddev:
-                sigma += f" (assumes {options.noise.stddev:g})"
-            rows.append((name, ", ".join(options.fields), sigma, seed))
-        for line in format_table(rows, "<<>>"):
-            logger.info("  %s", line)
+        noise_free = _noise_free(study.synthesis.truth, solver, times, operators)
 
-        match study.synthesis.truth:
-            case RunTruthOptions():
-                measurements = _generate_from_run(solver, study.measurements, operators, stddevs)
-            case CheckpointsTruthOptions(path=path):
-                measurements = _generate_from_checkpoints(
-                    solver, path, study.measurements, operators, stddevs
-                )
-            case _:
-                assert_never(study.synthesis.truth)
+        realizations = []
+        for r in range(study.synthesis.realizations):
+            measurements = _realization(study, r, operators, times, noise_free, stddevs, seeds)
+            for measurement in measurements:
+                _write(data_path(study.measurements[measurement.name], r), measurement, comm)
+            realizations.append(measurements)
 
-        for measurement in measurements:
-            path = study.measurements[measurement.name].data.path
-            _write(path, measurement, comm)
-            logger.info(
-                "wrote %s: %d times to %s", measurement.name, len(measurement.times), path
-            )
+        _log_written(study, times)
         logger.info("%-11s%.3g s", "run time", time.perf_counter() - started)
 
-    return measurements
+    return realizations
 
 
-def _generate_from_run(
+def _log_plan(study: StudyOptions, stddevs: Mapping[str, float]) -> None:
+    """Log what synthesis does: the solver, the truth, the realizations and the measurements.
+
+    Args:
+        study: the study options, with measurements
+        stddevs: standard deviations of the noise added to each measurement's data
+    """
+    assert study.measurements is not None
+    logger.info("synthesis")
+    logger.info("  %-16s%s", "forward solver", study.forward_solver.factory)
+    truth = study.synthesis.truth
+    if isinstance(truth, CheckpointsTruthOptions):
+        logger.info("  %-16s%s at %s", "truth", truth.type, truth.path)
+    else:
+        logger.info("  %-16s%s", "truth", truth.type)
+    if study.synthesis.realizations > 1:
+        logger.info("  %-16s%d", "realizations", study.synthesis.realizations)
+    logger.info("")
+
+    rows = [("measurement", "fields", "σ", "seed")]
+    for name, options in study.measurements.items():
+        seed = "" if options.noise.seed is None else str(options.noise.seed)
+        sigma = f"{stddevs[name]:g}"
+        if stddevs[name] != options.noise.stddev:
+            sigma += f" (assumes {options.noise.stddev:g})"
+        rows.append((name, ", ".join(options.fields), sigma, seed))
+    for line in format_table(rows, "<<>>"):
+        logger.info("  %s", line)
+
+
+def _log_written(study: StudyOptions, times: Mapping[str, NDArray_f64]) -> None:
+    """Log where the data of each measurement went.
+
+    Args:
+        study: the study options, with measurements
+        times: the times of each measurement
+    """
+    assert study.measurements is not None
+    n = study.synthesis.realizations
+    each = f"{n} realizations of " if n > 1 else ""
+    for name, options in study.measurements.items():
+        logger.info(
+            "wrote %s: %s%d times to %s", name, each, len(times[name]), options.data.path
+        )
+
+
+def _noise_free(
+    truth: TruthOptions,
     solver: ForwardSolver,
-    options: Mapping[str, MeasurementOptions],
+    times: Mapping[str, NDArray_f64],
     operators: Mapping[str, ObservationOperator],
+) -> dict[str, NDArray_f64]:
+    """Return the noise-free data of the measurements, from the source of the truth.
+
+    Args:
+        truth: the source of the true state, ``synthesis.truth``
+        solver: the forward solver
+        times: the times of each measurement
+        operators: the observation operators of the measurements
+
+    Returns:
+        this rank's entries of each measurement's noise-free data, one row per time
+    """
+    match truth:
+        case RunTruthOptions():
+            return _truth_from_run(solver, times, operators)
+        case CheckpointsTruthOptions(path=path):
+            return _truth_from_checkpoints(solver, path, times, operators)
+        case _:
+            assert_never(truth)
+
+
+def _realization(
+    study: StudyOptions,
+    realization: int,
+    operators: Mapping[str, ObservationOperator],
+    times: Mapping[str, NDArray_f64],
+    noise_free: Mapping[str, NDArray_f64],
     stddevs: Mapping[str, float],
+    seeds: Mapping[str, int],
 ) -> list[Measurement]:
-    """Generate the data by running the solver with its nominal parameters.
+    """Return the measurements of one noise realization.
+
+    Args:
+        study: the study options, with measurements
+        realization: number of the noise realization
+        operators: the observation operators of the measurements
+        times: the times of each measurement
+        noise_free: this rank's entries of each measurement's noise-free data
+        stddevs: standard deviations of the noise added to each measurement's data
+        seeds: noise seeds of the measurements with noise
+
+    Returns:
+        the measurements, in the order of the study, with this rank's entries of their data
+    """
+    assert study.measurements is not None
+    return [
+        Measurement(
+            name,
+            operators[name],
+            times[name],
+            _add_noise(
+                noise_free[name], operators[name], stddevs[name], seeds.get(name), realization
+            ),
+            options.noise.stddev,
+        )
+        for name, options in study.measurements.items()
+    ]
+
+
+def _truth_from_run(
+    solver: ForwardSolver,
+    times: Mapping[str, NDArray_f64],
+    operators: Mapping[str, ObservationOperator],
+) -> dict[str, NDArray_f64]:
+    """Return the noise-free data from a run of the solver with its nominal parameters.
 
     Args:
         solver: the forward solver
-        options: the measurement options: times, noise seed, assumed noise
+        times: the times of each measurement
         operators: the observation operators of the measurements
-        stddevs: standard deviations of the noise added to each measurement's data
 
     Returns:
-        the generated measurements
+        this rank's entries of each measurement's noise-free data, one row per time
 
     Raises:
-        StudyFileError: if a measurement lacks times or a noise seed, or a measurement time is
-            before the solver's start time
+        StudyFileError: if a measurement time is before the solver's start time
     """
-    times = {name: _times(name, o) for name, o in options.items()}
-    seeds = {name: _seed(name, o) for name, o in options.items() if stddevs[name] > 0}
-    values: dict[str, list[NDArray_f64]] = {name: [] for name in options}
+    values: dict[str, list[NDArray_f64]] = {name: [] for name in times}
 
     t, state = solver.initial_state()
-    for t_k, name, k in _events(times):
+    for t_k, name, _ in _events(times):
         if t_k < t - _tol(t):
             raise StudyFileError(f"measurements.{name}: time {t_k} is before the start {t}")
         elif t_k > t + _tol(t):
@@ -156,33 +248,32 @@ def _generate_from_run(
             # same time (up to round-off): sample the current state, no solver call
             pass
 
-        values[name].append(_observe(operators[name], state, stddevs[name], seeds.get(name), k))
+        values[name].append(operators[name](state))
 
-    return _measurements(options, operators, times, values)
+    return {name: np.array(v) for name, v in values.items()}
 
 
-def _generate_from_checkpoints(
+def _truth_from_checkpoints(
     solver: ForwardSolver,
     path: str,
-    options: Mapping[str, MeasurementOptions],
+    times: Mapping[str, NDArray_f64],
     operators: Mapping[str, ObservationOperator],
-    stddevs: Mapping[str, float],
-) -> list[Measurement]:
-    """Generate the data from the checkpoints of an earlier run, read at the measurement times.
+) -> dict[str, NDArray_f64]:
+    """Return the noise-free data from the checkpoints of an earlier run, read at the
+    measurement times.
 
     Args:
         solver: the forward solver, which must read checkpoints
         path: location of the checkpoints
-        options: the measurement options: times, noise seed, assumed noise
+        times: the times of each measurement
         operators: the observation operators of the measurements
-        stddevs: standard deviations of the noise added to each measurement's data
 
     Returns:
-        the generated measurements
+        this rank's entries of each measurement's noise-free data, one row per time
 
     Raises:
-        StudyFileError: if the solver cannot read checkpoints, a measurement lacks times or a
-            noise seed, or a checkpoint is missing or lacks a field a measurement observes
+        StudyFileError: if the solver cannot read checkpoints, or a checkpoint is missing or
+            lacks a field a measurement observes
     """
     if not isinstance(solver, SupportsCheckpoints):
         raise StudyFileError(
@@ -190,13 +281,11 @@ def _generate_from_checkpoints(
             "(it has no read_checkpoint)"
         )
 
-    times = {name: _times(name, o) for name, o in options.items()}
-    seeds = {name: _seed(name, o) for name, o in options.items() if stddevs[name] > 0}
-    values: dict[str, list[NDArray_f64]] = {name: [] for name in options}
+    values: dict[str, list[NDArray_f64]] = {name: [] for name in times}
 
     t: float | None = None
     state: State = {}
-    for t_k, name, k in _events(times):
+    for t_k, name, _ in _events(times):
         if t is None or abs(t_k - t) > _tol(t):  # a new time: read its checkpoint
             try:
                 state = solver.read_checkpoint(path, t_k)
@@ -210,9 +299,9 @@ def _generate_from_checkpoints(
                 f"measurements.{name}: the checkpoint at t = {t_k:g} has no field "
                 f"{', '.join(missing)}"
             )
-        values[name].append(_observe(operators[name], state, stddevs[name], seeds.get(name), k))
+        values[name].append(operators[name](state))
 
-    return _measurements(options, operators, times, values)
+    return {name: np.array(v) for name, v in values.items()}
 
 
 def _events(times: Mapping[str, NDArray_f64]) -> Iterator[tuple[float, str, int]]:
@@ -229,53 +318,39 @@ def _events(times: Mapping[str, NDArray_f64]) -> Iterator[tuple[float, str, int]
     return iter(sorted(events, key=lambda event: event[0]))
 
 
-def _observe(
-    operator: ObservationOperator, state: State, stddev: float, seed: int | None, k: int
+def _add_noise(
+    values: NDArray_f64,
+    operator: ObservationOperator,
+    stddev: float,
+    seed: int | None,
+    realization: int,
 ) -> NDArray_f64:
-    """Return this rank's entries of the data of a measurement at its k-th time.
+    """Return a measurement's data of one noise realization: the noise-free data plus noise.
 
-    The noise of the k-th time is drawn from ``numpy.random.default_rng([seed, k])``; none is
-    drawn without a seed (standard deviation 0).
+    The noise at the k-th time of realization r is drawn from
+    ``numpy.random.default_rng([seed, k, r])``, which is ``default_rng([seed, k])`` for r = 0:
+    NumPy's seed sequence ignores trailing zeros. None is drawn without a seed (standard
+    deviation 0).
 
     Args:
+        values: this rank's entries of the noise-free data, one row per time
         operator: the observation operator of the measurement
-        state: the true state at the k-th time
         stddev: standard deviation of the added noise
         seed: noise seed of the measurement, ``None`` for no noise
-        k: index of the time in the measurement's times
+        realization: number of the noise realization
 
     Returns:
-        the predicted data plus noise, at the positions ``operator.global_indices``
+        the data, at the positions ``operator.global_indices``
     """
-    z = operator(state)
-    if seed is not None:
+    if seed is None:
+        return values.copy()
+
+    noisy = np.empty_like(values)
+    for k, z in enumerate(values):
         # the noise of all entries, the same on every rank; each keeps those it holds
-        noise = np.random.default_rng([seed, k]).normal(0.0, stddev, operator.size)
-        z = z + noise[operator.global_indices]
-    return z
-
-
-def _measurements(
-    options: Mapping[str, MeasurementOptions],
-    operators: Mapping[str, ObservationOperator],
-    times: Mapping[str, NDArray_f64],
-    values: Mapping[str, list[NDArray_f64]],
-) -> list[Measurement]:
-    """Return the generated measurements.
-
-    Args:
-        options: the measurement options, for the assumed noise
-        operators: the observation operators of the measurements
-        times: the times of each measurement
-        values: this rank's entries of the data of each measurement, one array per time
-
-    Returns:
-        the measurements, in the order of the options
-    """
-    return [
-        Measurement(name, operators[name], times[name], np.array(values[name]), o.noise.stddev)
-        for name, o in options.items()
-    ]
+        noise = np.random.default_rng([seed, k, realization]).normal(0.0, stddev, operator.size)
+        noisy[k] = z + noise[operator.global_indices]
+    return noisy
 
 
 def _write(path: str, measurement: Measurement, comm: MPI.Comm) -> None:

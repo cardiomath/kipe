@@ -1,5 +1,8 @@
 """The ``measurements`` and ``synthesis`` sections of the study file."""
 
+import re
+from pathlib import Path
+
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
@@ -10,9 +13,12 @@ from kipe.options import (
     MeasurementOptions,
     MeshSamplingOptions,
     RunTruthOptions,
+    StudyFileError,
     StudyOptions,
     SynthesisNoiseOptions,
     TimeRange,
+    data_path,
+    estimation_directory,
 )
 
 BASE = {
@@ -144,3 +150,49 @@ def test_mesh_sampling():
 def test_invalid_mesh_sampling(options, message):
     with pytest.raises(ValidationError, match=message):
         _mesh_sampling(**options)
+
+
+PER_REALIZATION = MEASUREMENT | {"data": {"type": "numpy", "path": "data/r{realization}/v.npz"}}
+
+
+@pytest.mark.parametrize(
+    ("path", "realizations"),
+    [("data/v.npz", 1), ("data/r{realization}/v.npz", 1), ("data/v_{realization:02d}.npz", 30)],
+)
+def test_data_path_placeholder(path, realizations):
+    v = MEASUREMENT | {"data": {"type": "numpy", "path": path}}
+    study = _study({"v": v}, synthesis={"realizations": realizations})
+    assert data_path(study.measurements["v"], 7) == path.format(realization=7)
+
+
+@pytest.mark.parametrize(
+    ("path", "realizations", "message"),
+    [
+        ("data/v.npz", 3, "needs the placeholder {realization}: with 3 realizations"),
+        ("data/{seed}/v.npz", 1, "the only placeholder is {realization}"),
+        ("data/{realization/v.npz", 3, "expected '}' before end of string"),
+    ],
+)
+def test_invalid_data_path_placeholder(path, realizations, message):
+    v = MEASUREMENT | {"data": {"type": "numpy", "path": path}}
+    with pytest.raises(ValidationError, match=re.escape(message)):
+        _study({"v": v}, synthesis={"realizations": realizations})
+
+
+@pytest.mark.parametrize(
+    ("realizations", "realization", "directory"),
+    [
+        (1, 0, "results/estimation"),
+        (3, 2, "results/estimation/r2"),
+        (11, 7, "results/estimation/r07"),
+    ],
+)
+def test_estimation_directory(realizations, realization, directory):
+    study = _study({"v": PER_REALIZATION}, synthesis={"realizations": realizations})
+    assert estimation_directory(study, realization) == Path(directory)
+
+
+def test_estimation_directory_of_a_missing_realization():
+    study = _study({"v": PER_REALIZATION}, synthesis={"realizations": 3})
+    with pytest.raises(StudyFileError, match="realization 3: the study has realizations 0 to 2"):
+        estimation_directory(study, 3)
