@@ -67,6 +67,7 @@ Commands
 ``kipe estimation study.yaml``       estimate the parameters (also ``kipe estimate``)
 ``kipe plot study.yaml``             plot the estimation history, also while it runs
 ``kipe list-parameters study.yaml``  show the solver's parameters and the selected ones
+``kipe list-fields study.yaml``      show the solver's state fields, which measurements observe
 ``kipe schema``                      print the JSON schema of the study file, for editors
 ==================================== =========================================================
 

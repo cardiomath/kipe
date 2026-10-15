@@ -15,10 +15,11 @@ model:
    :start-at: measurements:
    :end-before: synthesis:
 
-A measurement names the state ``fields`` it observes (an unknown name gives an error that lists
-the solver's fields), its ``times``, where its ``data`` are, its ``noise``, and how the fields
-are brought to the measurement locations (``spatial_sampling``). :doc:`study_file` lists all
-keys of ``measurements.<name>``; this page explains how they work together.
+A measurement names the state ``fields`` it observes, its ``times``, where its ``data`` are, its
+``noise``, and how the fields are brought to the measurement locations (``spatial_sampling``).
+``kipe list-fields study.yaml`` lists the solver's fields, with their kind, size and, for a
+FEniCSx solver, their function space. :doc:`study_file` lists all keys of
+``measurements.<name>``; this page explains how they work together.
 
 From the model state to the data
 --------------------------------

@@ -47,6 +47,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     list_parameters.add_argument("study", type=Path, help="study file (YAML)")
     list_parameters.set_defaults(func=_list_parameters)
 
+    list_fields = subparsers.add_parser(
+        "list-fields",
+        help="list the state fields of the forward solver, which measurements can observe",
+    )
+    list_fields.add_argument("study", type=Path, help="study file (YAML)")
+    list_fields.set_defaults(func=_list_fields)
+
     synthesis = subparsers.add_parser(
         "synthesis",
         aliases=["synthesize"],
@@ -186,6 +193,47 @@ def _list_parameters(args: argparse.Namespace) -> None:
 
     for line in format_table(rows):
         print(line)
+
+
+def _list_fields(args: argparse.Namespace) -> None:
+    """Print the solver's state fields: their kind, global size and, for a FEniCSx solver, the
+    element of their function space.
+
+    The sizes are global, the same on any number of ranks; rank 0 prints.
+
+    Args:
+        args: parsed command line arguments, with the path to the study file
+    """
+    study = _load_study(args.study)
+    solver = build_forward_solver(study.forward_solver)
+    comm = MPI.COMM_WORLD
+
+    # Only a FEniCSx solver has function spaces: import the backend for it only
+    spaces: dict[str, str] = {}
+    if callable(getattr(solver, "function_space", None)):
+        from kipe.fenicsx.forward_solver import SupportsFunctionSpaces, describe_function_space
+
+        if isinstance(solver, SupportsFunctionSpaces):
+            spaces = {
+                name: describe_function_space(solver.function_space(name))
+                for name, spec in solver.state_spec.items()
+                if spec.kind == "distributed"
+            }
+
+    rows: list[tuple[str, ...]] = [("field", "kind", "size", "space")]
+    for name, spec in solver.state_spec.items():
+        if spec.kind == "distributed":
+            size = comm.allreduce(spec.local_size)
+        else:
+            size = spec.local_size
+        rows.append((name, spec.kind, str(size), spaces.get(name, "")))
+
+    if not spaces:
+        rows = [row[:3] for row in rows]
+
+    if comm.rank == 0:
+        for line in format_table(rows, align="<<><"[: len(rows[0])]):
+            print(line)
 
 
 def _synthesis(args: argparse.Namespace) -> None:

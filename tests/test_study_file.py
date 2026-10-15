@@ -1,5 +1,5 @@
-"""Loading a study file, constructing the forward solver, ``kipe list-parameters`` and
-``kipe schema``."""
+"""Loading a study file, constructing the forward solver, ``kipe list-parameters``,
+``kipe list-fields`` and ``kipe schema``."""
 
 import json
 import sys
@@ -153,6 +153,22 @@ parameters:
     assert lines[3].split() == [
         "c", "2.5", "multiplicative", "3", "0.5", "(relative)", "[1.5,", "4.5]"
     ]  # fmt: skip
+
+
+def test_list_fields(tmp_path, capsys):
+    study = StudyOptions(
+        output=OutputOptions(path=str(tmp_path / "results")),
+        forward_solver=ForwardSolverOptions("kipe.examples.fitzhugh_nagumo:Solver"),
+    )
+    dump_study(study, tmp_path / "study.yaml")
+
+    assert main(["list-fields", str(tmp_path / "study.yaml")]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert [line.split() for line in lines] == [
+        ["field", "kind", "size"],
+        ["v", "replicated", "1"],
+        ["w", "replicated", "1"],
+    ]
 
 
 def test_list_parameters_reports_errors(tmp_path, capsys):
