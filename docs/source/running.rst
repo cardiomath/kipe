@@ -38,6 +38,27 @@ sections:
 in the study file and in the solver's ``arguments``, are relative to the directory kipe runs in,
 not to the study file.
 
+Editor support
+^^^^^^^^^^^^^^
+
+``kipe schema`` prints the JSON schema of the study file. With it, an editor completes the keys,
+shows their documentation and marks invalid options while you type:
+
+.. code-block:: bash
+
+    kipe schema > study.schema.json
+
+and as the first line of the study file:
+
+.. code-block:: yaml
+
+    # yaml-language-server: $schema=study.schema.json
+
+This works in editors that use the YAML language server, e.g., VS Code with Red Hat's YAML
+extension, or Neovim and Helix with ``yaml-language-server``. The path is relative to the study
+file. The schema belongs to the installed kipe version: generate it again after an update.
+The example study files have this line already, with the schema in ``examples/``.
+
 Commands
 --------
 
@@ -46,6 +67,7 @@ Commands
 ``kipe estimation study.yaml``       estimate the parameters (also ``kipe estimate``)
 ``kipe plot study.yaml``             plot the estimation history, also while it runs
 ``kipe list-parameters study.yaml``  show the solver's parameters and the selected ones
+``kipe schema``                      print the JSON schema of the study file, for editors
 ==================================== =========================================================
 
 ``synthesis`` and ``estimation`` take ``--log-level``, which overrides ``output.log_level`` on
