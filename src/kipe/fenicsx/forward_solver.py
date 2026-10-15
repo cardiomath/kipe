@@ -4,10 +4,12 @@ kipe exchanges states with the solver as numpy arrays. Samplers on meshes (``fen
 the array of a field back into a ``dolfinx.fem.Function``, for which they need the field's
 function space: the solver provides it with :meth:`SupportsFunctionSpaces.function_space`.
 A solver without it can still be used with ``array`` measurements.
+:func:`describe_function_space` describes such a space briefly, for ``kipe list-fields``.
 """
 
 from typing import Protocol, runtime_checkable
 
+import basix.ufl
 from dolfinx import fem
 
 
@@ -28,3 +30,43 @@ class SupportsFunctionSpaces(Protocol):
             the function space
         """
         ...
+
+
+def describe_function_space(space: fem.FunctionSpace) -> str:
+    """Describe the element of a function space in a few characters, for ``kipe list-fields``.
+
+    Examples: ``P1``, ``DG0``, ``P2, vector 3``, ``P1, tensor 3x3``, ``N1E1, vector 3``,
+    ``mixed: P2, vector 3 + P1``.
+
+    Args:
+        space: the function space
+
+    Returns:
+        the element family and degree, ``DG`` for discontinuous Lagrange, and the value shape
+        of a non-scalar element; the sub-elements of a mixed element
+    """
+    return _describe_element(space.ufl_element())
+
+
+def _describe_element(element: basix.ufl._ElementBase) -> str:
+    """Describe an element, see :func:`describe_function_space`.
+
+    Args:
+        element: the element
+
+    Returns:
+        the description
+    """
+    if element.is_mixed:
+        return "mixed: " + " + ".join(map(_describe_element, element.sub_elements))
+
+    family = element.family_name
+    if family == "P" and element.discontinuous:
+        family = "DG"
+    description = f"{family}{element.degree}"
+
+    shape = element.reference_value_shape
+    if not shape:
+        return description
+    kind = "vector" if len(shape) == 1 else "tensor"
+    return f"{description}, {kind} {'x'.join(map(str, shape))}"
