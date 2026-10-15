@@ -53,6 +53,30 @@ runs the filter.
        data --> estimation
        estimation --> history[/"estimation history"/]
 
+Source-derived dependencies
+---------------------------
+
+The conceptual diagram above shows how a study flows through kipe. These generated diagrams
+instead show imports between Python modules; they are derived from the source code by
+``scripts/generate_diagrams.py``.
+
+.. figure:: _static/diagrams/dependencies-core.svg
+   :alt: Dependencies between modules in the core kipe package.
+   :align: center
+
+   Core package module dependencies.
+
+The optional FEniCSx backend has a separate graph to keep the core view readable.
+
+.. figure:: _static/diagrams/dependencies-fenicsx.svg
+   :alt: Dependencies between modules in the optional kipe.fenicsx backend.
+   :align: center
+
+   FEniCSx backend module dependencies.
+
+Regenerate these diagrams locally with ``python scripts/generate_diagrams.py`` before building
+the documentation.
+
 The forward solver
 ------------------
 

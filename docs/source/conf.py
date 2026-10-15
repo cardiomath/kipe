@@ -6,9 +6,10 @@ from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _version
 from pathlib import Path
 
-from sphinx.ext.apidoc import main as apidoc_main
-
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+
+from scripts.generate_api import generate_api  # ruff: ignore[module-import-not-at-top-of-file]
 
 project = "kipe"
 author = "kipe contributors"
@@ -39,15 +40,7 @@ autodoc_mock_imports = ["mpi4py", "dolfinx", "ufl", "petsc4py", "basix"]
 
 def _generate_api(app):
     """Generate the API pages from the package, so none are maintained by hand."""
-    out = Path(app.srcdir) / "_apidoc"
-    apidoc_main([
-        "--force",
-        "--separate",
-        "--module-first",
-        "-o",
-        str(out),
-        str(ROOT / "src" / "kipe"),
-    ])
+    generate_api(Path(app.srcdir), ROOT / "src" / "kipe")
 
 
 def _generate_study_reference(app):
