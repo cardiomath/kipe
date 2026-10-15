@@ -60,24 +60,19 @@ The conceptual diagram above shows how a study flows through kipe. These generat
 instead show imports between Python modules; they are derived from the source code by
 ``scripts/generate_diagrams.py``.
 
-.. figure:: _static/diagrams/dependencies-core.svg
+.. mermaid:: _static/diagrams/dependencies-core.mmd
    :alt: Dependencies between modules in the core kipe package.
-   :align: center
-
-   Core package module dependencies.
+   :caption: Core package module dependencies.
 
 The optional FEniCSx backend has a separate graph to keep the core view readable.
 
-.. figure:: _static/diagrams/dependencies-fenicsx.svg
+.. mermaid:: _static/diagrams/dependencies-fenicsx.mmd
    :alt: Dependencies between modules in the optional kipe.fenicsx backend.
-   :align: center
-
-   FEniCSx backend module dependencies.
+   :caption: FEniCSx backend module dependencies.
 
 Regenerate these diagrams locally with ``python scripts/generate_diagrams.py`` before building
-the documentation. This requires the docs extra (which provides Pyreverse) and the Graphviz
-``dot`` executable; install Graphviz separately, for example with ``brew install graphviz`` on
-macOS or ``sudo apt install graphviz`` on Debian and Ubuntu.
+the documentation. The docs extra provides Pyreverse; Sphinx renders the generated Mermaid
+source using the existing Mermaid extension.
 
 The forward solver
 ------------------

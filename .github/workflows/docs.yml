@@ -24,10 +24,6 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - name: Install Graphviz
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes graphviz
       - name: Install project and docs dependencies
         run: pip install -e ".[docs]"
       - name: Generate UML diagrams

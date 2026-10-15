@@ -30,6 +30,7 @@ examples/**/results/
 docs/build/
 docs/source/_apidoc/
 docs/source/_generated/
+docs/source/_static/diagrams/*.mmd
 docs/source/_static/diagrams/*.svg
 docs/_build/
 

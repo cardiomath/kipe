@@ -39,7 +39,7 @@ def class_modules(package_root: Path = PACKAGE_ROOT) -> list[tuple[str, Path]]:
 
 
 def _run_pyreverse(
-    sources: list[Path], project: str, output_dir: Path, *, ignore_examples: bool = False
+    sources: list[Path], project: str, output_dir: Path, *, ignore: str | None = None
 ) -> None:
     command = [
         "pyreverse",
@@ -49,7 +49,7 @@ def _run_pyreverse(
         "1",
         "--colorized",
         "--output",
-        "svg",
+        "mmd",
         "--project",
         project,
         "--source-roots",
@@ -57,8 +57,8 @@ def _run_pyreverse(
         "--output-directory",
         str(output_dir),
     ]
-    if ignore_examples:
-        command.extend(["--ignore", "examples,__pycache__"])
+    if ignore:
+        command.extend(["--ignore", ignore])
     command.extend(str(source) for source in sources)
     try:
         subprocess.run(command, check=True)
@@ -71,27 +71,22 @@ def _run_pyreverse(
 
 
 def _require_tools() -> None:
-    missing = [tool for tool in ("pyreverse", "dot") if shutil.which(tool) is None]
-    if missing:
-        raise SystemExit(
-            f"Missing required diagram tool(s): {', '.join(missing)}. "
-            "Install the docs dependencies and Graphviz."
-        )
+    if shutil.which("pyreverse") is None:
+        raise SystemExit("Pyreverse is missing. Install the docs dependencies.")
 
 
 def generate_diagrams(
     package_root: Path = PACKAGE_ROOT, output_dir: Path = DIAGRAMS_DIR
 ) -> list[Path]:
-    """Generate class diagrams and core/backend module dependency diagrams.
+    """Generate Mermaid class diagrams and core/backend module dependency diagrams.
 
     Returns:
-        Paths to the generated SVG files.
+        Paths to the generated Mermaid source files.
     """
     _require_tools()
     sources = class_modules(package_root)
-    core_sources = sorted(package_root.glob("*.py"))
     backend_root = package_root / "fenicsx"
-    if not core_sources or not backend_root.is_dir():
+    if not package_root.is_dir() or not backend_root.is_dir():
         raise RuntimeError(f"Expected KIPE source package at {package_root}.")
 
     with tempfile.TemporaryDirectory(prefix="kipe-diagrams-") as temporary:
@@ -101,29 +96,29 @@ def generate_diagrams(
         for module, source in sources:
             project = f"class_{module.replace('.', '_')}"
             _run_pyreverse([source], project, temporary_dir)
-            diagram = temporary_dir / f"classes_{project}.svg"
+            diagram = temporary_dir / f"classes_{project}.mmd"
             if not diagram.is_file():
                 raise RuntimeError(f"Pyreverse did not generate the class diagram for {module}.")
-            generated[f"class-{module}.svg"] = diagram
+            generated[f"class-{module}.mmd"] = diagram
 
-        for project, package_sources, ignores in (
-            ("kipe_core", core_sources, True),
-            ("kipe_fenicsx", [backend_root], True),
+        for project, package_sources, ignore in (
+            ("kipe_core", [package_root], "examples,fenicsx,__pycache__"),
+            ("kipe_fenicsx", [backend_root], "examples,__pycache__"),
         ):
-            _run_pyreverse(package_sources, project, temporary_dir, ignore_examples=ignores)
-            diagram = temporary_dir / f"packages_{project}.svg"
+            _run_pyreverse(package_sources, project, temporary_dir, ignore=ignore)
+            diagram = temporary_dir / f"packages_{project}.mmd"
             if not diagram.is_file():
                 raise RuntimeError(
                     f"Pyreverse did not generate the dependency diagram for {project}."
                 )
-            generated[f"dependencies-{project.removeprefix('kipe_')}.svg"] = diagram
+            generated[f"dependencies-{project.removeprefix('kipe_')}.mmd"] = diagram
 
         output_dir.mkdir(parents=True, exist_ok=True)
         expected_names = set(generated)
         for name, source in generated.items():
             shutil.copyfile(source, output_dir / name)
-        for stale in output_dir.glob("*.svg"):
-            if stale.name not in expected_names:
+        for stale in (*output_dir.glob("*.svg"), *output_dir.glob("*.mmd")):
+            if stale.suffix == ".svg" or stale.name not in expected_names:
                 stale.unlink()
 
     return [output_dir / name for name in sorted(generated)]
@@ -132,7 +127,7 @@ def generate_diagrams(
 def main() -> None:
     """Generate all documentation diagrams."""
     diagrams = generate_diagrams()
-    print(f"Generated {len(diagrams)} SVG diagrams in {DIAGRAMS_DIR}.")
+    print(f"Generated {len(diagrams)} Mermaid diagrams in {DIAGRAMS_DIR}.")
 
 
 if __name__ == "__main__":

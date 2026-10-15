@@ -1,4 +1,4 @@
-"""Generate Sphinx API pages and add corresponding class diagrams."""
+"""Generate Sphinx API pages and add corresponding Mermaid class diagrams."""
 
 import os
 from pathlib import Path
@@ -9,7 +9,7 @@ DIAGRAMS_DIR = ROOT / "docs" / "source" / "_static" / "diagrams"
 
 
 def insert_class_diagram(page: Path, module: str, diagram: Path) -> None:
-    """Insert a class diagram before a generated module's API details."""
+    """Insert a Mermaid class diagram before a generated module's API details."""
     content = page.read_text(encoding="utf-8")
     marker = f".. Generated class diagram for ``{module}``."
     if marker in content:
@@ -18,10 +18,9 @@ def insert_class_diagram(page: Path, module: str, diagram: Path) -> None:
     image_path = Path(os.path.relpath(diagram, page.parent)).as_posix()
     directive = (
         f"{marker}\n\n"
-        f".. figure:: {image_path}\n"
+        f".. mermaid:: {image_path}\n"
         f"   :alt: UML class diagram for {module}, showing its classes and relationships.\n"
-        "   :align: center\n\n"
-        f"   Class relationships in ``{module}``.\n\n"
+        f"   :caption: Class relationships in ``{module}``.\n\n"
     )
     api_details = content.find(".. automodule::")
     if api_details < 0:
@@ -46,7 +45,7 @@ def generate_api(source_dir: Path, package_root: Path = PACKAGE_ROOT) -> None:
         str(package_root),
     ])
 
-    for diagram in sorted(DIAGRAMS_DIR.glob("class-*.svg")):
+    for diagram in sorted(DIAGRAMS_DIR.glob("class-*.mmd")):
         module = diagram.stem.removeprefix("class-")
         page = api_dir / f"{module}.rst"
         if not page.is_file():
