@@ -317,8 +317,15 @@ the observation :math:`\bs{Z} = \bs{H}\bs{\chi} + \bs{\varepsilon}`,
    \bs{\hat\chi}_+ = \bs{\hat\chi}_- - \bs{L}_\chi \bs{M}
    = \bs{A} \big(\bs{\hat\theta}_- - \bs{L}_\theta \bs{M}\big) = \bs{A} \bs{\hat\theta}_+.
 
-**Several steps.** From the second step on, :math:`\bs{U}^{-1}` is no longer diagonal, and the
-sampling with :math:`\bs{C}`, not :math:`\bs{C}^T`, keeps the sigma points' covariance at
-:math:`\bs{P}_\theta^k`: only then do several steps equal the sequential Kalman filter. The test
-checks this; it is not derived here, and it is the test that tells :math:`\bs{C}` from
-:math:`\bs{C}^T`.
+**Several steps.** Step :math:`k` samples around :math:`\bs{\hat\theta}^{k-1}_+` with
+:math:`\bs{S} = \bs{L}_\theta^{k-1} \bs{C}^{k-1}`, and
+
+.. math::
+
+   \bs{S}\bs{S}^T = \bs{L}_\theta^{k-1} (\bs{U}^{k-1})^{-1} (\bs{L}_\theta^{k-1})^T
+   = \bs{P}_\theta^{k-1}:
+
+the sigma points represent the previous posterior exactly, as those of the first step
+represent the prior. The derivation above then holds for step :math:`k`, with this
+:math:`\bs{S}` and the prior :math:`\mathcal{N}(\bs{\hat\theta}^{k-1}_+, \bs{P}_\theta^{k-1})`:
+each step is a Kalman update, and several steps are the sequential Kalman filter.
