@@ -55,6 +55,9 @@ docs = [
 Homepage = "https://github.com/cardiomath/kipe"
 Issues = "https://github.com/cardiomath/kipe/issues"
 
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
 [tool.hatch.version]
 source = "vcs"
 raw-options = {fallback_version = "0.0.0"}  # without git, e.g., from an archive
