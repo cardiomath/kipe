@@ -10,7 +10,8 @@ pip install -e ".[docs]"
 python -m sphinx -W --keep-going -b html docs/source docs/build/html
 ```
 
-The `sphinx-build` pre-commit hook runs this same build on commits touching `docs/` or `src/`.
+The same build is a manual pre-commit hook, which also opens the result:
+`pre-commit run sphinx-build --all-files --hook-stage manual`.
 
 Open `docs/build/html/index.html` (or `python -m http.server -d docs/build/html`).
 

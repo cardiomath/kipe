@@ -30,7 +30,8 @@ sections:
   nominal values, those of the solver's input. ``kipe list-parameters study.yaml`` shows the
   solver's parameters and the initial 1σ range of the selected ones;
 - ``measurements``: what is measured, when, and where the data are (:doc:`measurements`);
-- ``synthesis``: how ``kipe synthesis`` generates data (:ref:`synthetic-data`);
+- ``synthesis``: how ``kipe synthesis`` generates data (see `Synthetic data: twin
+  experiments`_);
 - ``estimation``: the filter's sigma points and the number of passes over the data.
 
 :doc:`study_file` lists every key, with its type, its default and what it does. Relative paths,
@@ -56,6 +57,41 @@ the console. ``plot`` takes several study files, drawn into one figure, and:
   runs.
 
 ``kipe <command> --help`` shows all options, ``kipe --version`` the version.
+
+.. _synthetic-data:
+
+Synthetic data: twin experiments
+--------------------------------
+
+In a twin experiment, the data come from the model itself, with known parameters. The estimate
+can then be compared with the truth: you learn whether the measurements identify the
+parameters, and how precisely, before you use measured data. ``kipe synthesis`` generates such
+data, and ``kipe estimation`` reads them as it would read measured data.
+
+For each measurement, ``kipe synthesis``
+
+1. takes the true state at the measurement times (``synthesis.truth``): from a run of the
+   forward solver with its nominal parameters, the values of its input (``type: run``, the
+   default), or from the checkpoints of an earlier run (``type: checkpoints``), which may differ
+   from the study's model, e.g., in its time step;
+2. predicts the data from it, with the measurement's observation operator, the same as in the
+   estimation (:doc:`measurements`);
+3. adds noise: with the measurement's ``noise.stddev`` and ``noise.seed``, or the noise
+   ``synthesis.noise`` sets for it, e.g., none;
+4. writes the data to the measurement's ``data.path``, from where ``kipe estimation`` reads
+   them.
+
+Give the estimated parameters an ``initial`` value other than their nominal one: without it, the
+estimation starts from the nominal value, i.e., from the truth, and tests nothing. An example:
+noise-free data from an earlier run of the solver, while the estimation still assumes the
+measurement's noise:
+
+.. code-block:: yaml
+
+    synthesis:
+      truth: {type: checkpoints, path: results/reference}  # the earlier run's output
+      noise:
+        u: {stddev: 0}
 
 Results
 -------
