@@ -37,7 +37,7 @@ The study file
 The study file of the FitzHugh–Nagumo example (:mod:`kipe.examples.fitzhugh_nagumo`) has all
 sections:
 
-.. Maybe comment the FHN study file instead of writing the details here?
+.. DAVID: Maybe comment the FHN study file instead of writing the details here?
 
 
 .. literalinclude:: ../../examples/fitzhugh_nagumo/study.yaml
@@ -58,29 +58,6 @@ sections:
 :doc:`study_file` lists every key, with its type, its default and what it does. Relative paths,
 in the study file and in the solver's ``arguments``, are relative to the directory kipe runs in,
 not to the study file.
-
-Editor support
-^^^^^^^^^^^^^^
-
-.. Maybe just send to the API documentation instead of repeating all the details here?
-
-``kipe schema`` prints the JSON schema of the study file. With it, an editor completes the keys,
-shows their documentation and marks invalid options while you type:
-
-.. code-block:: bash
-
-    kipe schema > study.schema.json
-
-and as the first line of the study file:
-
-.. code-block:: yaml
-
-    # yaml-language-server: $schema=study.schema.json
-
-This works in editors that use the YAML language server, e.g., VS Code with Red Hat's YAML
-extension, or Neovim and Helix with ``yaml-language-server``. The path is relative to the study
-file. The schema belongs to the installed kipe version: generate it again after an update.
-The example study files have this line already, with the schema in ``examples/``.
 
 
 .. _synthetic-data:

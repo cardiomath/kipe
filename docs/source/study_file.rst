@@ -1,5 +1,9 @@
-Study file reference
-====================
+Options reference
+=================
+
+
+Complete study file
+-------------------
 
 All keys of a study file: first as an overview, a commented study file, then section by
 section, each key with its type, its default (or whether it is required) and what it does.
@@ -10,3 +14,28 @@ This page is generated from the study file's options (:mod:`kipe.options`), so i
 exactly what kipe accepts. Unknown keys are an error.
 
 .. include:: _generated/study_file.rst
+
+Editor support
+--------------
+
+.. DAVID: Maybe just send to the API documentation instead of repeating all the details here?
+
+``kipe schema`` prints the JSON schema of the study file. With it, an editor completes the keys,
+shows their documentation and marks invalid options while you type:
+
+.. code-block:: bash
+
+    kipe schema > study.schema.json
+
+and as the first line of the study file:
+
+.. code-block:: yaml
+
+    # yaml-language-server: $schema=study.schema.json
+
+This works in editors that use the YAML language server, e.g., VS Code with Red Hat's YAML
+extension, or Neovim and Helix with ``yaml-language-server``. The path is relative to the study
+file. The schema belongs to the installed kipe version: generate it again after an update.
+The example study files have this line already, with the schema in ``examples/``.
+
+.. DAVID: Would it maybe make sense to add a hook with the schema generation, and a CI checking that the schema committed actually corresponds to the one that is generated from the options class?
