@@ -19,6 +19,9 @@ The study file
 The study file of the FitzHugh–Nagumo example (:mod:`kipe.examples.fitzhugh_nagumo`) has all
 sections:
 
+.. Maybe comment the FHN study file instead of writing the details here?
+
+
 .. literalinclude:: ../../examples/fitzhugh_nagumo/study.yaml
    :language: yaml
 
@@ -41,6 +44,8 @@ not to the study file.
 Editor support
 ^^^^^^^^^^^^^^
 
+.. Maybe just send to the API documentation instead of repeating all the details here?
+
 ``kipe schema`` prints the JSON schema of the study file. With it, an editor completes the keys,
 shows their documentation and marks invalid options while you type:
 
@@ -61,6 +66,8 @@ The example study files have this line already, with the schema in ``examples/``
 
 Commands
 --------
+
+.. Maybe just send to the API documentation instead of repeating all the details here?
 
 ==================================== =========================================================
 ``kipe synthesis study.yaml``        generate the measurement data (also ``kipe synthesize``)
@@ -92,6 +99,10 @@ can then be compared with the truth: you learn whether the measurements identify
 parameters, and how precisely, before you use measured data. ``kipe synthesis`` generates such
 data, and ``kipe estimation`` reads them as it would read measured data.
 
+..  the wording point number 3 is not clear. Also, what would be the reason to have the noise definition in both the measurement and the synthesis sections? And what about the seeds? Also, how seeds are used for a number of noise realizations is not clear to me.
+
+.. Moreover, I feel this has duplication with the Options ... is it maybe possible to point here to the class (options) in the API documentation instead of giving all the details again? Namely to improve the class documentation using this text, but having everything at one place.
+
 For each measurement, ``kipe synthesis``
 
 1. takes the true state at the measurement times (``synthesis.truth``): from a run of the
@@ -120,10 +131,10 @@ measurement's noise:
 Noise realizations
 ^^^^^^^^^^^^^^^^^^
 
-How much an estimate depends on the noise shows only over several noise realizations. With
+To see how much a parameter estimate depends on the noise, it is useful to estimate the parameters from several noise realizations. With
 ``synthesis.realizations``, ``kipe synthesis`` computes the true state once and writes the data
-of each realization to its own files: the measurements' ``data.path`` contains
-``{realization}``, which is replaced by the number of the realization, from 0:
+of each realization to its own files. For this, the measurements' ``data.path`` must contain
+``{realization}``, which kipe replaces by the realization number, starting from 0:
 
 .. code-block:: yaml
 
@@ -194,7 +205,17 @@ Both commands run on several MPI ranks, if the forward solver does:
 
     mpirun -n 4 kipe estimation study.yaml
 
-The solver distributes its fields; kipe exchanges only the rank-local parts. The measurement
-data do not depend on the number of ranks, so ``synthesis`` and ``estimation`` can use different
-numbers, unless the solver's own files (e.g., checkpoints) tie it to one. On the console, rank 0
-reports; the other ranks only report warnings and errors.
+MPI splits one computation over several processes, called *ranks*, that work at the same time.
+``mpirun -n 4`` starts 4 ranks. This makes large models faster, but it only helps if the forward
+solver supports MPI. With ``-n 1``, or without ``mpirun``, kipe runs on a single rank.
+
+Each rank holds only a part of the solver's fields (the mesh is divided among the ranks). kipe
+works with each rank's part and exchanges only what is needed between them. You do not have to
+do anything for this in the study file.
+
+The measurement data do not depend on the number of ranks. So you can run ``synthesis`` on, say,
+2 ranks and ``estimation`` on 8. The exception: files written by the solver itself (e.g.,
+checkpoints) may be tied to a particular number of ranks. Then use the same number.
+
+On the console, only rank 0 reports progress. The other ranks only show warnings and errors, so
+the output is not repeated once per rank.
