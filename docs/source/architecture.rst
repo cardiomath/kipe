@@ -53,6 +53,27 @@ runs the filter.
        data --> estimation
        estimation --> history[/"estimation history"/]
 
+Source-derived dependencies
+---------------------------
+
+The conceptual diagram above shows how a study flows through kipe. These generated diagrams
+instead show imports between Python modules; they are derived from the source code by
+``scripts/generate_diagrams.py``.
+
+.. mermaid:: _static/diagrams/dependencies-core.mmd
+   :alt: Dependencies between modules in the core kipe package.
+   :caption: Core package module dependencies.
+
+The optional FEniCSx backend has a separate graph to keep the core view readable.
+
+.. mermaid:: _static/diagrams/dependencies-fenicsx.mmd
+   :alt: Dependencies between modules in the optional kipe.fenicsx backend.
+   :caption: FEniCSx backend module dependencies.
+
+Regenerate these diagrams locally with ``python scripts/generate_diagrams.py`` before building
+the documentation. The docs extra provides Pyreverse; Sphinx renders the generated Mermaid
+source using the existing Mermaid extension.
+
 The forward solver
 ------------------
 
