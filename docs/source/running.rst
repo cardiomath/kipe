@@ -1,14 +1,32 @@
 Running a study
 ===============
 
-A study is one YAML file: the forward solver, the parameters to estimate, the measurements,
-and the settings of synthesis and estimation. The same file serves all commands:
+Commands
+--------
 
-.. code-block:: bash
+A study is configured through a YAML file: the forward solver, the parameters to estimate, the measurements, and the settings of synthesis and estimation. The same file serves all commands:
 
-    kipe synthesis study.yaml     # synthetic data from a forward run (for a twin experiment)
-    kipe estimation study.yaml    # estimate the parameters from the data
-    kipe plot study.yaml          # the estimates with their 1σ range
+.. DAVID: Maybe just send to the API documentation instead of repeating all the details here? What if the "commands" functions are public and then listed in the API reference, which we can link here. Or a way that avoids writing things twice.
+
+==================================== =========================================================
+``kipe synthesis study.yaml``        generate the measurement data (also ``kipe synthesize``)
+``kipe estimation study.yaml``       estimate the parameters (also ``kipe estimate``)
+``kipe plot study.yaml``             plot the estimation history, also while it runs
+``kipe list-parameters study.yaml``  show the solver's parameters and the selected ones
+``kipe list-fields study.yaml``      show the solver's state fields, which measurements observe
+``kipe schema``                      print the JSON schema of the study file, for editors
+==================================== =========================================================
+
+``synthesis`` and ``estimation`` take ``--log-level``, which overrides ``output.log_level`` on
+the console; ``estimation`` and ``plot`` take ``--realization`` (`Noise realizations`_).
+``plot`` takes several study files, drawn into one figure, and:
+
+- ``--truth``: the nominal parameters of the first study's solver as reference lines;
+- ``--save FILE``: save the figure instead of showing it;
+- ``--terminal``: draw it as text, without a display; ``--watch``: redraw it as the estimation
+  runs.
+
+``kipe <command> --help`` shows all options, ``kipe --version`` the version.
 
 With measured data, there is nothing to synthesize: ``kipe estimation`` reads the data files the
 measurements name.
@@ -64,30 +82,6 @@ extension, or Neovim and Helix with ``yaml-language-server``. The path is relati
 file. The schema belongs to the installed kipe version: generate it again after an update.
 The example study files have this line already, with the schema in ``examples/``.
 
-Commands
---------
-
-.. Maybe just send to the API documentation instead of repeating all the details here?
-
-==================================== =========================================================
-``kipe synthesis study.yaml``        generate the measurement data (also ``kipe synthesize``)
-``kipe estimation study.yaml``       estimate the parameters (also ``kipe estimate``)
-``kipe plot study.yaml``             plot the estimation history, also while it runs
-``kipe list-parameters study.yaml``  show the solver's parameters and the selected ones
-``kipe list-fields study.yaml``      show the solver's state fields, which measurements observe
-``kipe schema``                      print the JSON schema of the study file, for editors
-==================================== =========================================================
-
-``synthesis`` and ``estimation`` take ``--log-level``, which overrides ``output.log_level`` on
-the console; ``estimation`` and ``plot`` take ``--realization`` (`Noise realizations`_).
-``plot`` takes several study files, drawn into one figure, and:
-
-- ``--truth``: the nominal parameters of the first study's solver as reference lines;
-- ``--save FILE``: save the figure instead of showing it;
-- ``--terminal``: draw it as text, without a display; ``--watch``: redraw it as the estimation
-  runs.
-
-``kipe <command> --help`` shows all options, ``kipe --version`` the version.
 
 .. _synthetic-data:
 
