@@ -18,7 +18,7 @@ A study is configured in a YAML file that specifies the forward solver, the para
 ==================================== =========================================================
 
 ``synthesis`` and ``estimation`` take ``--log-level``, which overrides ``output.log_level`` on
-the console; ``estimation`` and ``plot`` take ``--realization`` (`Noise realizations`_).
+the console; ``estimation`` and ``plot`` take ``--realization`` (`Estimating from multiple realizations`_).
 ``plot`` takes several study files, drawn into one figure, and:
 
 - ``--truth``: the nominal parameters of the first study's solver as reference lines;
@@ -50,8 +50,7 @@ sections:
   nominal values, those of the solver's input. ``kipe list-parameters study.yaml`` shows the
   solver's parameters and the initial 1σ range of the selected ones;
 - ``measurements``: what is measured, when, and where the data are (:doc:`measurements`);
-- ``synthesis``: how ``kipe synthesis`` generates data (see `Synthetic data: twin
-  experiments`_);
+- ``synthesis``: how ``kipe synthesis`` generates data (see :ref:`synthetic-data`);
 - ``estimation``: the filter's sigma points and the number of passes over the data.
 
 :doc:`study_file` lists every key, its type and default, and what it does. Relative paths in the
@@ -80,15 +79,16 @@ Single realization
 For each measurement, ``kipe synthesis``:
 
 1. obtains the true state at the measurement times (``synthesis.truth``), either by running the
-  forward solver with its nominal parameter values (``type: run``, the default) or from the
-  checkpoints of an earlier run (``type: checkpoints``), which may differ from the study's
-  model, for example in its time step;
+   forward solver with its nominal parameter values (``type: run``, the default) or from the
+   checkpoints of an earlier run (``type: checkpoints``), which may differ from the study's
+   model, for example in its time step;
 2. predicts the data from that state using the measurement's observation operator, as described
-  in :doc:`measurements`;
+   in :doc:`measurements`;
 3. adds noise using the measurement's ``noise.stddev`` and ``noise.seed``, or the noise specified
-  for it by ``synthesis.noise`` (which can specify no noise);
+   for it by ``synthesis.noise`` (which can specify no noise);
 4. writes the data to the measurement's ``data.path``, from where ``kipe estimation`` reads
    them.
+
 
 .. DAVID: I don't understand what it is meant in this paragraph. How is this related to synthesis? We are not estimating yet, move it to the later sectino? And also, in synthesis, the parameter values are all based on the nominal ones? Or are the values also overriden by the ones in the parameter section during synthesis?
 
