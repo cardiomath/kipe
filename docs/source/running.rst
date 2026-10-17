@@ -73,8 +73,8 @@ parameters before you use measured data. ``kipe synthesis`` generates these data
 .. DAVID: Moreover, I feel this has duplication with the Options ... is it maybe possible to point here to the class (options) in the API documentation instead of giving all the details again? Namely to improve the class documentation using this text, but having everything at one place.
 
 
-Single realization
-^^^^^^^^^^^^^^^^^^
+Single noise realization
+^^^^^^^^^^^^^^^^^^^^^^^^
 
 For each measurement, ``kipe synthesis``:
 
@@ -106,8 +106,8 @@ measurement's noise:
       noise:
         u: {stddev: 0}
 
-Multiple realizations
-^^^^^^^^^^^^^^^^^^^^^
+Multiple noise realizations
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 To see how much a parameter estimate depends on the noise, it is useful to estimate the parameters from several noise realizations. With
 ``synthesis.realizations``, ``kipe synthesis`` computes the true state once and writes the data
