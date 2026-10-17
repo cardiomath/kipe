@@ -137,17 +137,19 @@ Estimating the model parameters
 Parameters initial guess
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
-Under ``parameters``, list each solver parameter you want the filter to estimate. Set its
-``initial`` value to choose where estimation starts, and ``stddev`` to specify the initial
-1σ uncertainty around that value. For example:
+Under ``parameters.select``, list each solver parameter you want the filter to estimate.
+Set its ``initial`` value to choose where estimation starts. Specify the initial uncertainty
+with ``relative_stddev`` for ``log`` and ``multiplicative``, or an absolute ``stddev`` for
+``additive``. For example:
 
 .. code-block:: yaml
 
     parameters:
-    reparameterization:  log # use logarithmic reparameterization for the parameters to constraint the sign to be the same as the one of the initial guess
-      c:
-        initial: 0.8
-        stddev: 0.1
+      reparameterization: log  # requires positive initial values
+      select:
+        c:
+          initial: 0.8
+          relative_stddev: 0.1
 
 If ``initial`` is omitted, estimation starts at the solver's nominal value. Parameters not
 listed under ``parameters`` remain fixed at their nominal values. In a twin experiment,
