@@ -210,7 +210,10 @@ Both subdirectories also hold:
   options as they ran, with all defaults), ``environment.yaml`` (host, versions, git state),
   ``packages.txt``, and ``<package>.patch`` for uncommitted changes of a git checkout.
 
-**The next run of the same command overwrites these files.** To keep the previous results when running with a new configuration, change the output path in the study file before running the command.
+**The next run of the same command overwrites these files.** To keep the previous results
+when running with a new configuration, change ``output.path`` in the study file before
+running the command. Before rerunning synthesis, also change the measurements' ``data.path``
+values or archive the existing measurement files: changing ``output.path`` does not relocate them.
 
 Running in parallel
 -------------------
