@@ -1,14 +1,32 @@
 Running a study
 ===============
 
-A study is one YAML file: the forward solver, the parameters to estimate, the measurements,
-and the settings of synthesis and estimation. The same file serves all commands:
+Commands
+--------
 
-.. code-block:: bash
+A study is configured in a YAML file that specifies the forward solver, the parameters to estimate, the measurements, and the synthesis and estimation settings. The same file is used for all commands:
 
-    kipe synthesis study.yaml     # synthetic data from a forward run (for a twin experiment)
-    kipe estimation study.yaml    # estimate the parameters from the data
-    kipe plot study.yaml          # the estimates with their 1σ range
+.. DAVID: Maybe just send to the API documentation instead of repeating all the details here? What if the "commands" functions are public and then listed in the API reference, which we can link here. Or a way that avoids writing things twice.
+
+==================================== =========================================================
+``kipe synthesis study.yaml``        generate the measurement data (also ``kipe synthesize``)
+``kipe estimation study.yaml``       estimate the parameters (also ``kipe estimate``)
+``kipe plot study.yaml``             plot the estimation history, also while it runs
+``kipe list-parameters study.yaml``  show the solver's parameters and the selected ones
+``kipe list-fields study.yaml``      show the solver's state fields, which measurements observe
+``kipe schema``                      print the JSON schema of the study file, for editors
+==================================== =========================================================
+
+``synthesis`` and ``estimation`` take ``--log-level``, which overrides ``output.log_level`` on
+the console; ``estimation`` and ``plot`` take ``--realization`` (`Estimating from multiple realizations`_).
+``plot`` takes several study files, drawn into one figure, and:
+
+- ``--truth``: the nominal parameters of the first study's solver as reference lines;
+- ``--save FILE``: save the figure instead of showing it;
+- ``--terminal``: draw it as text, without a display; ``--watch``: redraw it as the estimation
+  runs.
+
+``kipe <command> --help`` shows all options, ``kipe --version`` the version.
 
 With measured data, there is nothing to synthesize: ``kipe estimation`` reads the data files the
 measurements name.
@@ -22,6 +40,8 @@ sections:
 .. literalinclude:: ../../examples/fitzhugh_nagumo/study.yaml
    :language: yaml
 
+.. DAVID: Maybe generate the descriptions of the sections directlty from the docstrings in options.py?
+
 - ``output``: where the results go, and how much the console shows;
 - ``forward_solver``: the model, built by a factory with its arguments. The solver's settings,
   e.g., its time step, belong there: kipe never changes them;
@@ -30,85 +50,54 @@ sections:
   nominal values, those of the solver's input. ``kipe list-parameters study.yaml`` shows the
   solver's parameters and the initial 1σ range of the selected ones;
 - ``measurements``: what is measured, when, and where the data are (:doc:`measurements`);
-- ``synthesis``: how ``kipe synthesis`` generates data (see `Synthetic data: twin
-  experiments`_);
+- ``synthesis``: how ``kipe synthesis`` generates data (see :ref:`synthetic-data`);
 - ``estimation``: the filter's sigma points and the number of passes over the data.
 
-:doc:`study_file` lists every key, with its type, its default and what it does. Relative paths,
-in the study file and in the solver's ``arguments``, are relative to the directory kipe runs in,
-not to the study file.
+:doc:`study_file` lists every key, its type and default, and what it does. Relative paths in the
+study file and in the solver's ``arguments`` are relative to the directory from which kipe is
+run, not to the study file.
 
-Editor support
-^^^^^^^^^^^^^^
-
-``kipe schema`` prints the JSON schema of the study file. With it, an editor completes the keys,
-shows their documentation and marks invalid options while you type:
-
-.. code-block:: bash
-
-    kipe schema > study.schema.json
-
-and as the first line of the study file:
-
-.. code-block:: yaml
-
-    # yaml-language-server: $schema=study.schema.json
-
-This works in editors that use the YAML language server, e.g., VS Code with Red Hat's YAML
-extension, or Neovim and Helix with ``yaml-language-server``. The path is relative to the study
-file. The schema belongs to the installed kipe version: generate it again after an update.
-The example study files have this line already, with the schema in ``examples/``.
-
-Commands
---------
-
-==================================== =========================================================
-``kipe synthesis study.yaml``        generate the measurement data (also ``kipe synthesize``)
-``kipe estimation study.yaml``       estimate the parameters (also ``kipe estimate``)
-``kipe plot study.yaml``             plot the estimation history, also while it runs
-``kipe list-parameters study.yaml``  show the solver's parameters and the selected ones
-``kipe list-fields study.yaml``      show the solver's state fields, which measurements observe
-``kipe schema``                      print the JSON schema of the study file, for editors
-==================================== =========================================================
-
-``synthesis`` and ``estimation`` take ``--log-level``, which overrides ``output.log_level`` on
-the console; ``estimation`` and ``plot`` take ``--realization`` (`Noise realizations`_).
-``plot`` takes several study files, drawn into one figure, and:
-
-- ``--truth``: the nominal parameters of the first study's solver as reference lines;
-- ``--save FILE``: save the figure instead of showing it;
-- ``--terminal``: draw it as text, without a display; ``--watch``: redraw it as the estimation
-  runs.
-
-``kipe <command> --help`` shows all options, ``kipe --version`` the version.
 
 .. _synthetic-data:
 
-Synthetic data: twin experiments
---------------------------------
+Synthetic data generation for twin experiments
+----------------------------------------------
 
-In a twin experiment, the data come from the model itself, with known parameters. The estimate
-can then be compared with the truth: you learn whether the measurements identify the
-parameters, and how precisely, before you use measured data. ``kipe synthesis`` generates such
-data, and ``kipe estimation`` reads them as it would read measured data.
+In a twin experiment, data are generated by the model using known parameter values. Comparing
+the estimate with those values shows whether — and how precisely — the measurements identify the
+parameters before you use measured data. ``kipe synthesis`` generates these data, and
+``kipe estimation`` reads them just as it reads measured data.
 
-For each measurement, ``kipe synthesis``
+..  DAVID: the wording point number 3 is not written clear enough. I was thinking now: what about moving the seeds story to the synthesis.noise, instead of measurements? It would make more sense there. I would keep a value of the standard deviation in the measurements section though, which would be the one use for estimation, identifiability. We would need to write point 3 according to that too. Of course, it should be decided how the treatment of paths for the realizations will be given, i.e., in which of the measurements or synthesis sections
 
-1. takes the true state at the measurement times (``synthesis.truth``): from a run of the
-   forward solver with its nominal parameters, the values of its input (``type: run``, the
-   default), or from the checkpoints of an earlier run (``type: checkpoints``), which may differ
-   from the study's model, e.g., in its time step;
-2. predicts the data from it, with the measurement's observation operator, the same as in the
-   estimation (:doc:`measurements`);
-3. adds noise: with the measurement's ``noise.stddev`` and ``noise.seed``, or the noise
-   ``synthesis.noise`` sets for it, e.g., none;
+.. DAVID: Moreover, I feel this has duplication with the Options ... is it maybe possible to point here to the class (options) in the API documentation instead of giving all the details again? Namely to improve the class documentation using this text, but having everything at one place.
+
+
+Single noise realization
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+For each measurement, ``kipe synthesis``:
+
+1. obtains the true state at the measurement times (``synthesis.truth``), either by running the
+   forward solver with its nominal parameter values (``type: run``, the default) or from the
+   checkpoints of an earlier run (``type: checkpoints``), which may differ from the study's
+   model, for example in its time step;
+2. predicts the data from that state using the measurement's observation operator, as described
+   in :doc:`measurements`;
+3. adds noise using the measurement's ``noise.stddev`` and ``noise.seed``, or the noise specified
+   for it by ``synthesis.noise`` (which can specify no noise);
 4. writes the data to the measurement's ``data.path``, from where ``kipe estimation`` reads
    them.
+
+
+.. DAVID: I don't understand what it is meant in this paragraph. How is this related to synthesis? We are not estimating yet, move it to the later sectino? And also, in synthesis, the parameter values are all based on the nominal ones? Or are the values also overriden by the ones in the parameter section during synthesis?
 
 Give the estimated parameters an ``initial`` value other than their nominal one: without it, the
 estimation starts from the nominal value, i.e., from the truth, and tests nothing. An example:
 noise-free data from an earlier run of the solver, while the estimation still assumes the
 measurement's noise:
+
+.. DAVID: this is also not fully clear from the options reference. Would it may be better to improve the doctring and get out this from here?
 
 .. code-block:: yaml
 
@@ -117,13 +106,13 @@ measurement's noise:
       noise:
         u: {stddev: 0}
 
-Noise realizations
-^^^^^^^^^^^^^^^^^^
+Multiple noise realizations
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-How much an estimate depends on the noise shows only over several noise realizations. With
+To see how much a parameter estimate depends on the noise, it is useful to estimate the parameters from several noise realizations. With
 ``synthesis.realizations``, ``kipe synthesis`` computes the true state once and writes the data
-of each realization to its own files: the measurements' ``data.path`` contains
-``{realization}``, which is replaced by the number of the realization, from 0:
+of each realization to its own files. For this, the measurements' ``data.path`` must contain
+``{realization}``, which kipe replaces by the realization number, starting from 0:
 
 .. code-block:: yaml
 
@@ -139,6 +128,46 @@ of each realization to its own files: the measurements' ``data.path`` contains
 The noise of realization :math:`r` at the :math:`k`-th time of a measurement is drawn from
 ``numpy.random.default_rng([seed, k, r])``. Realization 0 has the noise of the same study
 without realizations.
+
+.. _estimation:
+
+Estimating the model parameters
+-------------------------------
+
+Parameters initial guess
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+Under ``parameters.select``, list each solver parameter you want the filter to estimate.
+Set its ``initial`` value to choose where estimation starts. Specify the initial uncertainty
+with ``relative_stddev`` for ``log`` and ``multiplicative``, or an absolute ``stddev`` for
+``additive``. For example:
+
+.. code-block:: yaml
+
+    parameters:
+      reparameterization: log  # requires positive initial values
+      select:
+        c:
+          initial: 0.8
+          relative_stddev: 0.1
+
+If ``initial`` is omitted, estimation starts at the solver's nominal value. Parameters not
+listed under ``parameters`` remain fixed at their nominal values. In a twin experiment,
+choose an initial value different from the truth if you want to test whether the measurements
+can recover it. The ``reparameterization`` setting, controls how the filter
+represents a parameter; see :doc:`study_file` for its options.
+
+Estimating from a single data set
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+In a twin experiment from a single data set, or one actual measured data is available, the estimation does not involve multiple realizations, and the filter uses the single available data set to update the parameter estimates.
+
+Here, ``kipe estimation study.yaml`` runs the estimation from the single available data set as specified in the study file's ``measurements`` section.
+
+The settings of the estimation algorithm are defined in the study file under the ``estimation`` section. There, the user can specify options such as the number of iterations, type of particles of the unscented Kalman filter, etc; see :doc:`study_file` for the details.
+
+Estimating from multiple realizations
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 ``kipe estimation study.yaml`` then estimates from each realization in turn, into
 ``<output.path>/estimation/r00/`` to ``r29/``. ``--realization r`` estimates from one only,
@@ -183,7 +212,10 @@ Both subdirectories also hold:
   options as they ran, with all defaults), ``environment.yaml`` (host, versions, git state),
   ``packages.txt``, and ``<package>.patch`` for uncommitted changes of a git checkout.
 
-The next run of the same command overwrites them.
+**The next run of the same command overwrites these files.** To keep the previous results
+when running with a new configuration, change ``output.path`` in the study file before
+running the command. Before rerunning synthesis, also change the measurements' ``data.path``
+values or archive the existing measurement files: changing ``output.path`` does not relocate them.
 
 Running in parallel
 -------------------
@@ -194,7 +226,17 @@ Both commands run on several MPI ranks, if the forward solver does:
 
     mpirun -n 4 kipe estimation study.yaml
 
-The solver distributes its fields; kipe exchanges only the rank-local parts. The measurement
-data do not depend on the number of ranks, so ``synthesis`` and ``estimation`` can use different
-numbers, unless the solver's own files (e.g., checkpoints) tie it to one. On the console, rank 0
-reports; the other ranks only report warnings and errors.
+MPI splits one computation over several processes, called *ranks*, that work at the same time.
+``mpirun -n 4`` starts 4 ranks. This makes large models faster, but it only helps if the forward
+solver supports MPI. With ``-n 1``, or without ``mpirun``, kipe runs on a single rank.
+
+Each rank holds only a part of the solver's fields (the mesh is divided among the ranks). kipe
+works with each rank's part and exchanges only what is needed between them. You do not have to
+do anything for this in the study file.
+
+The measurement data do not depend on the number of ranks. So you can run ``synthesis`` on, say,
+2 ranks and ``estimation`` on 8. The exception: files written by the solver itself (e.g.,
+checkpoints) may be tied to a particular number of ranks. Then use the same number.
+
+On the console, only rank 0 reports progress. The other ranks only show warnings and errors, so
+the output is not repeated once per rank.
