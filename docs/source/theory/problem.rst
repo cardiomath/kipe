@@ -37,7 +37,9 @@ noise, so the parameters are the only unknowns.
 
 so that the initial estimate is :math:`\theta^0_i = 0`, :math:`1` or :math:`0`, respectively. The parameters
 are then of similar size, though their physical values may differ by orders of magnitude.
-[NAB26]_ uses the multiplicative one. In kipe, the prior parameter covariance :math:`\bs{P}_\theta^0` of the reparametrized parameters is diagonal, containing the standard deviations as given in the study file.
+[NAB26]_ uses the multiplicative one. In kipe, the prior parameter covariance
+:math:`\bs{P}_\theta^0` is diagonal, containing the squared standard deviations after
+conversion from the study-file uncertainties to :math:`\bs{\theta}`.
 
 **The measurements.** :math:`\bs{Z}^k \in \mathbb{R}^m` collects all measurements at
 :math:`t^k`, and the observation operator :math:`\mathcal{H}: \mathbb{R}^r \to \mathbb{R}^m`
