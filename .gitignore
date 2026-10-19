@@ -36,3 +36,4 @@ docs/_build/
 .idea/
 *.swp
 .DS_Store
+*.code-workspace

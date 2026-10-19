@@ -1,0 +1,70 @@
+classDiagram
+  class ArraySamplingOptions {
+  }
+  style ArraySamplingOptions fill:#77AADD
+  class CheckpointsTruthOptions {
+  }
+  style CheckpointsTruthOptions fill:#77AADD
+  class DifferenceModelOptions {
+  }
+  style DifferenceModelOptions fill:#77AADD
+  class EstimationOptions {
+  }
+  style EstimationOptions fill:#77AADD
+  class ForwardSolverOptions {
+  }
+  style ForwardSolverOptions fill:#77AADD
+  class Literal {
+  }
+  style Literal fill:#99DDFF
+  class MeasurementOptions {
+  }
+  style MeasurementOptions fill:#77AADD
+  class MeshSamplingOptions {
+  }
+  style MeshSamplingOptions fill:#77AADD
+  class NoiseOptions {
+  }
+  style NoiseOptions fill:#77AADD
+  class NumpyDataOptions {
+  }
+  style NumpyDataOptions fill:#77AADD
+  class OutputOptions {
+  }
+  style OutputOptions fill:#77AADD
+  class ParameterPrior {
+  }
+  style ParameterPrior fill:#77AADD
+  class ParametersOptions {
+  }
+  style ParametersOptions fill:#77AADD
+  class PointSamplingOptions {
+  }
+  style PointSamplingOptions fill:#77AADD
+  class RunTruthOptions {
+  }
+  style RunTruthOptions fill:#77AADD
+  class StudyFileError {
+  }
+  style StudyFileError fill:#77AADD
+  class StudyOptions {
+  }
+  style StudyOptions fill:#77AADD
+  class SynthesisNoiseOptions {
+  }
+  style SynthesisNoiseOptions fill:#77AADD
+  class SynthesisOptions {
+  }
+  style SynthesisOptions fill:#77AADD
+  class TimeRange {
+  }
+  style TimeRange fill:#77AADD
+  EstimationOptions --> Literal : sigma_points
+  ParametersOptions --> Literal : reparameterization
+  MeasurementOptions --> DifferenceModelOptions : model
+  StudyOptions --> EstimationOptions : estimation
+  StudyOptions --> ForwardSolverOptions : forward_solver
+  MeasurementOptions --> NoiseOptions : noise
+  MeasurementOptions --> NumpyDataOptions : data
+  StudyOptions --> OutputOptions : output
+  StudyOptions --> SynthesisOptions : synthesis

@@ -1,0 +1,5 @@
+Theory
+======
+
+.. toctree::
+   theory

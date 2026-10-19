@@ -1,0 +1,88 @@
+classDiagram
+  class kipe {
+  }
+  style kipe fill:#77AADD
+  class _formatting {
+  }
+  style _formatting fill:#77AADD
+  class _types {
+  }
+  style _types fill:#77AADD
+  class _yaml {
+  }
+  style _yaml fill:#77AADD
+  class cli {
+  }
+  style cli fill:#77AADD
+  class estimation {
+  }
+  style estimation fill:#77AADD
+  class forward_solver {
+  }
+  style forward_solver fill:#77AADD
+  class measurements {
+  }
+  style measurements fill:#77AADD
+  class options {
+  }
+  style options fill:#77AADD
+  class parameters {
+  }
+  style parameters fill:#77AADD
+  class plot {
+  }
+  style plot fill:#77AADD
+  class provenance {
+  }
+  style provenance fill:#77AADD
+  class roukf {
+  }
+  style roukf fill:#77AADD
+  class sampling {
+  }
+  style sampling fill:#77AADD
+  class synthesis {
+  }
+  style synthesis fill:#77AADD
+  cli --> kipe
+  cli --> _formatting
+  cli --> estimation
+  cli --> forward_solver
+  cli --> options
+  cli --> parameters
+  cli --> plot
+  cli --> synthesis
+  estimation --> kipe
+  estimation --> _formatting
+  estimation --> _types
+  estimation --> forward_solver
+  estimation --> measurements
+  estimation --> options
+  estimation --> parameters
+  estimation --> provenance
+  estimation --> roukf
+  forward_solver --> _types
+  forward_solver --> options
+  measurements --> _types
+  measurements --> forward_solver
+  measurements --> options
+  measurements --> sampling
+  options --> _yaml
+  parameters --> _types
+  parameters --> forward_solver
+  parameters --> options
+  plot --> _types
+  plot --> forward_solver
+  provenance --> _yaml
+  provenance --> options
+  roukf --> _types
+  roukf --> options
+  sampling --> _types
+  sampling --> forward_solver
+  sampling --> options
+  synthesis --> _formatting
+  synthesis --> _types
+  synthesis --> forward_solver
+  synthesis --> measurements
+  synthesis --> options
+  synthesis --> provenance

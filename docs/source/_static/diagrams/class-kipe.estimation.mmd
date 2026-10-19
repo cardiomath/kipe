@@ -1,0 +1,28 @@
+classDiagram
+  class Estimation {
+  }
+  style Estimation fill:#77AADD
+  class ForwardSolver {
+  }
+  style ForwardSolver fill:#77AADD
+  class Parameterization {
+  }
+  style Parameterization fill:#77AADD
+  class SigmaPointStencil {
+  }
+  style SigmaPointStencil fill:#77AADD
+  class _History {
+  }
+  style _History fill:#77AADD
+  class _StateLayout {
+  }
+  style _StateLayout fill:#77AADD
+  class _Step {
+  }
+  style _Step fill:#77AADD
+  _History --> _Step : _steps
+  _History --* Estimation : _history
+  _StateLayout --* Estimation : _layout
+  SigmaPointStencil --* Estimation : _stencil
+  ForwardSolver --o Estimation : _solver
+  Parameterization --o Estimation : _parameterization
