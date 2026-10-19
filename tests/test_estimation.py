@@ -374,3 +374,96 @@ def test_realizations(tmp_path, capsys):
     assert main(["plot", study, "--terminal"]) == 1
     assert "choose one with --realization" in capsys.readouterr().err
     assert main(["plot", study, "--terminal", "--realization", "2"]) == 0
+
+
+SHORT = [0.5, 1.0, 1.5, 2.0]  # 4 steps of 4 sigma points (simplex, 3 parameters)
+
+
+def _interrupt(monkeypatch: pytest.MonkeyPatch, after: int) -> None:
+    """Make the solver fail after the given number of propagations, as a killed job would."""
+    propagate = Solver.propagate
+    calls = 0
+
+    def failing(self, *args):
+        nonlocal calls
+        calls += 1
+        if calls > after:
+            raise RuntimeError("interrupted")
+        return propagate(self, *args)
+
+    monkeypatch.setattr(Solver, "propagate", failing)
+
+
+def _estimation(path: Path) -> Path:
+    return path / "results" / "estimation"
+
+
+def _assert_same_history(a: Path, b: Path) -> None:
+    """Bit for bit: the same filter, from the same estimate, on the same data."""
+    expected, actual = np.load(a / "history.npz"), np.load(b / "history.npz")
+    assert actual.files == expected.files
+    for key in expected.files:
+        np.testing.assert_array_equal(actual[key], expected[key])
+    assert (b / "history.csv").read_text() == (a / "history.csv").read_text()
+
+
+@pytest.fixture
+def reference(tmp_path: Path) -> Path:
+    """An estimation with 2 iterations, without interruption; --resume without a history
+    starts from the beginning."""
+    path = tmp_path / "reference"
+    path.mkdir()
+    study = str(_study(path, times=SHORT, iterations=2))
+    assert main(["synthesis", study, "--log-level", "warning"]) == 0
+    assert main(["estimation", study, "--resume", "--log-level", "warning"]) == 0
+    return _estimation(path)
+
+
+def test_resume_an_interrupted_estimation(tmp_path, monkeypatch, reference):
+    path = tmp_path / "interrupted"
+    path.mkdir()
+    study = str(_study(path, times=SHORT, iterations=2))
+    assert main(["synthesis", study, "--log-level", "warning"]) == 0
+    with monkeypatch.context() as patch:
+        _interrupt(patch, after=16 + 5)  # in the second iteration
+        with pytest.raises(RuntimeError, match="interrupted"):
+            main(["estimation", study, "--log-level", "warning"])
+    output = _estimation(path)
+    assert set(np.load(output / "history.npz")["iteration"]) == {0}  # the completed one
+
+    assert main(["estimation", study, "--resume", "--log-level", "warning"]) == 0
+    _assert_same_history(reference, output)
+    assert "resumed_after_iteration: 1" in (output / "run.yaml").read_text()
+    log = (output / "kipe.log").read_text()
+    assert "forward solver failed" in log  # the interrupted run's log is kept
+    assert "resumed after iteration 1/2" in log
+
+
+def test_resume_with_more_iterations(tmp_path, reference):
+    """A complete estimation continues when the study asks for more iterations."""
+    study = str(_study(tmp_path, times=SHORT, iterations=1))
+    assert main(["synthesis", study, "--log-level", "warning"]) == 0
+    assert main(["estimation", study, "--log-level", "warning"]) == 0
+
+    study = str(_study(tmp_path, times=SHORT, iterations=2))
+    assert main(["estimation", study, "--resume", "--log-level", "warning"]) == 0
+    _assert_same_history(reference, _estimation(tmp_path))
+
+
+def test_resume_a_complete_estimation(tmp_path, reference):
+    """Nothing runs, nothing is written but the log."""
+    before = {f.name: f.read_bytes() for f in reference.iterdir()}
+    study = str(_study(tmp_path / "reference", times=SHORT, iterations=2))
+
+    assert main(["estimation", study, "--resume"]) == 0
+    after = {f.name: f.read_bytes() for f in reference.iterdir()}
+    assert b"complete after 2 iterations, nothing to resume" in after.pop("kipe.log")
+    before.pop("kipe.log")
+    assert after == before
+
+
+def test_resume_a_changed_study(tmp_path, capsys, reference):
+    study = _study(tmp_path / "reference", times=SHORT, iterations=3, relative_stddev=0.3)
+
+    assert main(["estimation", str(study), "--resume"]) == 1
+    assert "the study has changed since (parameters)" in capsys.readouterr().err
