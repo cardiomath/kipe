@@ -19,6 +19,7 @@ import logging
 import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import Any
 
 from mpi4py import MPI
 
@@ -55,7 +56,7 @@ from kipe.options import (
     estimation_directory,
 )
 from kipe.parameters import Parameterization, build_parameterization
-from kipe.provenance import recorded_run
+from kipe.provenance import data_files, recorded_run
 
 logger = logging.getLogger(__name__)
 
@@ -374,9 +375,10 @@ def estimate(
         raise StudyFileError("estimation needs a parameters section")
 
     output = estimation_directory(study, realization)
+    data = data_files(study, realization)
     completed_steps: list[Step] = []
     if resume:
-        completed_steps = read_completed_steps(output, study)
+        completed_steps = read_completed_steps(output, study, data, comm)
         comm.barrier()  # every rank has read the earlier run's files before rank 0 rewrites them
     completed_iterations = count_iterations(completed_steps)
     if completed_iterations >= study.estimation.iterations:
@@ -394,11 +396,13 @@ def estimate(
         solver, parameterization, measurements, study.estimation, output, comm, completed_steps
     )
 
-    run = {"assimilation_times": _common_times(measurements).tolist()}  # maybe from the data
+    run: dict[str, Any] = {"assimilation_times": _common_times(measurements).tolist()}
     if study.synthesis.realizations > 1:
         run["realization"] = realization
+    run["data"] = data
     if completed_iterations:
         run["resumed_after_iteration"] = completed_iterations
+
     with recorded_run(output, study, run, comm):
         return estimation.run()
 
