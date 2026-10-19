@@ -1,5 +1,6 @@
 """``kipe estimation``: the FitzHugh-Nagumo twin experiment and example, history and errors."""
 
+import hashlib
 import io
 import logging
 import shutil
@@ -8,11 +9,19 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from ruamel.yaml import YAML
 
+from kipe._yaml import write_yaml
 from kipe.cli import main
 from kipe.estimation import Estimation
 from kipe.examples.fitzhugh_nagumo import Solver
-from kipe.measurements import DifferenceModel, Measurement, ObservationOperator, write_numpy
+from kipe.measurements import (
+    DifferenceModel,
+    Measurement,
+    ObservationOperator,
+    read_numpy,
+    write_numpy,
+)
 from kipe.options import (
     EstimationOptions,
     ForwardSolverOptions,
@@ -467,3 +476,34 @@ def test_resume_a_changed_study(tmp_path, capsys, reference):
 
     assert main(["estimation", str(study), "--resume"]) == 1
     assert "the study has changed since (parameters)" in capsys.readouterr().err
+
+
+def test_run_records_the_data_files(reference):
+    data = YAML(typ="safe").load(reference / "run.yaml")["data"]
+    assert list(data) == ["v", "w"]
+    for file in data.values():
+        assert file["sha256"] == hashlib.sha256(Path(file["path"]).read_bytes()).hexdigest()
+
+
+def test_resume_with_changed_data(tmp_path, capsys):
+    study = str(_study(tmp_path, times=SHORT, iterations=1))
+    assert main(["synthesis", study, "--log-level", "warning"]) == 0
+    assert main(["estimation", study, "--log-level", "warning"]) == 0
+    times, values = read_numpy(tmp_path / "w.npz")
+    write_numpy(tmp_path / "w.npz", times, values + 1e-3)
+
+    study = str(_study(tmp_path, times=SHORT, iterations=2))
+    assert main(["estimation", study, "--resume"]) == 1
+    message = f"the data of w ({tmp_path / 'w.npz'}) have changed since the earlier run"
+    assert message in capsys.readouterr().err
+
+
+def test_resume_without_recorded_data(tmp_path, kipe_caplog, reference):
+    """An earlier run of an older kipe: resumed, with a warning that the data are unchecked."""
+    run = YAML(typ="safe").load(reference / "run.yaml")
+    del run["data"]
+    write_yaml(reference / "run.yaml", run)
+
+    study = str(_study(tmp_path / "reference", times=SHORT, iterations=3))
+    assert main(["estimation", study, "--resume", "--log-level", "warning"]) == 0
+    assert "cannot compare the data with the earlier run" in kipe_caplog.text

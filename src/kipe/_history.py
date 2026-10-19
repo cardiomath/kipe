@@ -6,18 +6,23 @@ covariance. :func:`read_completed_steps` reads them back, for an estimation that
 interrupted one (``kipe estimation --resume``).
 """
 
-from collections.abc import Sequence
+import logging
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 from mpi4py import MPI
 
 import numpy as np
+from ruamel.yaml import YAML
 
 from kipe import roukf
 from kipe._types import NDArray_f64
 from kipe.options import StudyFileError, StudyOptions, load_study
 from kipe.parameters import Parameterization
+from kipe.provenance import DataFile
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -176,27 +181,34 @@ def read_steps(path: Path, names: list[str]) -> list[Step]:
         ]
 
 
-def read_completed_steps(output: Path, study: StudyOptions) -> list[Step]:
+def read_completed_steps(
+    output: Path, study: StudyOptions, data: Mapping[str, DataFile], comm: MPI.Comm
+) -> list[Step]:
     """Return the steps of the completed outer iterations of an earlier run of the study.
 
-    Checks that the study has not changed since: the saved ``study.yaml`` of the run must have
-    the same forward solver, parameters, measurements and sigma points. Every rank reads the
-    files, and so gets the same steps, or the same error.
+    Checks that the study and its data have not changed since: the saved ``study.yaml`` of the
+    run must have the same forward solver, parameters, measurements and sigma points, and its
+    ``run.yaml`` the same data files. Every rank reads the files, and so gets the same steps,
+    or the same error.
 
     Args:
         output: output directory of the estimation
         study: the study options, with parameters
+        data: the data files of the study's measurements (:func:`kipe.provenance.data_files`)
+        comm: communicator of the run; rank 0 warns if the data cannot be compared
 
     Returns:
         the steps; none if there is no earlier run to continue
 
     Raises:
-        StudyFileError: if the study has changed, or the run's study file is missing
+        StudyFileError: if the study or its data have changed, or the run's study file is
+            missing
     """
     assert study.parameters is not None
     steps = read_steps(output, list(study.parameters.select))
     if steps:
         _check_unchanged(output, study)
+        _check_data_unchanged(output, data, comm)
 
     return steps
 
@@ -227,6 +239,39 @@ def _check_unchanged(output: Path, study: StudyOptions) -> None:
         raise StudyFileError(
             f"cannot resume the estimation in {output}: the study has changed since "
             f"({', '.join(changed)}); only estimation.iterations may differ"
+        )
+
+
+def _check_data_unchanged(output: Path, data: Mapping[str, DataFile], comm: MPI.Comm) -> None:
+    """Check that the data files are those an earlier estimation read.
+
+    Args:
+        output: output directory of the earlier estimation, with its ``run.yaml``
+        data: the data files of the study's measurements
+        comm: communicator of the run; rank 0 warns if the data cannot be compared
+
+    Raises:
+        StudyFileError: if a data file has changed
+    """
+    run = YAML(typ="safe").load(output / "run.yaml") if (output / "run.yaml").exists() else None
+    earlier = (run or {}).get("data")
+    if earlier is None:  # e.g., a run of kipe 0.4
+        if comm.rank == 0:
+            logger.warning(
+                "cannot compare the data with the earlier run: %s does not record them",
+                output / "run.yaml",
+            )
+        return
+
+    changed = [
+        f"{name} ({file['path']})"
+        for name, file in data.items()
+        if earlier.get(name, {}).get("sha256") != file["sha256"]
+    ]
+    if changed:
+        raise StudyFileError(
+            f"cannot resume the estimation in {output}: the data of {', '.join(changed)} have "
+            "changed since the earlier run"
         )
 
 

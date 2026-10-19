@@ -1,5 +1,6 @@
 """``kipe synthesis``: synthetic data from a forward run."""
 
+import hashlib
 from pathlib import Path
 
 import numpy as np
@@ -311,3 +312,16 @@ def test_realizations(tmp_path, monkeypatch):
     np.testing.assert_allclose(v.values, _exact(times, "v") + noise, rtol=1e-12)
     _, written = read_numpy(tmp_path / "multi" / "r2" / "v.npz")
     np.testing.assert_array_equal(written, v.values)
+
+
+def test_synthesis_writes_checksums_of_the_data(tmp_path):
+    """In the format of sha256sum, all realizations."""
+    realizations = synthesize(_options(tmp_path, RunTruthOptions(), "multi", "Solver", 2))
+
+    lines = (tmp_path / "multi" / "synthesis" / "data.sha256").read_text().splitlines()
+    paths = [
+        tmp_path / "multi" / f"r{r}" / f"{measurement.name}.npz"
+        for r, measurements in enumerate(realizations)
+        for measurement in measurements
+    ]
+    assert lines == [f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p}" for p in paths]

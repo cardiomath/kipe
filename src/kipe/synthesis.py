@@ -50,7 +50,7 @@ from kipe.options import (
     TruthOptions,
     data_path,
 )
-from kipe.provenance import recorded_run
+from kipe.provenance import recorded_run, sha256
 
 logger = logging.getLogger(__name__)
 
@@ -95,12 +95,18 @@ def synthesize(study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD) -> list[lis
         noise_free = _noise_free(study.synthesis.truth, solver, times, operators)
 
         realizations = []
+        written = []
         for r in range(study.synthesis.realizations):
             measurements = _realization(study, r, operators, times, noise_free, stddevs, seeds)
             for measurement in measurements:
-                _write(data_path(study.measurements[measurement.name], r), measurement, comm)
+                path = data_path(study.measurements[measurement.name], r)
+                _write(path, measurement, comm)
+                written.append(path)
             realizations.append(measurements)
 
+        if comm.rank == 0:  # rank 0 wrote the files
+            lines = [f"{sha256(path)}  {path}\n" for path in written]
+            (output / "data.sha256").write_text("".join(lines))
         _log_written(study, times)
         logger.info("%-11s%.3g s", "run time", time.perf_counter() - started)
 

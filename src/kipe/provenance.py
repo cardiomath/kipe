@@ -5,7 +5,8 @@
 
 - ``run.yaml``: what the study does not hold: the status, ``running`` while the run lasts,
   then ``finished`` or ``failed``, with start and end time; for estimation, the assimilation
-  times (which may come from the data files).
+  times (which may come from the data files), and the path and SHA-256 hash of each data file
+  it read (:func:`data_files`).
 - ``study.yaml``: the validated study options, with all defaults filled in: what actually ran.
   The comments of the study file are not kept; the CLI logs the study file's path.
 - ``environment.yaml``: host, platform, Python, MPI, thread settings, and the versions of kipe,
@@ -17,10 +18,15 @@
 - ``spack.yaml`` and ``spack.lock``, or ``conda_environment.yml``: the environment, if the run
   happens in a Spack or conda environment.
 
+Synthesis also writes ``data.sha256``: the SHA-256 hash and path of each data file it wrote,
+one per line, in the format of ``sha256sum``, so ``sha256sum -c data.sha256`` checks them
+(from the directory kipe ran in, since the paths are relative to it).
+
 Only rank 0 writes. The files are overwritten by the next run in the same directory.
 """
 
 import functools
+import hashlib
 import importlib.util
 import logging
 import os
@@ -33,17 +39,64 @@ from contextlib import contextmanager
 from datetime import datetime
 from importlib import metadata
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from mpi4py import MPI
 
 from kipe._yaml import write_yaml
-from kipe.options import StudyOptions, dump_study
+from kipe.options import StudyFileError, StudyOptions, data_path, dump_study
 
 logger = logging.getLogger(__name__)
 
 _LIBRARIES = ["numpy", "mpi4py", "petsc4py", "fenics-dolfinx"]  # distribution names
 _THREADS = ["OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"]
+
+
+class DataFile(TypedDict):
+    """A data file a run read, as recorded in ``run.yaml``."""
+
+    path: str
+    """Path to the file, as the run read it, e.g., with the realization filled in."""
+
+    sha256: str
+    """SHA-256 hash of the file's content."""
+
+
+def sha256(path: str | Path) -> str:
+    """Return the SHA-256 hash of a file, e.g., of measurement data, to recognize it later.
+
+    Args:
+        path: path to the file
+
+    Returns:
+        the hash, as 64 hexadecimal digits
+    """
+    with open(path, "rb") as f:
+        return hashlib.file_digest(f, "sha256").hexdigest()
+
+
+def data_files(study: StudyOptions, realization: int = 0) -> dict[str, DataFile]:
+    """Return the data file of each measurement of a study, with its hash.
+
+    Args:
+        study: the study options
+        realization: number of the noise realization whose data are meant
+
+    Returns:
+        measurement name -> data file
+
+    Raises:
+        StudyFileError: if a data file cannot be read
+    """
+    files: dict[str, DataFile] = {}
+    for name, measurement in (study.measurements or {}).items():
+        path = data_path(measurement, realization)
+        try:
+            files[name] = {"path": path, "sha256": sha256(path)}
+        except OSError as err:
+            raise StudyFileError(f"cannot read measurement data {path}: {err}") from err
+
+    return files
 
 
 @contextmanager
