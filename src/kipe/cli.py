@@ -4,6 +4,7 @@ import argparse
 import json
 import logging
 import sys
+import time
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -141,13 +142,49 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "plot" and args.save and (args.terminal or args.watch):
         plot.error("--save writes a matplotlib figure, not with --terminal or --watch")
 
+    errors = MPI.COMM_WORLD.Dup()  # for reporting errors, apart from the run's communication
     try:
         args.func(args)
     except (StudyFileError, ForwardSolverError, PlotError) as err:  # user errors: no traceback
-        print(f"kipe: error: {err}", file=sys.stderr)
+        _report_error(err, errors)
         return 1
+    finally:
+        errors.Free()
 
     return 0
+
+
+_ERROR_WAIT = 10.0  # seconds the ranks wait for each other after an error
+
+
+def _report_error(err: Exception, comm: MPI.Comm, wait: float = _ERROR_WAIT) -> None:
+    """Print an error once, or end the run if only some of the ranks have it.
+
+    Usually all ranks raise the same error, since they read and check the same study and data:
+    rank 0 prints it. An error of single ranks, e.g., a file system problem on one node, would
+    leave the other ranks waiting in their next collective operation until the job's time
+    limit: the failing ranks print it, with their rank, and abort the run.
+
+    Args:
+        err: the error
+        comm: a communicator of all ranks that no other operation uses: the failing ranks meet
+            in a barrier on it
+        wait: seconds to wait for the other ranks to fail too
+    """
+    if comm.size == 1:
+        print(f"kipe: error: {err}", file=sys.stderr)
+        return
+
+    request = comm.Ibarrier()
+    deadline = time.monotonic() + wait
+    while not request.Test():
+        if time.monotonic() > deadline:  # the other ranks go on: an error of this rank only
+            print(f"kipe[{comm.rank}]: error: {err}", file=sys.stderr, flush=True)
+            comm.Abort(1)
+        time.sleep(0.01)
+
+    if comm.rank == 0:
+        print(f"kipe: error: {err}", file=sys.stderr)
 
 
 def _load_study(path: Path) -> StudyOptions:
