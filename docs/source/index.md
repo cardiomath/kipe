@@ -14,15 +14,15 @@
 - {doc}`user_guide/estimation`: configure estimation and read its results.
 - {doc}`user_guide/parallel`: run with MPI or across cluster tasks.
 
+## Theory
+
+- {doc}`theory/theory`: the estimation problem and the reduced-order unscented Kalman filter.
+
 ## Reference
 
 - {doc}`reference/study_file`: every study-file key, its type, default and purpose.
 - {doc}`reference/command_line`: the available commands and their options.
 - {doc}`reference/api`: modules, classes and functions, from their docstrings.
-
-## Theory
-
-- {doc}`theory/theory`: the estimation problem and the reduced-order unscented Kalman filter.
 
 ## Extending kipe
 
@@ -35,7 +35,7 @@
 :includehidden:
 
 user_guide/index
-reference/index
 theory/index
+reference/index
 extending/index
 ```
