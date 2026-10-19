@@ -4,4 +4,6 @@ Theory
 .. toctree::
    :maxdepth: 1
 
-   theory
+   problem
+   algorithm
+   verification_linear
