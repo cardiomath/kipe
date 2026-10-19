@@ -7,16 +7,17 @@ corrected. Outer iterations repeat the pass, starting from the previous estimate
 :func:`estimate` builds all of this from a study file.
 
 The estimation history is written to ``<output.path>/estimation/``: ``history.csv`` (one row
-per assimilation step, written as the filter runs) and ``history.npz`` (all steps, including
-the full parameter covariance). :func:`estimate` also writes the provenance of the run there
-(:mod:`kipe.provenance`). With several noise realizations (``synthesis.realizations``), each
-estimation uses the data of one realization and writes to its subdirectory, e.g.,
-``estimation/r07/``.
+per assimilation step, written as the filter runs) and ``history.npz`` (all steps of the
+completed outer iterations, including the full parameter covariance, written after each). An
+interrupted estimation can continue from it (``kipe estimation --resume``). :func:`estimate`
+also writes the provenance of the run there (:mod:`kipe.provenance`). With several noise
+realizations (``synthesis.realizations``), each estimation uses the data of one realization
+and writes to its subdirectory, e.g., ``estimation/r07/``.
 """
 
 import logging
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -46,6 +47,7 @@ from kipe.options import (
     StudyOptions,
     data_path,
     estimation_directory,
+    load_study,
 )
 from kipe.parameters import Parameterization, build_parameterization
 from kipe.provenance import recorded_run
@@ -65,6 +67,8 @@ class Estimation:
         options: number of outer iterations and sigma-point stencil
         output: directory for the estimation history
         comm: communicator over which the model state is distributed
+        completed_steps: the steps of the completed outer iterations of an earlier,
+            interrupted run of the same estimation, which this one continues
 
     Raises:
         StudyFileError: if the measurements have different times
@@ -78,6 +82,7 @@ class Estimation:
         options: EstimationOptions,
         output: Path,
         comm: MPI.Comm = MPI.COMM_WORLD,
+        completed_steps: Sequence["_Step"] = (),
     ) -> None:
         self._solver = solver
         self._parameterization = parameterization
@@ -92,13 +97,15 @@ class Estimation:
         self._stencil = roukf.sigma_point_stencil(
             options.sigma_points, len(parameterization.names)
         )
-        self._history = _History(output, parameterization.names, comm)
+        self._history = _History(output, parameterization.names, comm, completed_steps)
+        self._completed_iterations = _count_iterations(completed_steps)
 
     def run(self) -> Parameters:
         """Run the outer iterations, each a pass of the filter over all measurements.
 
         Each pass after the first starts from the previous estimate, with the initial
-        uncertainty.
+        uncertainty. After each pass, the history is written to ``history.npz``. A run that
+        continues an earlier one starts after its completed iterations, from their estimate.
 
         Returns:
             the estimated parameters, as physical values
@@ -106,8 +113,17 @@ class Estimation:
         self._log_setup()
         started = time.perf_counter()
 
+        # the estimate after the completed iterations, recentered as they were
         parameterization = self._parameterization
-        for iteration in range(self._iterations):
+        for theta in _final_thetas(self._history.steps):
+            estimate = parameterization.to_physical(theta)
+            parameterization = parameterization.recenter(theta)
+        if self._completed_iterations:
+            logger.info(
+                "resumed after iteration %d/%d", self._completed_iterations, self._iterations
+            )
+
+        for iteration in range(self._completed_iterations, self._iterations):
             title = f" iteration {iteration + 1}/{self._iterations} "
             logger.info("%s", title.center(_WIDTH, "━"))
             iteration_started = time.perf_counter()
@@ -126,8 +142,8 @@ class Estimation:
                 logger.info("    %s", line)
             estimate = parameterization.to_physical(filter_state.theta)
             parameterization = parameterization.recenter(filter_state.theta)
+            self._history.write_npz()
 
-        self._history.write_npz()
         logger.info("%s", "━" * _WIDTH)
         logger.info("%-11s%s", "history", self._output / "history.{csv,npz}")
         logger.info("%-11s%.3g s", "run time", time.perf_counter() - started)
@@ -319,40 +335,62 @@ class Estimation:
 
 
 def estimate(
-    study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD, realization: int = 0
+    study: StudyOptions,
+    comm: MPI.Comm = MPI.COMM_WORLD,
+    realization: int = 0,
+    resume: bool = False,
 ) -> Parameters:
     """Estimate the parameters of a study; write the estimation history and the provenance.
 
     Builds the forward solver, the estimated parameters and the measurements (with their data)
     from the study file, then runs the :class:`Estimation`.
 
+    With ``resume``, an interrupted estimation continues after its completed outer iterations,
+    as recorded in its ``history.npz``, with the same result as without the interruption. The
+    study may have more ``estimation.iterations`` than before, but must otherwise be the same.
+    Without a history, the estimation starts from the beginning; if it is complete, nothing
+    runs.
+
     Args:
         study: the study options
         comm: communicator over which the model state is distributed
         realization: number of the noise realization whose data are used
             (``synthesis.realizations``)
+        resume: continue an interrupted estimation
 
     Returns:
         the estimated parameters, as physical values
 
     Raises:
         StudyFileError: if the study lacks what estimation needs, has no such realization, or
-            the data do not fit
+            the data do not fit; with ``resume``, if the study has changed since the earlier run
     """
     if study.parameters is None:
         raise StudyFileError("estimation needs a parameters section")
 
     output = estimation_directory(study, realization)
+    completed_steps = _completed_steps(output, study, comm) if resume else []
+    completed_iterations = _count_iterations(completed_steps)
+    if completed_iterations >= study.estimation.iterations:
+        logger.info(
+            "%s: complete after %d iterations, nothing to resume", output, completed_iterations
+        )
+        return dict(
+            zip(study.parameters.select, completed_steps[-1].parameters.tolist(), strict=True)
+        )
+
     solver = build_forward_solver(study.forward_solver)
     parameterization = build_parameterization(study.parameters, solver.nominal_parameters())
     measurements = _build_measurements(study, solver, comm, realization)
     estimation = Estimation(
-        solver, parameterization, measurements, study.estimation, output, comm
+        solver, parameterization, measurements, study.estimation, output, comm, completed_steps
     )
 
     run = {"assimilation_times": _common_times(measurements).tolist()}  # maybe from the data
     if study.synthesis.realizations > 1:
         run["realization"] = realization
+    if completed_iterations:
+        run["resumed_after_iteration"] = completed_iterations
     with recorded_run(output, study, run, comm):
         return estimation.run()
 
@@ -565,20 +603,30 @@ class _History:
         path: output directory
         names: names of the estimated parameters
         comm: the communicator
+        steps: the steps of an earlier run that this one continues (:func:`_read_steps`); the
+            CSV starts with them
     """
 
-    def __init__(self, path: Path, names: list[str], comm: MPI.Comm) -> None:
+    def __init__(
+        self, path: Path, names: list[str], comm: MPI.Comm, steps: Sequence[_Step] = ()
+    ) -> None:
         self._path = path
         self._names = names
         self._writes = comm.rank == 0
-        self._steps: list[_Step] = []
+        self._steps: list[_Step] = list(steps)
         if self._writes:
             path.mkdir(parents=True, exist_ok=True)
             header = ["iteration", "time"]
             for name in names:
                 header += [name, f"lower_{name}", f"upper_{name}"]
                 header += [f"theta_{name}", f"stddev_theta_{name}"]
-            (path / "history.csv").write_text(",".join(header) + "\n")
+            lines = [",".join(header)] + [_csv_row(step) for step in self._steps]
+            (path / "history.csv").write_text("\n".join(lines) + "\n")
+
+    @property
+    def steps(self) -> list[_Step]:
+        """The recorded steps, those of an earlier run included."""
+        return self._steps
 
     def record(
         self,
@@ -610,15 +658,11 @@ class _History:
         self._steps.append(step)
 
         if self._writes:
-            row = [str(iteration), repr(t)]
-            columns = zip(step.parameters, step.lower, step.upper, theta, stddev, strict=True)
-            for values in columns:
-                row += [repr(float(value)) for value in values]
             with (self._path / "history.csv").open("a") as f:
-                f.write(",".join(row) + "\n")
+                f.write(_csv_row(step) + "\n")
 
     def write_npz(self) -> None:
-        """Write all steps to ``history.npz``."""
+        """Write all steps to ``history.npz``, e.g., after each outer iteration."""
         if not self._writes:
             return
 
@@ -633,3 +677,149 @@ class _History:
             theta=np.array([step.theta for step in self._steps]),
             P_theta=np.array([step.P_theta for step in self._steps]),
         )
+
+
+def _csv_row(step: _Step) -> str:
+    """Return the row of ``history.csv`` of a step, with the values at full precision.
+
+    Args:
+        step: the step
+
+    Returns:
+        the row, without line break
+    """
+    row = [str(step.iteration), repr(step.time)]
+    stddev = np.sqrt(np.diag(step.P_theta))
+    columns = zip(step.parameters, step.lower, step.upper, step.theta, stddev, strict=True)
+    for values in columns:
+        row += [repr(float(value)) for value in values]
+
+    return ",".join(row)
+
+
+def _read_steps(path: Path, names: list[str]) -> list[_Step]:
+    """Read the steps of an estimation from its ``history.npz``.
+
+    Args:
+        path: output directory of the estimation
+        names: names of the estimated parameters, which the history must have
+
+    Returns:
+        the steps; none if there is no ``history.npz``
+
+    Raises:
+        StudyFileError: if the history has other parameters
+    """
+    if not (path / "history.npz").exists():
+        return []
+
+    with np.load(path / "history.npz") as history:
+        if history["names"].tolist() != names:
+            raise StudyFileError(
+                f"{path / 'history.npz'} estimates {', '.join(history['names'])}, the study "
+                f"{', '.join(names)}"
+            )
+        return [
+            _Step(
+                iteration=int(history["iteration"][i]),
+                time=float(history["time"][i]),
+                parameters=history["parameters"][i],
+                lower=history["lower"][i],
+                upper=history["upper"][i],
+                theta=history["theta"][i],
+                P_theta=history["P_theta"][i],
+            )
+            for i in range(len(history["time"]))
+        ]
+
+
+def _completed_steps(output: Path, study: StudyOptions, comm: MPI.Comm) -> list[_Step]:
+    """Return the steps of the completed outer iterations of an earlier run of the study.
+
+    Rank 0 reads them and checks that the study has not changed since: the saved
+    ``study.yaml`` of the run must have the same forward solver, parameters, measurements and
+    sigma points.
+
+    Args:
+        output: output directory of the estimation
+        study: the study options, with parameters
+        comm: communicator of the run
+
+    Returns:
+        the steps, on all ranks; none if there is no earlier run to continue
+
+    Raises:
+        StudyFileError: if the study has changed, or the run's study file is missing
+    """
+    assert study.parameters is not None
+    steps: list[_Step] | StudyFileError = []
+    if comm.rank == 0:
+        try:
+            steps = _read_steps(output, list(study.parameters.select))
+            if steps:
+                _check_unchanged(output, study)
+        except StudyFileError as err:
+            steps = err
+
+    steps = comm.bcast(steps, root=0)
+    if isinstance(steps, StudyFileError):
+        raise steps
+
+    return steps
+
+
+def _check_unchanged(output: Path, study: StudyOptions) -> None:
+    """Check that a study is the one of an earlier estimation, but for more iterations.
+
+    Args:
+        output: output directory of the earlier estimation, with its ``study.yaml``
+        study: the study options
+
+    Raises:
+        StudyFileError: if the study differs, or the earlier run has no ``study.yaml``
+    """
+    saved = output / "study.yaml"
+    if not saved.exists():
+        raise StudyFileError(f"cannot resume: {saved} is missing, to compare the study with")
+    earlier = load_study(saved)
+
+    changed = [
+        name
+        for name in ("forward_solver", "parameters", "measurements")
+        if getattr(earlier, name) != getattr(study, name)
+    ]
+    if earlier.estimation.sigma_points != study.estimation.sigma_points:
+        changed.append("estimation.sigma_points")
+    if changed:
+        raise StudyFileError(
+            f"cannot resume the estimation in {output}: the study has changed since "
+            f"({', '.join(changed)}); only estimation.iterations may differ"
+        )
+
+
+def _count_iterations(steps: Sequence[_Step]) -> int:
+    """Return the number of outer iterations of recorded steps.
+
+    Args:
+        steps: the steps, of complete iterations
+
+    Returns:
+        the number of iterations
+    """
+    return steps[-1].iteration + 1 if steps else 0
+
+
+def _final_thetas(steps: Sequence[_Step]) -> list[NDArray_f64]:
+    r"""Return the estimate :math:`\theta` at the end of each outer iteration of recorded steps.
+
+    Args:
+        steps: the steps, of complete iterations, in order
+
+    Returns:
+        the estimate of the last step of each iteration
+    """
+    last: dict[int, NDArray_f64] = {}
+    for step in steps:
+        last[step.iteration] = step.theta
+
+    return list(last.values())
