@@ -7,10 +7,8 @@
 
 <!-- docs: start of the introduction (index.md) -->
 
-**K**alman-backed **p**arameter **e**stimation and **i**dentifiability analysis for
-**p**artial differential **e**quations
-
-<!-- TODO: Agree on the README expansion/description of the name kipe. -->
+**K**alman filtering and **i**dentifiability analysis for
+**p**arameter **e**stimation of differential **e**quations
 
 kipe estimates the parameters of dynamical models, e.g., PDE models, from time series of
 measurements, with the reduced-order unscented Kalman filter (ROUKF). The filter needs only

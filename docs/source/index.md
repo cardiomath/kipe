@@ -32,6 +32,7 @@
 
 ```{toctree}
 :hidden:
+:caption: User guide
 
 getting_started
 anatomy
@@ -39,11 +40,29 @@ measurements
 synthetic_data
 estimation
 parallel
+```
+
+```{toctree}
+:hidden:
+:caption: Reference
+
 study_file
 command_line
+api
+```
+
+```{toctree}
+:hidden:
+:caption: Theory
+
 theory
+```
+
+```{toctree}
+:hidden:
+:caption: Extending kipe
+
 architecture
 write_a_sampler
 development
-api
 ```
