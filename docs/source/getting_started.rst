@@ -41,7 +41,7 @@ starting from a wrong initial guess. The FitzHugh–Nagumo example
 Everything is configured in the study file, ``study.yaml``: the forward solver, the estimated
 parameters with their initial guess and uncertainty, the measurements and the filter. The
 results, a log and the provenance of the runs go to the directory ``output.path`` names, here
-``results/``. :doc:`running` walks through the study file and the results.
+``results/``. :doc:`anatomy` introduces the study file and :doc:`estimation` explains the results.
 
 Your own model
 --------------

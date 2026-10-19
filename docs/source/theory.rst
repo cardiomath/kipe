@@ -197,7 +197,7 @@ and the covariance of the parameters,
 After the last step, :math:`\bs{\hat\theta} = \bs{\hat\theta}^{N_T}_+` is the estimate and
 :math:`\bs{P}_\theta = \bs{P}_\theta^{N_T}` its covariance: the posterior
 :math:`\mathcal{N}(\bs{\hat\theta}, \bs{P}_\theta)`. kipe writes both after each step, to
-the estimation history (:doc:`running`).
+the estimation history (:doc:`estimation`).
 
 **In kipe**, sampling and correction are :func:`kipe.roukf.sample` and
 :func:`kipe.roukf.update`; the propagation of the sigma points and their innovations, which

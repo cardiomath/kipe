@@ -5,24 +5,42 @@
 :end-before: "<!-- docs: end of the introduction -->"
 ```
 
-## Where to start
+## User guide
 
-- {doc}`getting_started`: install kipe, run a first twin experiment, and connect your own model.
-- {doc}`running`: the study file, the commands and their results, synthetic data.
-- {doc}`measurements`: what kipe compares with the data, and how; {doc}`study_file`: every key
-  of a study file.
+- {doc}`getting_started`: install kipe and run a first twin experiment.
+- {doc}`anatomy`: how a study connects the solver, measurements, data and estimation.
+- {doc}`measurements`: what kipe compares with data, and how.
+- {doc}`synthetic_data`: generate data for a twin experiment.
+- {doc}`estimation`: configure estimation and read its results.
+- {doc}`parallel`: run with MPI or across cluster tasks.
+
+## Reference
+
+- {doc}`study_file`: every study-file key, its type, default and purpose.
+- {doc}`command_line`: the available commands and their options.
+- {doc}`api`: modules, classes and functions, from their docstrings.
+
+## Theory
+
 - {doc}`theory`: the estimation problem and the reduced-order unscented Kalman filter.
-- To add a sampler or a measurement model: {doc}`architecture`, then {doc}`write_a_sampler`;
-  to work on kipe: {doc}`development`.
-- {doc}`api`: the modules, classes and functions, from their docstrings.
+
+## Extending kipe
+
+- {doc}`architecture`: how kipe is put together and where extensions fit.
+- {doc}`write_a_sampler`: add a spatial sampler.
+- {doc}`development`: work on kipe.
 
 ```{toctree}
 :hidden:
 
 getting_started
-running
+anatomy
 measurements
+synthetic_data
+estimation
+parallel
 study_file
+command_line
 theory
 architecture
 write_a_sampler

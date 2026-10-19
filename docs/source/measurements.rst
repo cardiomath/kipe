@@ -1,10 +1,9 @@
 Measurements
 ============
 
-A measurement is a series of measured data, and the description of how to predict these data
-from the state of the model. kipe compares the prediction with the data at each measurement
-time: in an estimation, to correct the parameters; in a synthesis, it writes the prediction,
-with noise, as synthetic data.
+A measurement is a series of measured data and the description of how to predict those data
+from the model state. During estimation, kipe compares the prediction with the data at each
+measurement time to correct the parameters.
 
 Each measurement is an entry under ``measurements`` in the study file, by name. The
 FitzHugh–Nagumo example (:mod:`kipe.examples.fitzhugh_nagumo`) measures both fields of its
@@ -66,15 +65,9 @@ from an image, write them in this order:
 Noise
 -----
 
-``noise.stddev`` is the standard deviation of the measurement noise: ``estimation`` assumes
-it, ``synthesis`` adds it, drawn with ``noise.seed``. ``synthesis.noise`` can add another noise,
-e.g., none for noise-free data, while estimation still assumes ``noise.stddev``:
-
-.. code-block:: yaml
-
-    synthesis:
-      noise:
-        u: {stddev: 0}
+``noise.stddev`` is the standard deviation of measurement noise assumed during estimation.
+See :doc:`synthetic_data` for how synthesis uses this value and can override it for generated
+data.
 
 Spatial sampling
 ----------------
@@ -130,10 +123,3 @@ A finite element field, evaluated at given points, in their order:
       points: [[0.25, 0.25], [0.5, 0.5], [0.75, 0.75]]
 
 Another sampler? :doc:`write_a_sampler` walks through this one, step by step.
-
-Synthetic data
---------------
-
-``kipe synthesis`` generates the data of all measurements at their ``times``: with their
-observation operator, from a true state, with the noise above. :ref:`synthetic-data` explains
-how, and what for.
