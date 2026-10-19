@@ -55,3 +55,6 @@ multiple realizations.
 
 **TODO:** Revisit whether noise seeds and realization-specific data paths belong under
 ``measurements`` or ``synthesis``. The current study-file format keeps them under ``measurements``.
+
+**TODO:** Consider whether future versions should add controlled noise to externally measured
+data for robustness tests.
