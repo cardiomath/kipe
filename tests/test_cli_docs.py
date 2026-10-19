@@ -18,6 +18,6 @@ def test_command_line_reference_matches_cli(capsys):
     assert match is not None
     commands = set(match.group(1).split(","))
 
-    reference = Path(__file__).parents[1] / "docs" / "source" / "command_line.rst"
+    reference = Path(__file__).parents[1] / "docs" / "source" / "reference" / "command_line.rst"
     documented = set(re.findall(r"``kipe ([a-z][a-z0-9-]*)", reference.read_text()))
     assert documented == commands
