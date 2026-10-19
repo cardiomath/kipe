@@ -32,6 +32,7 @@
 
 ```{toctree}
 :hidden:
+:includehidden:
 :caption: User guide
 
 getting_started
@@ -44,6 +45,7 @@ parallel
 
 ```{toctree}
 :hidden:
+:includehidden:
 :caption: Reference
 
 study_file
@@ -53,6 +55,7 @@ api
 
 ```{toctree}
 :hidden:
+:includehidden:
 :caption: Theory
 
 theory
@@ -60,6 +63,7 @@ theory
 
 ```{toctree}
 :hidden:
+:includehidden:
 :caption: Extending kipe
 
 architecture
