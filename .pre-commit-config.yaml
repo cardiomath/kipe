@@ -46,7 +46,8 @@ repos:
         name: sphinx docs build
         stages: [manual]
         entry: >-
-          bash -c 'python -m sphinx -q -W --keep-going -b html docs/source docs/build/html
+          bash -c 'python -m sphinx -q -W --keep-going -c docs -b html docs/source
+          docs/build/html
           && python -m webbrowser -t "file://$(pwd)/docs/build/html/index.html"'
         language: system
         files: ^(docs/|src/.*\.py$|pyproject\.toml$)

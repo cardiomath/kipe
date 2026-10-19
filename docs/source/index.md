@@ -7,66 +7,35 @@
 
 ## User guide
 
-- {doc}`getting_started`: install kipe and run a first twin experiment.
-- {doc}`anatomy`: how a study connects the solver, measurements, data and estimation.
-- {doc}`measurements`: what kipe compares with data, and how.
-- {doc}`synthetic_data`: generate data for a twin experiment.
-- {doc}`estimation`: configure estimation and read its results.
-- {doc}`parallel`: run with MPI or across cluster tasks.
+- {doc}`user_guide/getting_started`: install kipe and run a first twin experiment.
+- {doc}`user_guide/anatomy`: how a study connects the solver, measurements, data and estimation.
+- {doc}`user_guide/measurements`: what kipe compares with data, and how.
+- {doc}`user_guide/synthetic_data`: generate data for a twin experiment.
+- {doc}`user_guide/estimation`: configure estimation and read its results.
+- {doc}`user_guide/parallel`: run with MPI or across cluster tasks.
 
 ## Reference
 
-- {doc}`study_file`: every study-file key, its type, default and purpose.
-- {doc}`command_line`: the available commands and their options.
-- {doc}`api`: modules, classes and functions, from their docstrings.
+- {doc}`reference/study_file`: every study-file key, its type, default and purpose.
+- {doc}`reference/command_line`: the available commands and their options.
+- {doc}`reference/api`: modules, classes and functions, from their docstrings.
 
 ## Theory
 
-- {doc}`theory`: the estimation problem and the reduced-order unscented Kalman filter.
+- {doc}`theory/theory`: the estimation problem and the reduced-order unscented Kalman filter.
 
 ## Extending kipe
 
-- {doc}`architecture`: how kipe is put together and where extensions fit.
-- {doc}`write_a_sampler`: add a spatial sampler.
-- {doc}`development`: work on kipe.
+- {doc}`extending/architecture`: how kipe is put together and where extensions fit.
+- {doc}`extending/write_a_sampler`: add a spatial sampler.
+- {doc}`extending/development`: work on kipe.
 
 ```{toctree}
 :hidden:
 :includehidden:
-:caption: User guide
 
-getting_started
-anatomy
-measurements
-synthetic_data
-estimation
-parallel
-```
-
-```{toctree}
-:hidden:
-:includehidden:
-:caption: Reference
-
-study_file
-command_line
-api
-```
-
-```{toctree}
-:hidden:
-:includehidden:
-:caption: Theory
-
-theory
-```
-
-```{toctree}
-:hidden:
-:includehidden:
-:caption: Extending kipe
-
-architecture
-write_a_sampler
-development
+user_guide/index
+reference/index
+theory/index
+extending/index
 ```

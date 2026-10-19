@@ -7,7 +7,7 @@ automatically from the package docstrings at build time (`sphinx.ext.apidoc` in 
 
 ```bash
 pip install -e ".[docs]"
-python -m sphinx -W --keep-going -b html docs/source docs/build/html
+python -m sphinx -W --keep-going -c docs -b html docs/source docs/build/html
 ```
 
 The same build is a manual pre-commit hook, which also opens the result:
