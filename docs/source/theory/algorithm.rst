@@ -4,10 +4,11 @@ The ROUKF
 Rationale and definitions
 -------------------------
 
+A Kalman filter is a recursive estimator - meaning that parameters are corrected one measurement at the time. In the context of dynamical models, this recursivity works by propagating the state and its covariance with the model, and corrects both
+whenever a measurement is available.
 
-A Kalman filter propagates the state and its covariance with the model, and corrects both
-whenever a measurement is available. For a linear model, it solves the problem above exactly.
-The unscented Kalman filter extends it to nonlinear models: it represents the uncertainty by
+For a linear model, it solves the MAP above exactly.
+The unscented Kalman filter is a popular extension to nonlinear models: it represents the uncertainty by
 :math:`N_\sigma` deterministically chosen *sigma points*, propagates them through the model,
 and recovers the mean and covariance from them. For a joint estimate of state and parameters,
 :math:`N_\sigma` grows with the dimension of both, which is infeasible for large models. The
