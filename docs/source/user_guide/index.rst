@@ -2,6 +2,8 @@ User guide
 ==========
 
 .. toctree::
+   :maxdepth: 1
+
    getting_started
    anatomy
    measurements
