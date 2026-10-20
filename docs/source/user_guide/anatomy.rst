@@ -1,9 +1,16 @@
 Anatomy of a study
 ==================
 
-A *study* connects a forward solver, measurements, data and parameter estimation. Its study file
-configures the solver and the measurements, and tells kipe how to synthesize data and estimate
-parameters. The same file is used throughout a twin experiment:
+In kipe, a *study* is a parameter estimation problem, described by a study file. The study file defines the forward model, the parameters to estimate with their priors, the measurements and where their data are, and the settings of the Kalman filter. The data are either measured or synthesized from the model with ``kipe synthesis``. For synthetic data, a study can define several independent noise realizations, to study the statistics of the estimates under noise.
+
+A single study file also defines a *twin experiment*: ``kipe synthesis`` computes a ground truth with known parameters and generates noisy data from it, and ``kipe estimation`` then estimates the parameters from these data, starting from an inaccurate prior.
+That is, the following commands generate the synthetic data, estimate the parameters, and plot the estimates against the true parameters:
+
+.. code-block:: bash
+
+    kipe synthesis study.yaml
+    kipe estimation study.yaml
+    kipe plot study.yaml --truth
 
 .. mermaid::
 
