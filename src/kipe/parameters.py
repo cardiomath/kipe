@@ -4,6 +4,7 @@ kipe estimates the reparameterized parameters :math:`\theta`, the forward solver
 physical values :math:`\phi`. :class:`Parameterization` maps between the two.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from typing import Self, assert_never
 
@@ -125,6 +126,23 @@ class Parameterization:
             parameter.name: parameter.to_physical(float(value))
             for parameter, value in zip(self.parameters, theta, strict=True)
         }
+
+    def with_initial(self, values: Mapping[str, float]) -> Self:
+        r"""Return the parameterization with other initial estimates.
+
+        The standard deviations of :math:`\theta` stay. Used by the sensitivity analysis,
+        whose :math:`\theta_0` maps to the nominal values.
+
+        Args:
+            values: the new initial estimates, as physical values, by parameter name
+
+        Returns:
+            new parameterization
+        """
+        return replace(
+            self,
+            parameters=[replace(p, initial=values[p.name]) for p in self.parameters],
+        )
 
     def recenter(self, theta: NDArray_f64) -> Self:
         r"""Return the parameterization with the initial estimates moved to ``theta``.

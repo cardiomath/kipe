@@ -272,3 +272,36 @@ def write_numpy(path: str | Path, times: NDArray_f64, values: NDArray_f64) -> No
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     np.savez(path, times=times, values=values)
+
+
+def write_data(
+    path: str | Path,
+    operator: ObservationOperator,
+    times: NDArray_f64,
+    values: NDArray_f64,
+    comm: MPI.Comm,
+) -> None:
+    """Write a measurement's data, gathered from all ranks, on rank 0 (:func:`write_numpy`).
+
+    In the format of the data files: what synthesis writes, and the predicted data of the runs
+    of the sensitivity analysis.
+
+    Args:
+        path: path to the ``.npz`` file
+        operator: the measurement's observation operator, which says where each rank's
+            entries go (``global_indices``)
+        times: the measurement times
+        values: this rank's entries of the data, one row per time
+        comm: communicator over which the entries are distributed
+    """
+    parts = comm.gather((operator.global_indices, values), root=0)
+    if comm.rank != 0:
+        return
+
+    assert parts is not None
+    data = np.empty((len(times), operator.size))
+
+    for global_indices, local_values in parts:
+        data[:, global_indices] = local_values
+
+    write_numpy(path, times, data)

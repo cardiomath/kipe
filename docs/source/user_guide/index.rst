@@ -9,4 +9,5 @@ User guide
    measurements
    synthetic_data
    estimation
+   identifiability
    parallel
