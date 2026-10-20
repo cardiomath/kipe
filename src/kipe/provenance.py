@@ -157,9 +157,13 @@ def git_state(module: str, patch: Path | None = None) -> dict[str, Any] | None:
         ``dirty``; None if the module's file is not tracked in a git checkout, e.g., for an
         installed package, or if git is not available
     """
-    spec = importlib.util.find_spec(module)
+    try:
+        spec = importlib.util.find_spec(module)
+    except ValueError:  # a module without __spec__, e.g., __main__ of an interactive session
+        return None
     if spec is None or spec.origin is None:
         return None
+
     origin = Path(spec.origin)
     directory = origin.parent
 
