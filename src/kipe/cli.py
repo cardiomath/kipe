@@ -4,6 +4,7 @@ import argparse
 import json
 import logging
 import sys
+import time
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -82,6 +83,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="estimate from the data of noise realization R only (synthesis.realizations); "
         "default: all, one after the other",
     )
+    estimation.add_argument(
+        "--resume",
+        action="store_true",
+        help="continue an interrupted estimation after its completed iterations; starts from "
+        "the beginning if there are none, does nothing if it is complete",
+    )
     _add_log_level_argument(estimation)
     estimation.set_defaults(func=_estimation)
 
@@ -135,13 +142,49 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "plot" and args.save and (args.terminal or args.watch):
         plot.error("--save writes a matplotlib figure, not with --terminal or --watch")
 
+    errors = MPI.COMM_WORLD.Dup()  # for reporting errors, apart from the run's communication
     try:
         args.func(args)
     except (StudyFileError, ForwardSolverError, PlotError) as err:  # user errors: no traceback
-        print(f"kipe: error: {err}", file=sys.stderr)
+        _report_error(err, errors)
         return 1
+    finally:
+        errors.Free()
 
     return 0
+
+
+_ERROR_WAIT = 10.0  # seconds the ranks wait for each other after an error
+
+
+def _report_error(err: Exception, comm: MPI.Comm, wait: float = _ERROR_WAIT) -> None:
+    """Print an error once, or end the run if only some of the ranks have it.
+
+    Usually all ranks raise the same error, since they read and check the same study and data:
+    rank 0 prints it. An error of single ranks, e.g., a file system problem on one node, would
+    leave the other ranks waiting in their next collective operation until the job's time
+    limit: the failing ranks print it, with their rank, and abort the run.
+
+    Args:
+        err: the error
+        comm: a communicator of all ranks that no other operation uses: the failing ranks meet
+            in a barrier on it
+        wait: seconds to wait for the other ranks to fail too
+    """
+    if comm.size == 1:
+        print(f"kipe: error: {err}", file=sys.stderr)
+        return
+
+    request = comm.Ibarrier()
+    deadline = time.monotonic() + wait
+    while not request.Test():
+        if time.monotonic() > deadline:  # the other ranks go on: an error of this rank only
+            print(f"kipe[{comm.rank}]: error: {err}", file=sys.stderr, flush=True)
+            comm.Abort(1)
+        time.sleep(0.01)
+
+    if comm.rank == 0:
+        print(f"kipe: error: {err}", file=sys.stderr)
 
 
 def _load_study(path: Path) -> StudyOptions:
@@ -283,11 +326,11 @@ def _estimation(args: argparse.Namespace) -> None:
 
     for r in realizations:
         log_file = estimation_directory(study, r) / "kipe.log"
-        _setup_logging(args.log_level or study.output.log_level, log_file)
+        _setup_logging(args.log_level or study.output.log_level, log_file, append=args.resume)
         logging.getLogger("kipe").info("%-11s%s", "study", args.study.resolve())
         if study.synthesis.realizations > 1:
             logging.getLogger("kipe").info("%-11s%d", "realization", r)
-        estimate(study, realization=r)
+        estimate(study, realization=r, resume=args.resume)
         logging.getLogger("kipe").info("%-11s%s", "log", log_file)
 
 
@@ -358,13 +401,13 @@ def _add_log_level_argument(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _setup_logging(level: str, log_file: Path) -> None:
+def _setup_logging(level: str, log_file: Path, append: bool = False) -> None:
     """Send kipe's log messages to stderr and, in full detail, to a log file.
 
     On stderr, MPI rank 0 reports from the given level on; the other ranks only report warnings
     and errors, marked with their rank. At the debug level, each message shows where it was
     logged. Rank 0 also writes all messages, from the debug level on and with their location, to
-    ``log_file`` (overwritten).
+    ``log_file``: overwritten, or appended to, e.g., when resuming an estimation.
 
     The messages don't propagate to the root logger: an imported library may have given it a
     handler on stderr (UFL does, with ``logging.debug``), which would show them at all levels.
@@ -372,6 +415,7 @@ def _setup_logging(level: str, log_file: Path) -> None:
     Args:
         level: minimum level of the messages on stderr of rank 0, e.g., ``"info"``
         log_file: path of the log file
+        append: append to the log file instead of overwriting it
     """
     rank = MPI.COMM_WORLD.rank
     prefix = "kipe" if rank == 0 else f"kipe[{rank}]"
@@ -393,7 +437,7 @@ def _setup_logging(level: str, log_file: Path) -> None:
 
     if rank == 0:
         log_file.parent.mkdir(parents=True, exist_ok=True)
-        file = logging.FileHandler(log_file, mode="w", encoding="utf-8")
+        file = logging.FileHandler(log_file, mode="a" if append else "w", encoding="utf-8")
         file.name = "kipe.file"
         file.setFormatter(
             logging.Formatter(f"%(asctime)s %(levelname)-7s {location}%(message)s")

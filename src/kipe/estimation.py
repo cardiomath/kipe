@@ -7,18 +7,19 @@ corrected. Outer iterations repeat the pass, starting from the previous estimate
 :func:`estimate` builds all of this from a study file.
 
 The estimation history is written to ``<output.path>/estimation/``: ``history.csv`` (one row
-per assimilation step, written as the filter runs) and ``history.npz`` (all steps, including
-the full parameter covariance). :func:`estimate` also writes the provenance of the run there
-(:mod:`kipe.provenance`). With several noise realizations (``synthesis.realizations``), each
-estimation uses the data of one realization and writes to its subdirectory, e.g.,
-``estimation/r07/``.
+per assimilation step, written as the filter runs) and ``history.npz`` (all steps of the
+completed outer iterations, including the full parameter covariance, written after each). An
+interrupted estimation can continue from it (``kipe estimation --resume``). :func:`estimate`
+also writes the provenance of the run there (:mod:`kipe.provenance`). With several noise
+realizations (``synthesis.realizations``), each estimation uses the data of one realization
+and writes to its subdirectory, e.g., ``estimation/r07/``.
 """
 
 import logging
 import time
-from collections.abc import Mapping
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import Any
 
 from mpi4py import MPI
 
@@ -26,6 +27,13 @@ import numpy as np
 
 from kipe import roukf
 from kipe._formatting import format_table
+from kipe._history import (
+    History,
+    Step,
+    count_iterations,
+    final_thetas,
+    read_completed_steps,
+)
 from kipe._types import NDArray_f64
 from kipe.forward_solver import (
     FieldSpec,
@@ -48,7 +56,7 @@ from kipe.options import (
     estimation_directory,
 )
 from kipe.parameters import Parameterization, build_parameterization
-from kipe.provenance import recorded_run
+from kipe.provenance import data_files, recorded_run
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +73,8 @@ class Estimation:
         options: number of outer iterations and sigma-point stencil
         output: directory for the estimation history
         comm: communicator over which the model state is distributed
+        completed_steps: the steps of the completed outer iterations of an earlier,
+            interrupted run of the same estimation, which this one continues
 
     Raises:
         StudyFileError: if the measurements have different times
@@ -78,6 +88,7 @@ class Estimation:
         options: EstimationOptions,
         output: Path,
         comm: MPI.Comm = MPI.COMM_WORLD,
+        completed_steps: Sequence[Step] = (),
     ) -> None:
         self._solver = solver
         self._parameterization = parameterization
@@ -92,13 +103,15 @@ class Estimation:
         self._stencil = roukf.sigma_point_stencil(
             options.sigma_points, len(parameterization.names)
         )
-        self._history = _History(output, parameterization.names, comm)
+        self._history = History(output, parameterization.names, comm, completed_steps)
+        self._completed_iterations = count_iterations(completed_steps)
 
     def run(self) -> Parameters:
         """Run the outer iterations, each a pass of the filter over all measurements.
 
         Each pass after the first starts from the previous estimate, with the initial
-        uncertainty.
+        uncertainty. After each pass, the history is written to ``history.npz``. A run that
+        continues an earlier one starts after its completed iterations, from their estimate.
 
         Returns:
             the estimated parameters, as physical values
@@ -106,8 +119,17 @@ class Estimation:
         self._log_setup()
         started = time.perf_counter()
 
+        # the estimate after the completed iterations, recentered as they were
         parameterization = self._parameterization
-        for iteration in range(self._iterations):
+        for theta in final_thetas(self._history.steps):
+            estimate = parameterization.to_physical(theta)
+            parameterization = parameterization.recenter(theta)
+        if self._completed_iterations:
+            logger.info(
+                "resumed after iteration %d/%d", self._completed_iterations, self._iterations
+            )
+
+        for iteration in range(self._completed_iterations, self._iterations):
             title = f" iteration {iteration + 1}/{self._iterations} "
             logger.info("%s", title.center(_WIDTH, "━"))
             iteration_started = time.perf_counter()
@@ -126,8 +148,8 @@ class Estimation:
                 logger.info("    %s", line)
             estimate = parameterization.to_physical(filter_state.theta)
             parameterization = parameterization.recenter(filter_state.theta)
+            self._history.write_npz()
 
-        self._history.write_npz()
         logger.info("%s", "━" * _WIDTH)
         logger.info("%-11s%s", "history", self._output / "history.{csv,npz}")
         logger.info("%-11s%.3g s", "run time", time.perf_counter() - started)
@@ -319,40 +341,68 @@ class Estimation:
 
 
 def estimate(
-    study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD, realization: int = 0
+    study: StudyOptions,
+    comm: MPI.Comm = MPI.COMM_WORLD,
+    realization: int = 0,
+    resume: bool = False,
 ) -> Parameters:
     """Estimate the parameters of a study; write the estimation history and the provenance.
 
     Builds the forward solver, the estimated parameters and the measurements (with their data)
     from the study file, then runs the :class:`Estimation`.
 
+    With ``resume``, an interrupted estimation continues after its completed outer iterations,
+    as recorded in its ``history.npz``, with the same result as without the interruption. The
+    study may have more ``estimation.iterations`` than before, but must otherwise be the same.
+    Without a history, the estimation starts from the beginning; if it is complete, nothing
+    runs.
+
     Args:
         study: the study options
         comm: communicator over which the model state is distributed
         realization: number of the noise realization whose data are used
             (``synthesis.realizations``)
+        resume: continue an interrupted estimation
 
     Returns:
         the estimated parameters, as physical values
 
     Raises:
         StudyFileError: if the study lacks what estimation needs, has no such realization, or
-            the data do not fit
+            the data do not fit; with ``resume``, if the study has changed since the earlier run
     """
     if study.parameters is None:
         raise StudyFileError("estimation needs a parameters section")
 
     output = estimation_directory(study, realization)
+    data = data_files(study, realization)
+    completed_steps: list[Step] = []
+    if resume:
+        completed_steps = read_completed_steps(output, study, data, comm)
+        comm.barrier()  # every rank has read the earlier run's files before rank 0 rewrites them
+    completed_iterations = count_iterations(completed_steps)
+    if completed_iterations >= study.estimation.iterations:
+        logger.info(
+            "%s: complete after %d iterations, nothing to resume", output, completed_iterations
+        )
+        return dict(
+            zip(study.parameters.select, completed_steps[-1].parameters.tolist(), strict=True)
+        )
+
     solver = build_forward_solver(study.forward_solver)
     parameterization = build_parameterization(study.parameters, solver.nominal_parameters())
     measurements = _build_measurements(study, solver, comm, realization)
     estimation = Estimation(
-        solver, parameterization, measurements, study.estimation, output, comm
+        solver, parameterization, measurements, study.estimation, output, comm, completed_steps
     )
 
-    run = {"assimilation_times": _common_times(measurements).tolist()}  # maybe from the data
+    run: dict[str, Any] = {"assimilation_times": _common_times(measurements).tolist()}
     if study.synthesis.realizations > 1:
         run["realization"] = realization
+    run["data"] = data
+    if completed_iterations:
+        run["resumed_after_iteration"] = completed_iterations
+
     with recorded_run(output, study, run, comm):
         return estimation.run()
 
@@ -537,99 +587,3 @@ class _StateLayout:
             the state
         """
         return {name: vector[s].copy() for name, s in self._slices.items()}
-
-
-@dataclass(frozen=True)
-class _Step:
-    """The estimate after one assimilation step, as recorded in the history."""
-
-    iteration: int
-    time: float
-    parameters: NDArray_f64  # physical values
-    lower: NDArray_f64  # physical 1σ range
-    upper: NDArray_f64
-    theta: NDArray_f64
-    P_theta: NDArray_f64
-
-
-class _History:
-    """The estimation history: one entry per assimilation step.
-
-    Rows are appended to ``history.csv`` as the filter runs; :meth:`write_npz` writes all
-    steps, including the full parameter covariance. Only rank 0 writes.
-
-    Per parameter, e.g., ``c``, the CSV has the columns ``c`` (physical value), ``lower_c`` and
-    ``upper_c`` (its physical 1σ range), ``theta_c`` and ``stddev_theta_c``.
-
-    Args:
-        path: output directory
-        names: names of the estimated parameters
-        comm: the communicator
-    """
-
-    def __init__(self, path: Path, names: list[str], comm: MPI.Comm) -> None:
-        self._path = path
-        self._names = names
-        self._writes = comm.rank == 0
-        self._steps: list[_Step] = []
-        if self._writes:
-            path.mkdir(parents=True, exist_ok=True)
-            header = ["iteration", "time"]
-            for name in names:
-                header += [name, f"lower_{name}", f"upper_{name}"]
-                header += [f"theta_{name}", f"stddev_theta_{name}"]
-            (path / "history.csv").write_text(",".join(header) + "\n")
-
-    def record(
-        self,
-        iteration: int,
-        t: float,
-        filter_state: roukf.FilterState,
-        parameterization: Parameterization,
-    ) -> None:
-        r"""Record the estimate after an assimilation step.
-
-        Args:
-            iteration: index of the pass
-            t: time of the step
-            filter_state: the filter state, with the estimate :math:`\theta`
-            parameterization: maps :math:`\theta` to physical values
-        """
-        theta, P_theta = filter_state.theta, filter_state.covariance()
-        stddev = np.sqrt(np.diag(P_theta))
-        ranges = np.array(parameterization.physical_range(theta, stddev))
-        step = _Step(
-            iteration=iteration,
-            time=t,
-            parameters=np.array(list(parameterization.to_physical(theta).values())),
-            lower=ranges[:, 0],
-            upper=ranges[:, 1],
-            theta=theta.copy(),
-            P_theta=P_theta.copy(),
-        )
-        self._steps.append(step)
-
-        if self._writes:
-            row = [str(iteration), repr(t)]
-            columns = zip(step.parameters, step.lower, step.upper, theta, stddev, strict=True)
-            for values in columns:
-                row += [repr(float(value)) for value in values]
-            with (self._path / "history.csv").open("a") as f:
-                f.write(",".join(row) + "\n")
-
-    def write_npz(self) -> None:
-        """Write all steps to ``history.npz``."""
-        if not self._writes:
-            return
-
-        np.savez(
-            self._path / "history.npz",
-            names=np.array(self._names),
-            iteration=np.array([step.iteration for step in self._steps]),
-            time=np.array([step.time for step in self._steps]),
-            parameters=np.array([step.parameters for step in self._steps]),
-            lower=np.array([step.lower for step in self._steps]),
-            upper=np.array([step.upper for step in self._steps]),
-            theta=np.array([step.theta for step in self._steps]),
-            P_theta=np.array([step.P_theta for step in self._steps]),
-        )
