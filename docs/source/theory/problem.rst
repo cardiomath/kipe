@@ -6,7 +6,7 @@ Scientific references
 
 kipe estimates the parameters of a model from measurements with the reduced-order unscented
 Kalman filter (ROUKF) of [MC11]_. This page follows the formulation and notation of
-[NAB26]_; In the code, :mod:`kipe.roukf` implements the filter, :mod:`kipe.estimation` runs it over a study.
+[NAB26]_; in the code, :mod:`kipe.roukf` implements the filter, and :mod:`kipe.estimation` runs it over a study.
 
 The estimation problem
 ----------------------
@@ -21,9 +21,9 @@ needs,
 
 with the physical parameters :math:`\bs{\phi} \in \mathbb{R}^p` and a known initial state
 :math:`\bs{\chi}^0`. In kipe, :math:`\mathcal{A}^k` is the solver's
-:meth:`~kipe.forward_solver.ForwardSolver.propagate`. The state and the parameters is everything a time step
-depends on, so that the model can be restarted from any state; the model carries no process
-noise, so the parameters are the only unknowns.
+:meth:`~kipe.forward_solver.ForwardSolver.propagate`. The state and parameters are all that a time step
+depends on, so the model can be restarted from any state. The model carries no process noise,
+so the parameters are the only unknowns.
 
 **The parameters.** The filter estimates reparameterized parameters
 :math:`\bs{\theta} \in \mathbb{R}^p`, relative to the initial estimate :math:`\bs{\phi}^0`
@@ -35,17 +35,17 @@ noise, so the parameters are the only unknowns.
    \text{multiplicative:} \quad \phi_i = \phi_i^0 \, \theta_i, \qquad
    \text{additive:} \quad \phi_i = \phi_i^0 + \theta_i,
 
-so that the initial estimate is :math:`\theta^0_i = 0`, :math:`1` or :math:`0`, respectively. The parameters
-are then of similar size, though their physical values may differ by orders of magnitude.
+so that the initial estimate is :math:`\theta^0_i = 0` for the log and additive forms, and
+:math:`\theta^0_i = 1` for the multiplicative form. The reparameterized parameters are then of
+similar size, though their physical values may differ by orders of magnitude.
 [NAB26]_ uses the multiplicative one. In kipe, the prior parameter covariance
 :math:`\bs{P}_\theta^0` is diagonal, containing the squared standard deviations after
 conversion from the study-file uncertainties to :math:`\bs{\theta}`.
 
 **The measurements.** :math:`\bs{Z}^k \in \mathbb{R}^m` collects all measurements at
 :math:`t^k`, and the observation operator :math:`\mathcal{H}: \mathbb{R}^r \to \mathbb{R}^m`
-predicts them from the state. In kipe, measurements are the result of a spatial sampler and a measurement model per
-measurement (:doc:`../user_guide/measurements`). The noise is (assumed) Gaussian, zero-mean and independent, with the
-covariance
+predicts them from the state. In kipe, measurements are produced by a spatial sampler composed with
+an individual measurement model for each measurement (:doc:`../user_guide/measurements`). The noise. The noise is assumed to be Gaussian, zero-mean, and independent, with covariance
 
 .. math::
 
@@ -64,4 +64,4 @@ where :math:`\bs{\sigma}_Z` collects the standard deviations of the measurements
    \big\|^2_{\bs{W}^{-1}},
 
 with :math:`\|\bs{x}\|^2_{\bs{A}} = \bs{x}^T \bs{A} \bs{x}` and :math:`\bs{\chi}^k(\bs{\theta})`
-the state after :math:`k` steps with the parameters :math:`\bs{\phi}(\bs{\theta})`.
+the state after :math:`k` forward steps with the parameters :math:`\bs{\phi}(\bs{\theta})`.
