@@ -1,8 +1,8 @@
 The ROUKF
 =========
 
-Rationale and definitions
--------------------------
+Intro
+-----
 
 A Kalman filter is a recursive estimator - meaning that parameters are corrected one measurement at the time. In the context of dynamical models, this recursivity works by propagating the state and its covariance with the model, and corrects both
 whenever a measurement is available.
