@@ -10,6 +10,10 @@ realizations (``synthesis.realizations``), the true state is computed once, and 
 realization gets its own noise and data files. The provenance of the run is written to
 ``<output.path>/synthesis/`` (:mod:`kipe.provenance`).
 
+The noise-free data come from :func:`observe_run` or :func:`observe_checkpoints`. They are
+public: the sensitivity analysis (:mod:`kipe.sensitivity`) uses :func:`observe_run` for its
+perturbed runs.
+
 In parallel, each rank generates the entries of the data it holds (``global_indices``); the
 noise of an entry depends only on its position, so the data do not depend on the number of
 ranks. Rank 0 writes the files.
@@ -29,6 +33,7 @@ from kipe._formatting import format_table
 from kipe._types import NDArray_f64
 from kipe.forward_solver import (
     ForwardSolver,
+    Parameters,
     State,
     SupportsCheckpoints,
     build_forward_solver,
@@ -38,7 +43,7 @@ from kipe.measurements import (
     ObservationOperator,
     build_observation_operator,
     measurement_times,
-    write_numpy,
+    write_data,
 )
 from kipe.options import (
     CheckpointsTruthOptions,
@@ -100,7 +105,9 @@ def synthesize(study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD) -> list[lis
             measurements = _realization(study, r, operators, times, noise_free, stddevs, seeds)
             for measurement in measurements:
                 path = data_path(study.measurements[measurement.name], r)
-                _write(path, measurement, comm)
+                write_data(
+                    path, measurement.operator, measurement.times, measurement.values, comm
+                )
                 written.append(path)
             realizations.append(measurements)
 
@@ -178,9 +185,9 @@ def _noise_free(
     """
     match truth:
         case RunTruthOptions():
-            return _truth_from_run(solver, times, operators)
+            return observe_run(solver, times, operators)
         case CheckpointsTruthOptions(path=path):
-            return _truth_from_checkpoints(solver, path, times, operators)
+            return observe_checkpoints(solver, path, times, operators)
         case _:
             assert_never(truth)
 
@@ -223,17 +230,22 @@ def _realization(
     ]
 
 
-def _truth_from_run(
+def observe_run(
     solver: ForwardSolver,
     times: Mapping[str, NDArray_f64],
     operators: Mapping[str, ObservationOperator],
+    parameters: Parameters | None = None,
 ) -> dict[str, NDArray_f64]:
-    """Return the noise-free data from a run of the solver with its nominal parameters.
+    """Return the noise-free data of a run of the solver: its predicted measurements.
+
+    The truth of synthesis with the nominal parameters, the perturbed runs of the sensitivity
+    analysis (:mod:`kipe.sensitivity`) with others.
 
     Args:
         solver: the forward solver
         times: the times of each measurement
         operators: the observation operators of the measurements
+        parameters: physical values of solver parameters; the nominal ones for all others
 
     Returns:
         this rank's entries of each measurement's noise-free data, one row per time
@@ -248,7 +260,7 @@ def _truth_from_run(
         if t_k < t - _tol(t):
             raise StudyFileError(f"measurements.{name}: time {t_k} is before the start {t}")
         elif t_k > t + _tol(t):
-            state = solver.propagate(t, t_k, state, {})
+            state = solver.propagate(t, t_k, state, dict(parameters or {}))
             t = t_k
         else:
             # same time (up to round-off): sample the current state, no solver call
@@ -259,14 +271,16 @@ def _truth_from_run(
     return {name: np.array(v) for name, v in values.items()}
 
 
-def _truth_from_checkpoints(
+def observe_checkpoints(
     solver: ForwardSolver,
     path: str,
     times: Mapping[str, NDArray_f64],
     operators: Mapping[str, ObservationOperator],
 ) -> dict[str, NDArray_f64]:
-    """Return the noise-free data from the checkpoints of an earlier run, read at the
-    measurement times.
+    """Return the noise-free data of the checkpoints of an earlier run: its predicted
+    measurements, from the states read at the measurement times.
+
+    The truth of synthesis from checkpoints (``synthesis.truth: {type: checkpoints}``).
 
     Args:
         solver: the forward solver, which must read checkpoints
@@ -357,25 +371,6 @@ def _add_noise(
         noise = np.random.default_rng([seed, k, realization]).normal(0.0, stddev, operator.size)
         noisy[k] = z + noise[operator.global_indices]
     return noisy
-
-
-def _write(path: str, measurement: Measurement, comm: MPI.Comm) -> None:
-    """Write a measurement's data, gathered from all ranks, on rank 0.
-
-    Args:
-        path: path to the ``.npz`` file
-        measurement: the measurement, with this rank's entries of its data
-        comm: communicator over which the entries are distributed
-    """
-    parts = comm.gather((measurement.operator.global_indices, measurement.values), root=0)
-    if comm.rank != 0:
-        return
-
-    assert parts is not None
-    values = np.empty((len(measurement.times), measurement.operator.size))
-    for global_indices, local_values in parts:
-        values[:, global_indices] = local_values
-    write_numpy(path, measurement.times, values)
 
 
 def _times(name: str, options: MeasurementOptions) -> NDArray_f64:

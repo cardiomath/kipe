@@ -13,6 +13,7 @@ from mpi4py import MPI
 from pydantic import ValidationError
 
 import kipe
+from kipe import sensitivity
 from kipe._formatting import format_table
 from kipe.estimation import estimate
 from kipe.forward_solver import ForwardSolverError, build_forward_solver
@@ -131,6 +132,26 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="time between redraws with --watch (default: %(default)s)",
     )
     plot.set_defaults(func=_plot)
+
+    analysis = subparsers.add_parser(
+        "sensitivity",
+        help="sensitivity analysis: the Fisher information of the measurements at the nominal "
+        "parameters, from two forward runs per parameter",
+    )
+    analysis.add_argument("study", type=Path, help="study file (YAML)")
+    which = analysis.add_mutually_exclusive_group()
+    which.add_argument(
+        "--run",
+        type=int,
+        metavar="I",
+        help="compute forward run I only, e.g., as a task of a job array; default: all runs, "
+        "then their assembly",
+    )
+    which.add_argument(
+        "--assemble", action="store_true", help="only combine the runs, once all are done"
+    )
+    _add_log_level_argument(analysis)
+    analysis.set_defaults(func=_sensitivity)
 
     schema = subparsers.add_parser(
         "schema",
@@ -331,6 +352,36 @@ def _estimation(args: argparse.Namespace) -> None:
         if study.synthesis.realizations > 1:
             logging.getLogger("kipe").info("%-11s%d", "realization", r)
         estimate(study, realization=r, resume=args.resume)
+        logging.getLogger("kipe").info("%-11s%s", "log", log_file)
+
+
+def _sensitivity(args: argparse.Namespace) -> None:
+    """Run the sensitivity analysis of the study: its forward runs, and their assembly.
+
+    Args:
+        args: parsed command line arguments, with the path to the study file
+    """
+    study = _load_study(args.study)
+    level = args.log_level or study.output.log_level
+    if args.assemble:
+        runs: Sequence[int] = []
+    elif args.run is not None:
+        runs = [args.run]
+    else:
+        runs = range(sensitivity.run_count(study))
+
+    for i in runs:
+        log_file = sensitivity.run_directory(study, i) / "kipe.log"
+        _setup_logging(level, log_file)
+        logging.getLogger("kipe").info("%-11s%s", "study", args.study.resolve())
+        sensitivity.run(study, i)
+        logging.getLogger("kipe").info("%-11s%s", "log", log_file)
+
+    if args.run is None:
+        log_file = Path(study.output.path) / "sensitivity" / "kipe.log"
+        _setup_logging(level, log_file)
+        logging.getLogger("kipe").info("%-11s%s", "study", args.study.resolve())
+        sensitivity.assemble(study)
         logging.getLogger("kipe").info("%-11s%s", "log", log_file)
 
 

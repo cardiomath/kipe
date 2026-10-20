@@ -2,6 +2,7 @@
 # FitzHugh-Nagumo twin experiment. Run from this directory:
 #   kipe synthesis study.yaml     # generates data/v.npz, data/w.npz with the nominal parameters
 #   kipe estimation study.yaml    # estimates a, b, c from them, starting from a wrong guess
+#   kipe sensitivity study.yaml   # the Cramér-Rao bounds of a, b, c at the true parameters
 
 output:
   path: results

@@ -418,6 +418,26 @@ class EstimationOptions:
 
 
 @dataclass(frozen=True, config=_CONFIG)
+class SensitivityOptions:
+    r"""Sensitivity analysis with the Fisher information (``kipe sensitivity``).
+
+    It computes the sensitivities of the measurements to the estimated parameters, and from
+    them the Fisher information the measurements carry about the parameters. The sensitivities
+    are evaluated at the nominal parameters, i.e., the truth of a twin experiment, in
+    :math:`\theta` of the ``parameters`` section, by centered finite differences with two
+    forward runs per parameter. The measurements are those of the study, their predicted data
+    noise-free, and weighted with the measurements' ``noise.stddev``, the noise that estimation
+    assumes.
+    """
+
+    step: PositiveFloat = 0.1
+    r"""Step of the finite differences, as a fraction of each parameter's prior standard
+    deviation :math:`\sigma_\theta`: the runs are at :math:`\theta_\mathrm{true} \pm`
+    ``step`` :math:`\sigma_\theta`. With ``log`` and ``relative_stddev: 0.1``, the default
+    changes the parameter by about 1 %."""
+
+
+@dataclass(frozen=True, config=_CONFIG)
 class StudyOptions:
     """All sections of a study file."""
 
@@ -444,6 +464,9 @@ class StudyOptions:
 
     estimation: EstimationOptions = field(default_factory=EstimationOptions)
     """Parameter estimation."""
+
+    sensitivity: SensitivityOptions = field(default_factory=SensitivityOptions)
+    """Sensitivity analysis with the Fisher information (``kipe sensitivity``)."""
 
     def __post_init__(self) -> None:
         """Check the synthesis noise's measurement names and that measurements do not share a
