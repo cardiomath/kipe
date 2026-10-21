@@ -38,20 +38,3 @@ study file:
    :language: yaml
 
 :doc:`../reference/study_file` lists every option and its default.
-
-Run a study
------------
-
-For a twin experiment, run synthesis, estimation, then plotting:
-
-.. code-block:: bash
-
-    kipe synthesis study.yaml
-    kipe estimation study.yaml
-    kipe plot study.yaml --truth
-
-With measured data, skip synthesis and configure their file paths under ``measurements``. The
-commands write logs and run provenance under subdirectories of ``output.path``; estimation also
-writes its history there. Synthesized measurement data go to the ``data.path`` values in the
-study file. See :doc:`../reference/command_line` for command options, :doc:`synthetic_data` for data generation
-and :doc:`estimation` for parameter estimates and results.
