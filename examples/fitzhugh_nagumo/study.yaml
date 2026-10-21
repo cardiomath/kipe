@@ -9,7 +9,7 @@ output:
 
 forward_solver:
   factory: "kipe.examples.fitzhugh_nagumo:Solver"
-  arguments: {dt: 0.05}             # nominal (true) parameters: a = 0.2, b = 0.2, c = 3
+  arguments: {dt: 0.05}   # nominal values in solver: a = 0.2, b = 0.2, c = 3
 
 parameters:
   reparameterization: log
@@ -34,5 +34,7 @@ synthesis:
   truth: {type: run}                # run the solver with its nominal parameters (the default)
 
 estimation:
-  sigma_points: simplex
+  sigma_points: simplex             # shape of the UKF's sigma-point stencil
   iterations: 5                     # outer iterations: restart from the previous estimate
+
+# end-of-study-file
