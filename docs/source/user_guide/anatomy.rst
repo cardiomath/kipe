@@ -12,17 +12,19 @@ That is, the following commands generate the synthetic data, estimate the parame
     kipe estimation study.yaml
     kipe plot study.yaml --truth
 
+The commands read the study file, and pass their results on through files: synthesis writes
+the data to the measurements' ``data.path``, and estimation writes its estimates to
+``output.path``.
+
 .. mermaid::
 
-   flowchart LR
-       study[/"study file"/] --> solver["forward solver"]
-       solver --> truth["true model state"]
-       truth --> operator["measurement operator"]
-       operator --> data[/"synthetic data"/]
-       measured[/"measured data"/] --> data
-       data --> estimate["parameter estimation"]
-       solver --> estimate
-       estimate --> history[/"estimation results"/]
+    flowchart LR
+        study[/"study.yaml"/] --> synthesis["kipe synthesis"]
+        synthesis --> data[/"data files (data.path)"/]
+        measured[/"measured data"/] -.-> data
+        study --> estimation["kipe estimation"]
+        data --> estimation
+        estimation --> results[/"estimates & uncertainties (output.path)"/]
 
 :doc:`measurements` explains how kipe compares the model with measured data and :doc:`../extending/architecture` describes the data flow and the code structure in detail, for those who extend kipe.
 
