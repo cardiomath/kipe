@@ -24,9 +24,7 @@ That is, the following commands generate the synthetic data, estimate the parame
        solver --> estimate
        estimate --> history[/"estimation results"/]
 
-The measurements' observation operators turn model states into predicted data. Synthesis uses
-them to generate data; estimation uses the same operators to compare predictions with data.
-:doc:`measurements` explains how measurements and observation operators work.
+:doc:`measurements` explains how kipe compares the model with measured data and :doc:`../extending/architecture` describes the data flow and the code structure in detail, for those who extend kipe.
 
 The study file
 --------------
