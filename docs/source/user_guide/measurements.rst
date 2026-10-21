@@ -1,16 +1,15 @@
 Measurements
 ============
 
-A measurement is a series of measured data, and the description of how to predict these data
-from the state of the model. kipe compares the prediction with the data at each measurement
-time: in an estimation, to correct the parameters; in a synthesis, it writes the prediction,
-with noise, as synthetic data.
+A measurement is a series of measured data and the description of how to predict those data
+from the model state. During estimation, kipe compares the prediction with the data at each
+measurement time to correct the parameters.
 
 Each measurement is an entry under ``measurements`` in the study file, by name. The
 FitzHugh–Nagumo example (:mod:`kipe.examples.fitzhugh_nagumo`) measures both fields of its
 model:
 
-.. literalinclude:: ../../examples/fitzhugh_nagumo/study.yaml
+.. literalinclude:: ../../../examples/fitzhugh_nagumo/study.yaml
    :language: yaml
    :start-at: measurements:
    :end-before: synthesis:
@@ -18,7 +17,7 @@ model:
 A measurement names the state ``fields`` it observes, its ``times``, where its ``data`` are, its
 ``noise``, and how the fields are brought to the measurement locations (``spatial_sampling``).
 ``kipe list-fields study.yaml`` lists the solver's fields, with their kind, size and, for a
-FEniCSx solver, their function space. :doc:`study_file` lists all keys of
+FEniCSx solver, their function space. :doc:`../reference/study_file` lists all keys of
 ``measurements.<name>``; this page explains how they work together.
 
 From the model state to the data
@@ -35,7 +34,7 @@ kipe predicts a measurement's data from the model state in two steps:
    :math:`\hat{z} = y`, and the innovation is :math:`z - \hat{z}`.
 
 Together, they are the measurement's observation operator, the same in synthesis and
-estimation: the data kipe generates are the data it expects. :doc:`architecture` explains the
+estimation: the data kipe generates are the data it expects. :doc:`../extending/architecture` explains the
 split and how to add a sampler or a model.
 
 Times
@@ -66,15 +65,9 @@ from an image, write them in this order:
 Noise
 -----
 
-``noise.stddev`` is the standard deviation of the measurement noise: ``estimation`` assumes
-it, ``synthesis`` adds it, drawn with ``noise.seed``. ``synthesis.noise`` can add another noise,
-e.g., none for noise-free data, while estimation still assumes ``noise.stddev``:
-
-.. code-block:: yaml
-
-    synthesis:
-      noise:
-        u: {stddev: 0}
+``noise.stddev`` is the standard deviation of measurement noise assumed during estimation.
+See :doc:`synthetic_data` for how synthesis uses this value and can override it for generated
+data.
 
 Spatial sampling
 ----------------
@@ -96,7 +89,7 @@ solver's: it can be coarser, or a surface of it. A vector field can be measured 
 its component along a direction or the surface normal (``projection``). The heat example
 (:mod:`kipe.fenicsx.examples.heat`) measures the temperature on a coarser mesh:
 
-.. literalinclude:: ../../examples/heat/study.yaml
+.. literalinclude:: ../../../examples/heat/study.yaml
    :language: yaml
    :start-at: measurements:
    :end-before: synthesis:
@@ -129,11 +122,4 @@ A finite element field, evaluated at given points, in their order:
       type: fenicsx.points
       points: [[0.25, 0.25], [0.5, 0.5], [0.75, 0.75]]
 
-Another sampler? :doc:`write_a_sampler` walks through this one, step by step.
-
-Synthetic data
---------------
-
-``kipe synthesis`` generates the data of all measurements at their ``times``: with their
-observation operator, from a true state, with the noise above. :ref:`synthetic-data` explains
-how, and what for.
+Another sampler? :doc:`../extending/write_a_sampler` walks through this one, step by step.

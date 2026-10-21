@@ -46,13 +46,13 @@ Documentation
 -------------
 
 The documentation is built with Sphinx, from ``docs/source``: reStructuredText and Markdown
-pages, the API pages generated from the docstrings, and the :doc:`study_file` generated from
+pages, the API pages generated from the docstrings, and the :doc:`../reference/study_file` generated from
 the options. Warnings are errors, as in CI:
 
 .. code-block:: bash
 
     pip install -e ".[docs]"
-    python -m sphinx -W --keep-going -b html docs/source docs/build/html
+    python -m sphinx -W --keep-going -c docs -b html docs/source docs/build/html
     # or, the same as a pre-commit hook that also opens the result:
     pre-commit run sphinx-build --all-files --hook-stage manual
 
@@ -64,4 +64,4 @@ Before a pull request
 - ``pre-commit run --all-files`` passes;
 - the tests pass, those of the FEniCSx backend also on several ranks;
 - the documentation builds without warnings; new options are documented in their docstrings,
-  from which the :doc:`study_file` is generated.
+  from which the :doc:`../reference/study_file` is generated.

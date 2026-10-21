@@ -32,7 +32,7 @@ def write_reference(path: Path) -> None:
     schema = TypeAdapter(StudyOptions).json_schema()
     reference = _Reference(schema["$defs"])
 
-    lines = ["Overview", "--------", "", ".. code-block:: yaml", ""]
+    lines = [".. code-block:: yaml", ""]
     lines += [f"   {line}" if line else "" for line in reference.skeleton(schema)]
     lines.append("")
     lines += reference.tables(schema)

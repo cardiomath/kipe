@@ -8,7 +8,7 @@ from pathlib import Path
 
 from sphinx.ext.apidoc import main as apidoc_main
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parent.parent
 
 project = "kipe"
 author = "kipe contributors"
@@ -29,7 +29,7 @@ exclude_patterns = ["_apidoc/modules.rst", "_generated/*"]  # _generated: includ
 html_theme = "sphinx_rtd_theme"
 # \bs{x}: bold symbols, as in the article the theory page follows
 mathjax3_config = {"tex": {"macros": {"bs": [r"\boldsymbol{#1}", 1]}}}
-html_static_path = ["_static"]
+html_static_path = ["source/_static"]
 html_css_files = ["mermaid.css", "tables.css"]
 mermaid_height = "auto"  # in proportion to the width, not a fixed box; see mermaid.css
 autodoc_member_order = "bysource"
@@ -52,7 +52,7 @@ def _generate_api(app):
 
 def _generate_study_reference(app):
     """Generate the study file reference from the options, so none is maintained by hand."""
-    sys.path.insert(0, str(Path(__file__).parent))  # study_reference.py, next to this file
+    sys.path.insert(0, str(Path(app.srcdir) / "reference"))
     from study_reference import write_reference
 
     write_reference(Path(app.srcdir) / "_generated" / "study_file.rst")

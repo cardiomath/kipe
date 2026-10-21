@@ -5,7 +5,7 @@ A spatial sampler brings the model's fields to where a measurement is taken: it 
 them onto a measurement mesh, evaluates them at points, integrates them over a surface, and so
 on. This page walks through a small, complete one, ``fenicsx.points``, which evaluates a field
 at given points (:mod:`kipe.fenicsx.points`). A new sampler follows the same steps. Read
-:doc:`measurements` and :doc:`architecture` first: they explain what a sampler is
+:doc:`../user_guide/measurements` and :doc:`architecture` first: they explain what a sampler is
 for and how kipe uses it.
 
 Start without kipe
@@ -47,13 +47,13 @@ The options say what a study file can set for the sampler: a frozen dataclass in
 :mod:`kipe.options`, with a literal ``type``. The name carries the backend, ``fenicsx.``. The
 docstrings are the documentation of the study file, here and in the API pages:
 
-.. literalinclude:: ../../src/kipe/options.py
+.. literalinclude:: ../../../src/kipe/options.py
    :pyobject: PointSamplingOptions
 
 It joins the choices of ``spatial_sampling``, the union that pydantic selects from by
 ``type``:
 
-.. literalinclude:: ../../src/kipe/options.py
+.. literalinclude:: ../../../src/kipe/options.py
    :start-at: type SpatialSamplingOptions
    :end-at: ]
 
@@ -63,7 +63,7 @@ It joins the choices of ``spatial_sampling``, the union that pydantic selects fr
 The class gets everything it needs as arguments, not as options, so that it can be tested
 without a study file:
 
-.. literalinclude:: ../../src/kipe/fenicsx/points.py
+.. literalinclude:: ../../../src/kipe/fenicsx/points.py
    :pyobject: PointSampler
 
 The constructor:
@@ -89,14 +89,14 @@ A build function turns the options into the sampler. It takes what it needs from
 here, the observed field and its function space, from
 :func:`~kipe.fenicsx.sampling.observed_function_space`, which every FEniCSx sampler can use:
 
-.. literalinclude:: ../../src/kipe/fenicsx/points.py
+.. literalinclude:: ../../../src/kipe/fenicsx/points.py
    :pyobject: build_point_sampler
 
 kipe calls it from :func:`kipe.sampling.build_sampler`, which has one ``case`` per kind of
 sampler. A backend's sampler is imported inside its case, so that kipe works without dolfinx
 as long as no study uses it:
 
-.. literalinclude:: ../../src/kipe/sampling.py
+.. literalinclude:: ../../../src/kipe/sampling.py
    :pyobject: build_sampler
 
 4. Tests
@@ -104,10 +104,10 @@ as long as no study uses it:
 
 The tests use a field whose values are known exactly, and run on one rank and on several:
 
-.. literalinclude:: ../../tests/fenicsx/test_point_sampler.py
+.. literalinclude:: ../../../tests/fenicsx/test_point_sampler.py
    :pyobject: test_values_at_the_points
 
-.. literalinclude:: ../../tests/fenicsx/test_point_sampler.py
+.. literalinclude:: ../../../tests/fenicsx/test_point_sampler.py
    :pyobject: test_each_point_on_exactly_one_rank
 
 ``_gathered`` collects the entries of all ranks by their ``global_indices``, so the result is
@@ -144,4 +144,4 @@ Before a pull request:
 
 - ``ruff check``, ``ruff format --check`` and ``mypy`` pass (``pre-commit run --all-files``);
 - the tests pass on one rank and on several;
-- the new options appear in :doc:`measurements`, with an example.
+- the new options appear in :doc:`../user_guide/measurements`, with an example.

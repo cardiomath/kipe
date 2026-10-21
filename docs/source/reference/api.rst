@@ -5,4 +5,4 @@ API reference
    :maxdepth: 1
    :glob:
 
-   _apidoc/kipe
+   ../_apidoc/kipe
