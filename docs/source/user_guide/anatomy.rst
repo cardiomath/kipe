@@ -35,10 +35,7 @@ study file:
 .. literalinclude:: ../../../examples/fitzhugh_nagumo/study.yaml
    :language: yaml
 
-:doc:`../reference/study_file` lists every option and its default. Parameters selected for estimation start
-from their configured initial values; unselected parameters stay at the solver's nominal values.
-Synthesis uses the solver's nominal parameters. Relative paths are resolved from the directory
-where kipe is run, not from the study file's directory.
+:doc:`../reference/study_file` lists every option and its default.
 
 Run a study
 -----------
