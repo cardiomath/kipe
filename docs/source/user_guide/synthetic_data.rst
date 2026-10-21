@@ -52,9 +52,3 @@ realization number, starting at 0:
 The noise for realization :math:`r` at the :math:`k`-th time of a measurement is drawn from
 ``numpy.random.default_rng([seed, k, r])``. Realization 0 has the same noise as a study without
 multiple realizations.
-
-**TODO:** Revisit whether noise seeds and realization-specific data paths belong under
-``measurements`` or ``synthesis``. The current study-file format keeps them under ``measurements``.
-
-**TODO:** Consider whether future versions should add controlled noise to externally measured
-data for robustness tests.
