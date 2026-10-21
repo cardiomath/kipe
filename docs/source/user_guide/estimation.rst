@@ -22,13 +22,14 @@ for the available options.
 Run ``kipe estimation study.yaml`` to estimate parameters from the data named by the study's
 measurements. The ``estimation`` section configures the sigma-point stencil and number of
 iterations. With multiple noise realizations, estimation processes each in turn and writes its
-results to a separate directory. ``kipe estimation study.yaml --realization R`` runs just one, e.g., as a task of a job array on a cluster (:doc:`parallel`).
+results to a separate directory. ``kipe estimation study.yaml --realization R`` runs just one,
+for example, as one task in a cluster job array (:doc:`parallel`).
 
 Results
 -------
 
 Each command writes to its own subdirectory of ``output.path``: ``synthesis/`` or
-``estimation/``. The generated measurement data instead go to their configured ``data.path``.
+``estimation/``. Generated measurement data are written to their configured ``data.path`` locations.
 
 Estimation writes ``history.csv`` and ``history.npz`` under ``estimation/``; with multiple
 realizations, each has its own subdirectory, e.g., ``estimation/r07/``. The CSV has one row per
