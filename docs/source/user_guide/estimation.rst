@@ -22,13 +22,7 @@ for the available options.
 Run ``kipe estimation study.yaml`` to estimate parameters from the data named by the study's
 measurements. The ``estimation`` section configures the sigma-point stencil and number of
 iterations. With multiple noise realizations, estimation processes each in turn and writes its
-results to a separate directory. Use ``--realization R`` to run just one, for example as a task
-in a SLURM job array:
-
-.. code-block:: bash
-
-    #SBATCH --array=0-29
-    srun kipe estimation study.yaml --realization "$SLURM_ARRAY_TASK_ID"
+results to a separate directory. ``kipe estimation study.yaml --realization R`` runs just one, e.g., as a task of a job array on a cluster (:doc:`parallel`).
 
 Results
 -------
