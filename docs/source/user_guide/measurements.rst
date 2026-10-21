@@ -36,6 +36,8 @@ Together, they are the measurement's observation operator, the same in synthesis
 estimation: the data kipe generates are the data it expects. :doc:`../extending/architecture` explains the
 split and how to add a sampler or a model.
 
+.. DAVID: wouldn't it be better to simply make the measurement's options descriptions more detailed and refer it from here rather than explaining them in detail in this guide?
+
 Times
 -----
 
