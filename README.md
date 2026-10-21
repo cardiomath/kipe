@@ -8,14 +8,15 @@
 <!-- docs: start of the introduction (index.md) -->
 
 **K**alman filtering and **i**dentifiability analysis for
-**p**arameter **e**stimation of differential **e**quations
+**p**arameter **e**stimation of distributed dynamical systems
 
-kipe estimates the parameters of dynamical models, e.g., PDE models, from time series of
-measurements, with the reduced-order unscented Kalman filter (ROUKF). The filter needs only
-forward runs of your model, no derivatives, through a lean interface. Around the estimation,
-kipe generates synthetic measurement data for twin experiments, from a run of the model or from
-the checkpoints of an earlier run, and will analyze the identifiability of the parameters with
-the Fisher information (planned).
+kipe estimates the parameters of distributed dynamical models, e.g., time-dependent PDE models,
+from time series of measurements,  with the reduced-order unscented Kalman filter (ROUKF).
+
+The filter needs only forward runs of your model, no derivatives, through a lean interface. Around
+the estimation, kipe generates synthetic measurement data for twin experiments, from a run of the
+model or from the checkpoints of an earlier run, and will analyze the identifiability of the
+parameters with the Fisher information (planned).
 
 ## Key features
 
