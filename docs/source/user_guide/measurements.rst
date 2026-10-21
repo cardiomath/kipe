@@ -1,21 +1,20 @@
 Measurements
 ============
 
-A measurement is a series of measured data and the description of how to predict those data
-from the model state. During estimation, kipe compares the prediction with the data at each
-measurement time to correct the parameters.
+A measurement consists of measured data and a description of how to predict them from the
+model state. During estimation, kipe compares the prediction with the data at each measurement
+time to correct the parameters.
 
-Each measurement is an entry under ``measurements`` in the study file, by name. The
-FitzHugh–Nagumo example (:mod:`kipe.examples.fitzhugh_nagumo`) measures both fields of its
-model:
+Each measurement is an entry under ``measurements`` in the study file, by name. The :mod:`kipe.examples.fitzhugh_nagumo` example measures both fields of its model:
 
 .. literalinclude:: ../../../examples/fitzhugh_nagumo/study.yaml
    :language: yaml
    :start-at: measurements:
    :end-before: synthesis:
 
-A measurement names the state ``fields`` it observes, its ``times``, where its ``data`` are, its
-``noise``, and how the fields are brought to the measurement locations (``spatial_sampling``).
+A measurement names the state ``fields`` it observes, its ``times``, where its ``data`` are
+stored, and its ``noise``. For spatially distributed fields, it also specifies how the fields
+are brought to the measurement locations (``spatial_sampling``).
 ``kipe list-fields study.yaml`` lists the solver's fields, with their kind, size and, for a
 FEniCSx solver, their function space. :doc:`../reference/study_file` lists all keys of
 ``measurements.<name>``; this page explains how they work together.
