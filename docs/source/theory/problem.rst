@@ -45,7 +45,7 @@ conversion from the study-file uncertainties to :math:`\bs{\theta}`.
 **The measurements.** :math:`\bs{Z}^k \in \mathbb{R}^m` collects all measurements at
 :math:`t^k`, and the observation operator :math:`\mathcal{H}: \mathbb{R}^r \to \mathbb{R}^m`
 predicts them from the state. In kipe, measurements are produced by a spatial sampler composed with
-an individual measurement model for each measurement (:doc:`../user_guide/measurements`). The noise. The noise is assumed to be Gaussian, zero-mean, and independent, with covariance
+an individual measurement model for each measurement (:doc:`../user_guide/measurements`). The noise is assumed to be Gaussian, zero-mean, and independent, with covariance
 
 .. math::
 
