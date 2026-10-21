@@ -35,15 +35,6 @@ study file:
 .. literalinclude:: ../../../examples/fitzhugh_nagumo/study.yaml
    :language: yaml
 
-Broadly, the sections configure:
-
-- ``output``: where kipe writes results and how much it reports;
-- ``forward_solver``: the model and its arguments;
-- ``parameters``: which parameters to estimate and their initial estimates;
-- ``measurements``: what is observed, when, and where the data are;
-- ``synthesis``: how to generate synthetic data;
-- ``estimation``: the filter's sigma-point stencil and number of iterations.
-
 :doc:`../reference/study_file` lists every option and its default. Parameters selected for estimation start
 from their configured initial values; unselected parameters stay at the solver's nominal values.
 Synthesis uses the solver's nominal parameters. Relative paths are resolved from the directory
