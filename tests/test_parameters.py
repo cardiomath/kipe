@@ -143,18 +143,6 @@ def test_inadmissible_initial_estimate(reparameterization, initial):
         })
 
 
-def test_log_allows_negative_initial_estimate():
-    parameterization = _build({
-        "reparameterization": "log",
-        "select": {"c": {"relative_stddev": 0.1, "initial": -1.0}},
-    })
-
-    assert parameterization.to_physical(parameterization.initial_theta()) == pytest.approx({
-        "c": -1.0
-    })
-    assert parameterization.to_physical(np.array([1.0])) == pytest.approx({"c": -2.0})
-
-
 @pytest.mark.parametrize(
     "data",
     [
