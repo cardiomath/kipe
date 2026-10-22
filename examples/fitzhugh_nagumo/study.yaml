@@ -9,7 +9,7 @@ output:
 
 forward_solver:
   factory: "kipe.examples.fitzhugh_nagumo:Solver"
-  arguments: {dt: 0.05}   # nominal values in solver: a = 0.2, b = 0.2, c = 3
+  arguments: {dt: 0.05}   # nominal parameter values in solver: a = 0.2, b = 0.2, c = 3
 
 parameters:
   reparameterization: log
