@@ -4,6 +4,7 @@ kipe estimates the reparameterized parameters :math:`\theta`, the forward solver
 physical values :math:`\phi`. :class:`Parameterization` maps between the two.
 """
 
+import math
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass, replace
 from typing import Self, assert_never
@@ -32,7 +33,7 @@ class EstimatedParameter:
 
     anchor: float
     r"""The physical value :math:`\phi^0` that :math:`\theta` is relative to, e.g.,
-    :math:`\phi = \phi^0 \, 2^\theta` for ``log``: in an estimation, first the prior mean, then,
+    :math:`\phi = \phi^0 \, e^\theta` for ``log``: in an estimation, first the prior mean, then,
     in later outer iterations, the previous estimate (:meth:`Parameterization.with_anchor`);
     in the sensitivity analysis, the nominal value."""
 
@@ -75,7 +76,7 @@ class EstimatedParameter:
 
         match self.reparameterization:
             case "log":
-                return phi0 * 2.0**theta
+                return phi0 * math.exp(theta)
             case "multiplicative":
                 return phi0 * theta
             case "additive":
@@ -90,7 +91,7 @@ class EstimatedParameter:
         the parameter, at its anchor; with ``additive``, a fraction of the parameter's
         prior standard deviation, which gives the step its unit:
 
-        - ``log``: :math:`h_\theta = h / \ln 2`, to first order;
+        - ``log``: :math:`h_\theta = h`, to first order;
         - ``multiplicative``: :math:`h_\theta = h`;
         - ``additive``: :math:`h_\theta = h \sigma_\theta`.
 
@@ -105,9 +106,7 @@ class EstimatedParameter:
             step in :math:`\theta`
         """
         match self.reparameterization:
-            case "log":
-                return step / np.log(2.0)
-            case "multiplicative":
+            case "log" | "multiplicative":
                 return step
             case "additive":
                 return self.stddev_theta * step
@@ -258,15 +257,14 @@ def build_parameterization(
 
         # the options check that each reparameterization has its kind of stddev
         match reparameterization:
-            case "log":  # first order, see ParameterPrior.relative_stddev
-                stddev_theta = prior.relative_stddev / np.log(2)
-            case "multiplicative":
+            case "log" | "multiplicative":
                 stddev_theta = prior.relative_stddev
             case "additive":
                 stddev_theta = prior.stddev
             case _:
                 assert_never(reparameterization)
 
+        assert stddev_theta is not None
         try:
             parameters.append(
                 EstimatedParameter(name, reparameterization, prior.mean, float(stddev_theta))

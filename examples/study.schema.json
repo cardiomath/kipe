@@ -324,7 +324,7 @@
             }
           ],
           "default": null,
-          "description": "Standard deviation relative to the ``mean``, e.g., ``0.3`` for 30%. For ``log`` and\n``multiplicative``.\n\nConverted to the standard deviation of :math:`\\theta`, to first order around the ``mean``:\n:math:`\\sigma_\\theta` = ``relative_stddev`` / ln 2 for ``log``, :math:`\\sigma_\\theta` =\n``relative_stddev`` for ``multiplicative``. So both give the same prior as long as\n``relative_stddev`` is small. For large values they differ: ``log`` keeps the sign of the\nparameter, at the price of an asymmetric distribution. ``kipe list-parameters`` shows the\nresulting 1\u03c3 range.",
+          "description": "Standard deviation relative to the ``mean``, e.g., ``0.3`` for 30%. For ``log`` and\n``multiplicative``.\n\nThe standard deviation of :math:`\\theta` is :math:`\\sigma_\\theta` = ``relative_stddev``,\ni.e., that of :math:`\\ln \\phi` for ``log`` and that of :math:`\\phi / \\phi_0` for\n``multiplicative``. To first order, both are the standard deviation of :math:`\\phi`\nrelative to the ``mean``, so both give about the same prior as long as ``relative_stddev``\nis small. For large values they differ: ``log`` keeps the sign of the parameter, at the\nprice of an asymmetric distribution. ``kipe list-parameters`` shows the resulting 1\u03c3\nrange.",
           "title": "Relative Stddev"
         },
         "stddev": {
@@ -366,7 +366,7 @@
       "properties": {
         "reparameterization": {
           "$ref": "#/$defs/Reparameterization",
-          "description": "How the estimated parameter :math:`\\theta` relates to the physical value :math:`\\phi`,\nrelative to the prior mean :math:`\\phi_0`.\nDefault for all parameters in ``priors``, each can override it.\n\nAvailable reparameterizations:\n\n- ``log``: :math:`\\phi = \\phi_0 2^\\theta`, starting at :math:`\\theta = 0`, with a\n  ``relative_stddev``. Keeps the sign of :math:`\\phi_0`; the prior mean may be\n  positive or negative, but not zero.\n- ``multiplicative``: :math:`\\phi = \\phi_0 \\theta`, starting at :math:`\\theta = 1`, with\n  a ``relative_stddev``. The prior mean must not be zero; :math:`\\phi` can change\n  sign.\n- ``additive``: :math:`\\phi = \\phi_0 + \\theta`, starting at :math:`\\theta = 0`, with an\n  absolute ``stddev``. :math:`\\theta` is the deviation from the prior mean, in the\n  parameter's physical unit. Accepts any prior mean, including zero."
+          "description": "How the estimated parameter :math:`\\theta` relates to the physical value :math:`\\phi`,\nrelative to the prior mean :math:`\\phi_0`.\nDefault for all parameters in ``priors``, each can override it.\n\nAvailable reparameterizations:\n\n- ``log``: :math:`\\phi = \\phi_0 e^\\theta`, starting at :math:`\\theta = 0`, with a\n  ``relative_stddev``. Keeps the sign of :math:`\\phi_0`; the prior mean may be\n  positive or negative, but not zero.\n- ``multiplicative``: :math:`\\phi = \\phi_0 \\theta`, starting at :math:`\\theta = 1`, with\n  a ``relative_stddev``. The prior mean must not be zero; :math:`\\phi` can change\n  sign.\n- ``additive``: :math:`\\phi = \\phi_0 + \\theta`, starting at :math:`\\theta = 0`, with an\n  absolute ``stddev``. :math:`\\theta` is the deviation from the prior mean, in the\n  parameter's physical unit. Accepts any prior mean, including zero."
         },
         "priors": {
           "additionalProperties": {

@@ -29,15 +29,15 @@ Reading the result
 ------------------
 
 For the FitzHugh–Nagumo example, with its three parameters in ``log`` reparameterization and a
-prior of 10 %, i.e., :math:`\sigma_\theta = 0.1 / \ln 2 = 0.144`, the log shows:
+prior of 10 %, i.e., :math:`\sigma_\theta = 0.1`, the log shows:
 
 .. code-block:: text
 
     sensitivity at the nominal parameters (step 0.01)
       parameter  nominal  prior σ_θ    CR σ_θ  CR 1σ range       with prior σ_θ
-      a              0.2      0.144   0.00528  [0.1993, 0.2007]         0.00526
-      b              0.2      0.144    0.0272  [0.1963, 0.2038]          0.0267
-      c                3      0.144  0.000653  [2.999, 3.001]          0.000651
+      a              0.2        0.1   0.00366  [0.1993, 0.2007]         0.00365
+      b              0.2        0.1    0.0188  [0.1963, 0.2038]          0.0185
+      c                3        0.1  0.000452  [2.999, 3.001]          0.000451
 
       Cramér-Rao correlations
                a      b      c
@@ -47,7 +47,7 @@ prior of 10 %, i.e., :math:`\sigma_\theta = 0.1 / \ln 2 = 0.144`, the log shows:
 
       singular values of the weighted sensitivities (header), and the magnitudes
       of their right singular vectors: the parameters of each combination
-           3.31e+03   208  36.7
+           4.78e+03   300  52.9
         a      0.11  0.99  0.08
         b      0.02  0.08  1.00
         c      0.99  0.11  0.01
@@ -83,8 +83,8 @@ standard deviations after its iterations are within 4 % of the bound:
 
     history = np.load("results/estimation/history.npz")
     bound = np.load("results/sensitivity/sensitivity.npz")
-    np.sqrt(np.diag(history["P_theta"][-1]))  # the filter: [0.00545, 0.0264, 0.00064]
-    bound["posterior_stddev"]                  # the bound:  [0.00526, 0.0267, 0.00065]
+    np.sqrt(np.diag(history["P_theta"][-1]))  # the filter: [0.00378, 0.0183, 0.000447]
+    bound["posterior_stddev"]                  # the bound:  [0.00365, 0.0185, 0.000451]
 
 Larger differences point to a model that is nonlinear on the scale of the prior. A filter
 standard deviation far below the bound means that the filter is overconfident.

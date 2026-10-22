@@ -31,7 +31,7 @@ prior mean (``parameters.reparameterization``, ``parameters.priors``):
 
 .. math::
 
-   \text{log:} \quad \phi_i = \phi_i^0 \, 2^{\theta_i}, \qquad
+   \text{log:} \quad \phi_i = \phi_i^0 \, e^{\theta_i}, \qquad
    \text{multiplicative:} \quad \phi_i = \phi_i^0 \, \theta_i, \qquad
    \text{additive:} \quad \phi_i = \phi_i^0 + \theta_i,
 
