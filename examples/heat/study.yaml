@@ -15,9 +15,9 @@ forward_solver:
 
 parameters:
   reparameterization: log
-  select:
-    kappa: {initial: 0.12, relative_stddev: 0.1}
-    a: {initial: 0.8, relative_stddev: 0.1}
+  priors:
+    kappa: {mean: 0.12, relative_stddev: 0.1}
+    a: {mean: 0.8, relative_stddev: 0.1}
 
 measurements:
   u:

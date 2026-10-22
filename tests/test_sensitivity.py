@@ -77,17 +77,17 @@ def _study(
     initial = _LinearSolver().nominal_parameters()
     if reparameterization == "additive":
         priors = {
-            name: ParameterPrior(initial=initial[name], stddev=s) for name, s in STDDEV.items()
+            name: ParameterPrior(mean=initial[name], stddev=s) for name, s in STDDEV.items()
         }
     else:
         priors = {
-            name: ParameterPrior(initial=initial[name], relative_stddev=s)
+            name: ParameterPrior(mean=initial[name], relative_stddev=s)
             for name, s in RELATIVE_STDDEV.items()
         }
     return StudyOptions(
         output=OutputOptions(path=str(tmp_path / "results")),
         forward_solver=ForwardSolverOptions("linear_solver:Solver"),
-        parameters=ParametersOptions(reparameterization=reparameterization, select=priors),
+        parameters=ParametersOptions(reparameterization=reparameterization, priors=priors),
         measurements={
             "y": MeasurementOptions(
                 fields=["y"],

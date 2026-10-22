@@ -39,9 +39,10 @@ starting from a wrong initial guess. The FitzHugh–Nagumo example
     kipe plot study.yaml --truth  # the estimates with their 1σ range; --terminal without a display
 
 Everything is configured in the study file, ``study.yaml``: the forward solver, the estimated
-parameters with their initial guesses and uncertainties, the measurements, and the filter. The
-results, a log, and run provenance go to the directory named by ``output.path``; here, that is
-``results/``. :doc:`anatomy` introduces the study file, and :doc:`estimation` explains the results.
+parameters with their priors (initial guess and uncertainty), the measurements, and the
+filter. The results, a log, and run provenance go to the directory named by ``output.path``;
+here, that is ``results/``. :doc:`anatomy` introduces the study file, and :doc:`estimation`
+explains the results.
 
 Your own model
 --------------

@@ -205,7 +205,7 @@ def read_completed_steps(
             missing
     """
     assert study.parameters is not None
-    steps = read_steps(output, list(study.parameters.select))
+    steps = read_steps(output, list(study.parameters.priors))
     if steps:
         _check_unchanged(output, study)
         _check_data_unchanged(output, data, comm)

@@ -159,9 +159,9 @@ def _study(directory: Path, measurement_mesh: Path) -> Path:
         ),
         parameters=ParametersOptions(
             reparameterization="log",
-            select={
-                "kappa": ParameterPrior(initial=0.12, relative_stddev=0.1),
-                "a": ParameterPrior(initial=0.8, relative_stddev=0.1),
+            priors={
+                "kappa": ParameterPrior(mean=0.12, relative_stddev=0.1),
+                "a": ParameterPrior(mean=0.8, relative_stddev=0.1),
             },
         ),
         measurements={

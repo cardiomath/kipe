@@ -94,8 +94,8 @@ Caveats
 
 - The nominal parameters must be the truth. With synthetic data from the checkpoints of an
   earlier run, the forward solver's input must hold the parameters of that run.
-- For ``multiplicative`` parameters, the filter's :math:`\theta` is relative to the initial
-  values, which outer iterations move to the estimate; the comparison then needs a rescaling
+- For ``multiplicative`` parameters, the filter's :math:`\theta` is relative to the prior
+  means, which outer iterations move to the estimate; the comparison then needs a rescaling
   (:mod:`kipe.sensitivity`). ``log`` and ``additive`` need none.
 - For ``additive`` parameters, :math:`\theta` has the parameters' units, and the singular values
   and vectors depend on them.

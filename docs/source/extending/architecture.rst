@@ -70,8 +70,8 @@ arguments can be any objects, e.g., the solver's own options.
   degrees of freedom of a finite element function) or ``replicated`` (every rank holds all
   of it, e.g., the state of a lumped-parameter model). Measurements refer to fields by name.
 - **Named parameters.** The solver lists what can be estimated, with nominal values. The study
-  selects parameters by name and sets their prior; parameters it does not select keep their
-  nominal values.
+  lists the estimated parameters by name, each with its prior; parameters it does not list keep
+  their nominal values.
 - **Backend capabilities.** A backend may need more from the solver: FEniCSx samplers need the
   function space of a field (:class:`kipe.fenicsx.forward_solver.SupportsFunctionSpaces`).
   Such a capability is a separate protocol, so a solver without it still works with the core

@@ -306,11 +306,11 @@
     },
     "ParameterPrior": {
       "additionalProperties": false,
-      "description": "Initial estimate of one estimated parameter and its uncertainty.\n\nThe two define the prior (Gaussian in the estimated parameter :math:`\\theta`) and the\nstarting state of the filter: the standard deviation sets the initial size of the\nsigma-point stencil used for the derivative-free linearization, and the initial weight\nagainst the measurement noise.\n\n``log`` and ``multiplicative`` take a ``relative_stddev``, ``additive`` an absolute\n``stddev``.",
+      "description": "Prior of one estimated parameter: its mean and standard deviation.\n\nThe prior is Gaussian in the estimated parameter :math:`\\theta`, and the filter starts\nfrom it: at the mean, with the standard deviation as the initial size of the sigma-point\nstencil used for the derivative-free linearization, and as the initial weight against the\nmeasurement noise.\n\n``log`` and ``multiplicative`` take a ``relative_stddev``, ``additive`` an absolute\n``stddev``.",
       "properties": {
-        "initial": {
-          "description": "Initial estimate (prior mean), as physical value.",
-          "title": "Initial",
+        "mean": {
+          "description": "Prior mean, as physical value: where the estimation starts.",
+          "title": "Mean",
           "type": "number"
         },
         "relative_stddev": {
@@ -324,7 +324,7 @@
             }
           ],
           "default": null,
-          "description": "Standard deviation relative to ``initial``, e.g., ``0.3`` for 30%. For ``log`` and\n``multiplicative``.\n\nConverted to the standard deviation of :math:`\\theta`, to first order around ``initial``:\n:math:`\\sigma_\\theta` = ``relative_stddev`` / ln 2 for ``log``, :math:`\\sigma_\\theta` =\n``relative_stddev`` for ``multiplicative``. So both give the same prior as long as\n``relative_stddev`` is small. For large values they differ: ``log`` keeps the sign of the\nparameter, at the price of an asymmetric distribution. ``kipe list-parameters`` shows the\nresulting 1\u03c3 range.",
+          "description": "Standard deviation relative to the ``mean``, e.g., ``0.3`` for 30%. For ``log`` and\n``multiplicative``.\n\nConverted to the standard deviation of :math:`\\theta`, to first order around the ``mean``:\n:math:`\\sigma_\\theta` = ``relative_stddev`` / ln 2 for ``log``, :math:`\\sigma_\\theta` =\n``relative_stddev`` for ``multiplicative``. So both give the same prior as long as\n``relative_stddev`` is small. For large values they differ: ``log`` keeps the sign of the\nparameter, at the price of an asymmetric distribution. ``kipe list-parameters`` shows the\nresulting 1\u03c3 range.",
           "title": "Relative Stddev"
         },
         "stddev": {
@@ -351,37 +351,37 @@
             }
           ],
           "default": null,
-          "description": "Overrides the section's ``reparameterization`` for this parameter."
+          "description": "The distribution of this prior: Gaussian in :math:`\\theta`, i.e., log-normal in the\nparameter for ``log``, normal for ``multiplicative`` and ``additive``. Overrides the\nsection's ``reparameterization`` for this parameter."
         }
       },
       "required": [
-        "initial"
+        "mean"
       ],
       "title": "ParameterPrior",
       "type": "object"
     },
     "ParametersOptions": {
       "additionalProperties": false,
-      "description": "Selection, initial estimate and reparameterization of the estimated parameters.\n\n``kipe list-parameters`` shows the names the forward solver accepts.",
+      "description": "Priors and reparameterization of the estimated parameters.\n\n``kipe list-parameters`` shows the names the forward solver accepts.",
       "properties": {
         "reparameterization": {
           "$ref": "#/$defs/Reparameterization",
-          "description": "How the estimated parameter :math:`\\theta` relates to the physical value :math:`\\phi`,\nrelative to the initial estimate :math:`\\phi_0`. Default for all parameters in\n``select``, each can override it.\n\nAvailable reparameterizations:\n\n- ``log``: :math:`\\phi = \\phi_0 2^\\theta`, starting at :math:`\\theta = 0`, with a\n  ``relative_stddev``. Keeps the sign of :math:`\\phi_0`; the initial estimate may be\n  positive or negative, but not zero.\n- ``multiplicative``: :math:`\\phi = \\phi_0 \\theta`, starting at :math:`\\theta = 1`, with\n  a ``relative_stddev``. The initial estimate must not be zero; :math:`\\phi` can change\n  sign.\n- ``additive``: :math:`\\phi = \\phi_0 + \\theta`, starting at :math:`\\theta = 0`, with an\n  absolute ``stddev``. :math:`\\theta` is the deviation from the initial estimate, in the\n  parameter's physical unit. Accepts any initial estimate, including zero."
+          "description": "How the estimated parameter :math:`\\theta` relates to the physical value :math:`\\phi`,\nrelative to the prior mean :math:`\\phi_0`.\nDefault for all parameters in ``priors``, each can override it.\n\nAvailable reparameterizations:\n\n- ``log``: :math:`\\phi = \\phi_0 2^\\theta`, starting at :math:`\\theta = 0`, with a\n  ``relative_stddev``. Keeps the sign of :math:`\\phi_0`; the prior mean may be\n  positive or negative, but not zero.\n- ``multiplicative``: :math:`\\phi = \\phi_0 \\theta`, starting at :math:`\\theta = 1`, with\n  a ``relative_stddev``. The prior mean must not be zero; :math:`\\phi` can change\n  sign.\n- ``additive``: :math:`\\phi = \\phi_0 + \\theta`, starting at :math:`\\theta = 0`, with an\n  absolute ``stddev``. :math:`\\theta` is the deviation from the prior mean, in the\n  parameter's physical unit. Accepts any prior mean, including zero."
         },
-        "select": {
+        "priors": {
           "additionalProperties": {
             "$ref": "#/$defs/ParameterPrior"
           },
-          "description": "Estimated parameters: parameter name -> initial estimate and uncertainty. All other\nparameters keep their nominal values.",
+          "description": "Estimated parameters: parameter name -> prior (mean and standard deviation). All other\nparameters keep their nominal values.",
           "keys": "a parameter of the solver",
           "minProperties": 1,
-          "title": "Select",
+          "title": "Priors",
           "type": "object"
         }
       },
       "required": [
         "reparameterization",
-        "select"
+        "priors"
       ],
       "title": "ParametersOptions",
       "type": "object"

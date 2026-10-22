@@ -135,18 +135,18 @@ def test_list_parameters(tmp_path, capsys):
     ]
 
 
-def test_list_parameters_shows_selection(tmp_path, capsys):
-    selection = """
+def test_list_parameters_shows_configured_parameters(tmp_path, capsys):
+    parameters = """
 parameters:
   reparameterization: multiplicative
-  select:
-    c: {relative_stddev: 0.5, initial: 3.0}
-    a: {reparameterization: additive, stddev: 0.1, initial: 0.2}
+  priors:
+    c: {relative_stddev: 0.5, mean: 3.0}
+    a: {reparameterization: additive, stddev: 0.1, mean: 0.2}
 """
-    assert main(["list-parameters", str(_write(tmp_path, STUDY + selection))]) == 0
+    assert main(["list-parameters", str(_write(tmp_path, STUDY + parameters))]) == 0
     lines = capsys.readouterr().out.splitlines()
     assert lines[0].split() == [
-        "parameter", "nominal", "reparameterization", "initial", "stddev", "1σ", "range"
+        "parameter", "nominal", "reparameterization", "mean", "stddev", "1σ", "range"
     ]  # fmt: skip
     assert lines[1].split() == ["a", "0.2", "additive", "0.2", "0.1", "[0.1,", "0.3]"]
     assert lines[2].split() == ["b", "0.2"]
@@ -200,9 +200,9 @@ def test_dump_study_round_trip(tmp_path):
         forward_solver=ForwardSolverOptions(factory="kipe.examples.fitzhugh_nagumo:Solver"),
         parameters=ParametersOptions(
             reparameterization="log",
-            select={
-                "a": ParameterPrior(initial=0.25, relative_stddev=0.1),
-                "c": ParameterPrior(reparameterization="additive", initial=3.0, stddev=0.5),
+            priors={
+                "a": ParameterPrior(mean=0.25, relative_stddev=0.1),
+                "c": ParameterPrior(reparameterization="additive", mean=3.0, stddev=0.5),
             },
         ),
         measurements={

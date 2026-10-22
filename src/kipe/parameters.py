@@ -1,4 +1,4 @@
-r"""Estimated parameters: selection, initial estimate and reparameterization.
+r"""Estimated parameters: priors and reparameterization.
 
 kipe estimates the reparameterized parameters :math:`\theta`, the forward solver receives the
 physical values :math:`\phi`. :class:`Parameterization` maps between the two.
@@ -32,9 +32,9 @@ class EstimatedParameter:
 
     anchor: float
     r"""The physical value :math:`\phi^0` that :math:`\theta` is relative to, e.g.,
-    :math:`\phi = \phi^0 \, 2^\theta` for ``log``: in an estimation, first the study's initial
-    estimate, then, in later outer iterations, the previous estimate
-    (:meth:`Parameterization.with_anchor`); in the sensitivity analysis, the nominal value."""
+    :math:`\phi = \phi^0 \, 2^\theta` for ``log``: in an estimation, first the prior mean, then,
+    in later outer iterations, the previous estimate (:meth:`Parameterization.with_anchor`);
+    in the sensitivity analysis, the nominal value."""
 
     stddev_theta: float
     r"""Initial standard deviation of :math:`\theta`."""
@@ -42,10 +42,10 @@ class EstimatedParameter:
     def __post_init__(self) -> None:
         """Check that the anchor is admissible for the reparameterization."""
         if self.reparameterization == "log" and self.anchor == 0:
-            raise ValueError(f"{self.name}: 'log' needs a nonzero initial estimate")
+            raise ValueError(f"{self.name}: 'log' needs a nonzero mean")
 
         if self.reparameterization == "multiplicative" and self.anchor == 0:
-            raise ValueError(f"{self.name}: 'multiplicative' needs a nonzero initial estimate")
+            raise ValueError(f"{self.name}: 'multiplicative' needs a nonzero mean")
 
     def anchor_theta(self) -> float:
         r"""Return :math:`\theta` at the anchor, where the filter starts: 0, or 1 for
@@ -238,22 +238,22 @@ def build_parameterization(
             selection against
 
     Returns:
-        the parameterization, with the parameters in the order of ``options.select``
+        the parameterization, with the parameters in the order of ``options.priors``
 
     Raises:
-        StudyFileError: if a selected parameter is unknown to the solver, or an initial
-            estimate is not admissible for its reparameterization
+        StudyFileError: if a selected parameter is unknown to the solver, or a prior mean is
+            not admissible for its reparameterization
     """
-    unknown = [name for name in options.select if name not in available_parameters]
+    unknown = [name for name in options.priors if name not in available_parameters]
     if unknown:
         raise StudyFileError(
-            f"parameters.select: the forward solver has no parameter {', '.join(unknown)}. "
+            f"parameters.priors: the forward solver has no parameter {', '.join(unknown)}. "
             f"Available: {', '.join(available_parameters)} "
             "(kipe list-parameters study.yaml shows their nominal values)"
         )
 
     parameters = []
-    for name, prior in options.select.items():
+    for name, prior in options.priors.items():
         reparameterization = prior.reparameterization or options.reparameterization
 
         # the options check that each reparameterization has its kind of stddev
@@ -269,9 +269,9 @@ def build_parameterization(
 
         try:
             parameters.append(
-                EstimatedParameter(name, reparameterization, prior.initial, float(stddev_theta))
+                EstimatedParameter(name, reparameterization, prior.mean, float(stddev_theta))
             )
         except ValueError as err:
-            raise StudyFileError(f"parameters.select.{err}") from err
+            raise StudyFileError(f"parameters.priors.{err}") from err
 
     return Parameterization(parameters)
