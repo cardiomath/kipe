@@ -36,12 +36,20 @@ repos:
     hooks:
       - id: markdownlint-cli2
 
-  # Needs the docs extra in the active environment: pip install -e ".[docs]"
-  # Manual stage, skipped on commit; run it with
-  #   pre-commit run sphinx-build --all-files --hook-stage manual
-  # (without --hook-stage manual: "No hook with id `sphinx-build` in stage `pre-commit`")
   - repo: local
     hooks:
+      - id: study-schema
+        name: generate study schema
+        entry: bash -c 'kipe schema > examples/study.schema.json'
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      # Needs the docs extra in the active environment: pip install -e ".[docs]"
+      # Manual stage, skipped on commit; run it with
+      #   pre-commit run sphinx-build --all-files --hook-stage manual
+      # (without --hook-stage manual: "No hook with id `sphinx-build` in stage `pre-commit`")
+
       - id: sphinx-build
         name: sphinx docs build
         stages: [manual]

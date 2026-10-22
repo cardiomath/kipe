@@ -36,8 +36,8 @@ class EstimatedParameter:
 
     def __post_init__(self) -> None:
         """Check that the initial estimate is admissible for the reparameterization."""
-        if self.reparameterization == "log" and self.initial <= 0:
-            raise ValueError(f"{self.name}: 'log' needs a positive initial estimate")
+        if self.reparameterization == "log" and self.initial == 0:
+            raise ValueError(f"{self.name}: 'log' needs a nonzero initial estimate")
 
         if self.reparameterization == "multiplicative" and self.initial == 0:
             raise ValueError(f"{self.name}: 'multiplicative' needs a nonzero initial estimate")

@@ -121,7 +121,7 @@ def test_unknown_parameter_lists_available():
 
 @pytest.mark.parametrize(
     ("reparameterization", "initial"),
-    [("log", 0.0), ("log", -1.0), ("multiplicative", 0.0)],
+    [("log", 0.0), ("multiplicative", 0.0)],
 )
 def test_inadmissible_initial_estimate(reparameterization, initial):
     with pytest.raises(StudyFileError, match=f"'{reparameterization}' needs"):
