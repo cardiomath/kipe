@@ -34,8 +34,7 @@ class EstimatedParameter:
     r"""The physical value :math:`\phi^0` that :math:`\theta` is relative to, e.g.,
     :math:`\phi = \phi^0 \, 2^\theta` for ``log``: in an estimation, first the study's initial
     estimate, then, in later outer iterations, the previous estimate
-    (:meth:`Parameterization.recenter`); in the sensitivity analysis, the nominal value
-    (:meth:`Parameterization.with_anchor`)."""
+    (:meth:`Parameterization.with_anchor`); in the sensitivity analysis, the nominal value."""
 
     stddev_theta: float
     r"""Initial standard deviation of :math:`\theta`."""
@@ -48,12 +47,12 @@ class EstimatedParameter:
         if self.reparameterization == "multiplicative" and self.anchor == 0:
             raise ValueError(f"{self.name}: 'multiplicative' needs a nonzero initial estimate")
 
-    def initial_theta(self) -> float:
+    def anchor_theta(self) -> float:
         r"""Return :math:`\theta` at the anchor, where the filter starts: 0, or 1 for
         ``multiplicative``.
 
         Returns:
-            initial :math:`\theta`
+            :math:`\theta` at the anchor
         """
         match self.reparameterization:
             case "log" | "additive":
@@ -123,7 +122,8 @@ class Parameterization:
     Converts :math:`\theta` to the physical values passed to the forward solver
     (:meth:`to_physical`), each entry by its parameter's reparameterization, relative to its
     anchor (:attr:`EstimatedParameter.anchor`). The anchors stay fixed during one pass of the
-    filter over the measurements; outer iterations move them to the estimate (:meth:`recenter`).
+    filter over the measurements; outer iterations move them to the estimate
+    (:meth:`with_anchor`).
     """
 
     parameters: list[EstimatedParameter]
@@ -153,13 +153,13 @@ class Parameterization:
         """
         return np.array([parameter.theta_step(step) for parameter in self.parameters])
 
-    def initial_theta(self) -> NDArray_f64:
+    def anchor_theta(self) -> NDArray_f64:
         r"""Return :math:`\theta` at the anchors, where the filter starts.
 
         Returns:
-            initial :math:`\theta`
+            :math:`\theta` at the anchors
         """
-        return np.array([parameter.initial_theta() for parameter in self.parameters])
+        return np.array([parameter.anchor_theta() for parameter in self.parameters])
 
     def to_physical(self, theta: NDArray_f64) -> Parameters:
         r"""Map :math:`\theta` to physical values, as passed to the forward solver.
@@ -178,8 +178,9 @@ class Parameterization:
     def with_anchor(self, values: Mapping[str, float]) -> Self:
         r"""Return the parameterization with other anchors.
 
-        The standard deviations of :math:`\theta` stay. Used by the sensitivity analysis, which
-        anchors :math:`\theta` at the nominal values.
+        The standard deviations of :math:`\theta` stay. Used between outer iterations, which
+        anchor :math:`\theta` at the estimate, so that the next pass starts from it, and by the
+        sensitivity analysis, which anchors it at the nominal values.
 
         Args:
             values: the new anchors, as physical values, by parameter name
@@ -192,26 +193,6 @@ class Parameterization:
             parameters=[replace(p, anchor=values[p.name]) for p in self.parameters],
         )
 
-    def recenter(self, theta: NDArray_f64) -> Self:
-        r"""Return the parameterization with the anchors moved to ``theta``.
-
-        Used between outer iterations: the next pass starts from the estimate, with the
-        initial standard deviations of :math:`\theta`.
-
-        Args:
-            theta: estimated parameters, in the order of :attr:`parameters`
-
-        Returns:
-            new parameterization, whose anchors are the physical values of ``theta``
-        """
-        return replace(
-            self,
-            parameters=[
-                replace(parameter, anchor=parameter.to_physical(float(value)))
-                for parameter, value in zip(self.parameters, theta, strict=True)
-            ],
-        )
-
     def one_sigma_range(self) -> list[tuple[float, float]]:
         r"""Return the physical values at :math:`\theta` of the anchors
         :math:`\pm \sigma_\theta`.
@@ -222,7 +203,7 @@ class Parameterization:
         Returns:
             (lower, upper) physical value per parameter
         """
-        return self.physical_range(self.initial_theta(), self.stddev_theta())
+        return self.physical_range(self.anchor_theta(), self.stddev_theta())
 
     def physical_range(
         self, theta: NDArray_f64, stddev_theta: NDArray_f64

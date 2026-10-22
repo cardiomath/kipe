@@ -219,7 +219,7 @@ def run(study: StudyOptions, index: int, comm: MPI.Comm = MPI.COMM_WORLD) -> Non
     }
     times = {name: _times(name, study) for name in study.measurements}
 
-    parameterization = _at_nominal(study, solver.nominal_parameters())
+    parameterization = _nominal_parameterization(study, solver.nominal_parameters())
     theta = _perturbed_theta(parameterization, study.sensitivity.step, index)
     physical = parameterization.to_physical(theta)
     label = _label(parameterization, index)
@@ -268,7 +268,7 @@ def assemble(study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD) -> Sensitivit
     with recorded_run(output, study, comm=comm):
         solver = build_forward_solver(study.forward_solver)
         nominal = solver.nominal_parameters()
-        parameterization = _at_nominal(study, nominal)
+        parameterization = _nominal_parameterization(study, nominal)
         _check_runs(study, parameterization)
 
         step = parameterization.theta_step(study.sensitivity.step)
@@ -293,9 +293,11 @@ def assemble(study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD) -> Sensitivit
     return sensitivity
 
 
-def _at_nominal(study: StudyOptions, nominal: dict[str, float]) -> Parameterization:
-    r"""Return the study's parameterization, anchored at the nominal parameters: its initial
-    :math:`\bs{\theta}` maps to them, :math:`\bs{\theta}_\mathrm{true}`.
+def _nominal_parameterization(
+    study: StudyOptions, nominal: dict[str, float]
+) -> Parameterization:
+    r"""Return the study's parameterization, anchored at the nominal parameters:
+    :math:`\bs{\theta}` at the anchors maps to them, :math:`\bs{\theta}_\mathrm{true}`.
 
     Args:
         study: the study options, with parameters
@@ -322,7 +324,7 @@ def _perturbed_theta(parameterization: Parameterization, step: float, index: int
     Returns:
         :math:`\bs{\theta}_\mathrm{true}`, perturbed along parameter ``index // 2``
     """
-    theta = parameterization.initial_theta()
+    theta = parameterization.anchor_theta()
     j = index // 2
     sign = 1.0 if index % 2 == 0 else -1.0
     theta[j] += sign * parameterization.theta_step(step)[j]
@@ -435,7 +437,7 @@ def _sensitivity(
 
     return Sensitivity(
         names=parameterization.names,
-        theta=parameterization.initial_theta(),
+        theta=parameterization.anchor_theta(),
         stddev_theta=parameterization.stddev_theta(),
         jacobians=jacobians,
         fims=fims,

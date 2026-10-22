@@ -119,11 +119,11 @@ class Estimation:
         self._log_setup()
         started = time.perf_counter()
 
-        # the estimate after the completed iterations, recentered as they were
+        # the estimate after the completed iterations, anchored as they were
         parameterization = self._parameterization
         for theta in final_thetas(self._history.steps):
             estimate = parameterization.to_physical(theta)
-            parameterization = parameterization.recenter(theta)
+            parameterization = parameterization.with_anchor(estimate)
         if self._completed_iterations:
             logger.info(
                 "resumed after iteration %d/%d", self._completed_iterations, self._iterations
@@ -146,8 +146,10 @@ class Estimation:
             )
             for line in format_table(_estimate_rows(filter_state, parameterization), "<><"):
                 logger.info("    %s", line)
+
             estimate = parameterization.to_physical(filter_state.theta)
-            parameterization = parameterization.recenter(filter_state.theta)
+            # get parameterization of next iteration, anchored at the current estimate
+            parameterization = parameterization.with_anchor(estimate)
             self._history.write_npz()
 
         logger.info("%s", "━" * _WIDTH)
@@ -214,7 +216,7 @@ class Estimation:
 
         filter_state = roukf.initial_state(
             self._layout.to_vector(solver_state),
-            parameterization.initial_theta(),
+            parameterization.anchor_theta(),
             parameterization.stddev_theta(),
             self._stencil,
         )

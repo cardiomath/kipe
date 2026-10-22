@@ -207,7 +207,7 @@ def test_fisher_information_is_what_the_filter_learns(
     the prior, the Bayesian Cramer-Rao bound.
 
     The data are the model's own, without noise: the estimate stays at the nominal values, so
-    for multiplicative, theta keeps its scale over the passes (each recenters it at the
+    for multiplicative, theta keeps its scale over the passes (each anchors it at the
     previous estimate), and needs no rescaling to compare with M.
     """
     options = EstimationOptions(sigma_points=sigma_points, iterations=iterations)
@@ -226,7 +226,7 @@ def test_fisher_information_is_what_the_filter_learns(
 
 
 def test_rescaled_filter_covariance_for_multiplicative(tmp_path, linear):
-    """With noisy data, the estimate leaves the nominal values, and each pass recenters theta
+    """With noisy data, the estimate leaves the nominal values, and each pass anchors theta
     at the previous one: for multiplicative, the last pass's theta and prior are relative to
     its center phi^0. With D = diag(phi^0 / phi_true), the filter's covariance D P D in the
     theta of the sensitivity analysis is (M + (D P_0 D)^-1)^-1."""

@@ -23,13 +23,14 @@ def _build(data: dict):
         ("additive", {"stddev": 0.1}, 0.0),
     ],
 )
-def test_initial_theta_maps_to_initial_estimate(reparameterization, spread, theta0):
-    """The initial theta maps to the initial estimates: nominal or ``initial``."""
+def test_new_parameterization_anchored_at_initial_estimates(reparameterization, spread, theta0):
+    """A new parameterization is anchored at the initial estimates, nominal or ``initial``:
+    theta at the anchor maps to them."""
     parameterization = _build({
         "reparameterization": reparameterization,
         "select": {"c": spread, "a": {**spread, "initial": 0.25}},
     })
-    theta = parameterization.initial_theta()
+    theta = parameterization.anchor_theta()
 
     np.testing.assert_allclose(theta, [theta0, theta0])
     assert parameterization.to_physical(theta) == pytest.approx({"c": 3.0, "a": 0.25})
@@ -97,21 +98,22 @@ def test_reparameterization_per_parameter():
         ("additive", {"stddev": 0.5}),
     ],
 )
-def test_recenter_moves_initial_estimate_to_estimate(reparameterization, spread):
-    """After recentering, the initial theta maps to the previous estimate."""
+def test_with_anchor_moves_the_anchor_to_the_estimate(reparameterization, spread):
+    """Between outer iterations: after anchoring at the estimate, theta at the anchor maps to
+    the estimate; the standard deviations of theta stay."""
     parameterization = _build({
         "reparameterization": reparameterization,
         "select": {"c": spread, "a": spread},
     })
-    theta = parameterization.initial_theta() + np.array([0.5, -0.25])
+    theta = parameterization.anchor_theta() + np.array([0.5, -0.25])
     estimate = parameterization.to_physical(theta)
 
-    recentered = parameterization.recenter(theta)
-    assert recentered.to_physical(recentered.initial_theta()) == pytest.approx(estimate)
-    np.testing.assert_allclose(recentered.stddev_theta(), parameterization.stddev_theta())
+    anchored = parameterization.with_anchor(estimate)
+    assert anchored.to_physical(anchored.anchor_theta()) == pytest.approx(estimate)
+    np.testing.assert_allclose(anchored.stddev_theta(), parameterization.stddev_theta())
 
-    original = parameterization.to_physical(parameterization.initial_theta())
-    assert original == pytest.approx({"c": 3.0, "a": 0.2})  # unchanged by recenter
+    original = parameterization.to_physical(parameterization.anchor_theta())
+    assert original == pytest.approx({"c": 3.0, "a": 0.2})  # unchanged by with_anchor
 
 
 def test_unknown_parameter_lists_available():
@@ -164,6 +166,6 @@ def test_invalid_options(data):
 def test_theta_step(reparameterization, stddev_theta, lower, upper, rtol):
     """A step of 0.01: 1 % of the parameter (log, multiplicative), 0.01 stddev (additive)."""
     parameter = EstimatedParameter("x", reparameterization, 2.0, stddev_theta)
-    step, theta = parameter.theta_step(0.01), parameter.initial_theta()
+    step, theta = parameter.theta_step(0.01), parameter.anchor_theta()
     assert parameter.to_physical(theta - step) == pytest.approx(lower, rel=rtol)
     assert parameter.to_physical(theta + step) == pytest.approx(upper, rel=rtol)
