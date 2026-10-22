@@ -64,8 +64,7 @@ arguments kipe passes to it:
       arguments: {dt: 0.01}                     # MySolver(dt=0.01)
 
 ``kipe list-parameters study.yaml`` then shows the parameters your solver offers. The
-FitzHugh–Nagumo solver, :mod:`kipe.examples.fitzhugh_nagumo`, is a complete example, including
-docstrings.
+FitzHugh–Nagumo solver, :mod:`kipe.examples.fitzhugh_nagumo`, is a complete example.
 
 FEniCSx models
 --------------
