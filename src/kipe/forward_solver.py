@@ -90,7 +90,8 @@ class ForwardSolver(Protocol):
 
         The nominal values are those the solver was configured with (e.g., by its input file
         or constructor). kipe uses the names to validate the parameters selected in a study,
-        and the values as default initial guesses.
+        and the values as the truth: synthesis runs the solver with them, the sensitivity
+        analysis evaluates there, and ``kipe plot --truth`` draws them.
 
         Returns:
             parameter name -> nominal physical value dict (a new dict that the caller may modify)

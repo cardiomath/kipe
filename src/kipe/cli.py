@@ -247,7 +247,7 @@ def _list_parameters(args: argparse.Namespace) -> None:
     selected: dict[str, tuple[str, str, str, str]] = {}
 
     if study.parameters is not None:
-        parameterization = build_parameterization(study.parameters, nominal)
+        parameterization = build_parameterization(study.parameters, nominal.keys())
         ranges = parameterization.one_sigma_range()
 
         for parameter, (lower, upper) in zip(parameterization.parameters, ranges, strict=True):

@@ -309,7 +309,7 @@ def _nominal_parameterization(
     if study.parameters is None:
         raise StudyFileError("sensitivity needs a parameters section")
 
-    parameterization = build_parameterization(study.parameters, nominal)
+    parameterization = build_parameterization(study.parameters, nominal.keys())
     return parameterization.with_anchor(nominal)
 
 

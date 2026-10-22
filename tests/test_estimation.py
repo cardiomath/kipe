@@ -242,9 +242,9 @@ def test_estimation_from_python(tmp_path):
     )
     measurement = Measurement("v", operator, times, np.array(values), stddev=0.1)
     parameters = ParametersOptions(
-        reparameterization="log", select={"c": ParameterPrior(relative_stddev=0.5)}
+        reparameterization="log", select={"c": ParameterPrior(initial=3.0, relative_stddev=0.5)}
     )
-    parameterization = build_parameterization(parameters, solver.nominal_parameters())
+    parameterization = build_parameterization(parameters, solver.nominal_parameters().keys())
 
     estimation = Estimation(
         solver,

@@ -74,9 +74,8 @@ class ParameterPrior:
     ``stddev``.
     """
 
-    initial: float | None = None
-    """Initial estimate (prior mean), as physical value. The solver's nominal value if not
-    given."""
+    initial: float
+    """Initial estimate (prior mean), as physical value."""
 
     relative_stddev: PositiveFloat | None = None
     r"""Standard deviation relative to ``initial``, e.g., ``0.3`` for 30%. For ``log`` and

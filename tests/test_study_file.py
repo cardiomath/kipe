@@ -141,7 +141,7 @@ parameters:
   reparameterization: multiplicative
   select:
     c: {relative_stddev: 0.5, initial: 3.0}
-    a: {reparameterization: additive, stddev: 0.1}
+    a: {reparameterization: additive, stddev: 0.1, initial: 0.2}
 """
     assert main(["list-parameters", str(_write(tmp_path, STUDY + selection))]) == 0
     lines = capsys.readouterr().out.splitlines()
@@ -202,7 +202,7 @@ def test_dump_study_round_trip(tmp_path):
             reparameterization="log",
             select={
                 "a": ParameterPrior(initial=0.25, relative_stddev=0.1),
-                "c": ParameterPrior(reparameterization="additive", stddev=0.5),
+                "c": ParameterPrior(reparameterization="additive", initial=3.0, stddev=0.5),
             },
         ),
         measurements={

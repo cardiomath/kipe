@@ -392,7 +392,9 @@ def estimate(
         )
 
     solver = build_forward_solver(study.forward_solver)
-    parameterization = build_parameterization(study.parameters, solver.nominal_parameters())
+    parameterization = build_parameterization(
+        study.parameters, solver.nominal_parameters().keys()
+    )
     measurements = _build_measurements(study, solver, comm, realization)
     estimation = Estimation(
         solver, parameterization, measurements, study.estimation, output, comm, completed_steps
