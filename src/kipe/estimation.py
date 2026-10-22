@@ -388,7 +388,7 @@ def estimate(
             "%s: complete after %d iterations, nothing to resume", output, completed_iterations
         )
         return dict(
-            zip(study.parameters.select, completed_steps[-1].parameters.tolist(), strict=True)
+            zip(study.parameters.priors, completed_steps[-1].parameters.tolist(), strict=True)
         )
 
     solver = build_forward_solver(study.forward_solver)

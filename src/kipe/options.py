@@ -63,25 +63,25 @@ type Reparameterization = Literal["log", "multiplicative", "additive"]
 
 @dataclass(frozen=True, config=_CONFIG)
 class ParameterPrior:
-    r"""Initial estimate of one estimated parameter and its uncertainty.
+    r"""Prior of one estimated parameter: its mean and standard deviation.
 
-    The two define the prior (Gaussian in the estimated parameter :math:`\theta`) and the
-    starting state of the filter: the standard deviation sets the initial size of the
-    sigma-point stencil used for the derivative-free linearization, and the initial weight
-    against the measurement noise.
+    The prior is Gaussian in the estimated parameter :math:`\theta`, and the filter starts
+    from it: at the mean, with the standard deviation as the initial size of the sigma-point
+    stencil used for the derivative-free linearization, and as the initial weight against the
+    measurement noise.
 
     ``log`` and ``multiplicative`` take a ``relative_stddev``, ``additive`` an absolute
     ``stddev``.
     """
 
-    initial: float
-    """Initial estimate (prior mean), as physical value."""
+    mean: float
+    """Prior mean, as physical value: where the estimation starts."""
 
     relative_stddev: PositiveFloat | None = None
-    r"""Standard deviation relative to ``initial``, e.g., ``0.3`` for 30%. For ``log`` and
+    r"""Standard deviation relative to the ``mean``, e.g., ``0.3`` for 30%. For ``log`` and
     ``multiplicative``.
 
-    Converted to the standard deviation of :math:`\theta`, to first order around ``initial``:
+    Converted to the standard deviation of :math:`\theta`, to first order around the ``mean``:
     :math:`\sigma_\theta` = ``relative_stddev`` / ln 2 for ``log``, :math:`\sigma_\theta` =
     ``relative_stddev`` for ``multiplicative``. So both give the same prior as long as
     ``relative_stddev`` is small. For large values they differ: ``log`` keeps the sign of the
@@ -92,38 +92,40 @@ class ParameterPrior:
     """Absolute standard deviation, in the parameter's physical unit. For ``additive``."""
 
     reparameterization: Reparameterization | None = None
-    """Overrides the section's ``reparameterization`` for this parameter."""
+    r"""The distribution of this prior: Gaussian in :math:`\theta`, i.e., log-normal in the
+    parameter for ``log``, normal for ``multiplicative`` and ``additive``. Overrides the
+    section's ``reparameterization`` for this parameter."""
 
 
 @dataclass(frozen=True, config=_CONFIG)
 class ParametersOptions:
-    """Selection, initial estimate and reparameterization of the estimated parameters.
+    """Priors and reparameterization of the estimated parameters.
 
     ``kipe list-parameters`` shows the names the forward solver accepts.
     """
 
     reparameterization: Reparameterization
     r"""How the estimated parameter :math:`\theta` relates to the physical value :math:`\phi`,
-    relative to the initial estimate :math:`\phi_0`. Default for all parameters in
-    ``select``, each can override it.
+    relative to the prior mean :math:`\phi_0`.
+    Default for all parameters in ``priors``, each can override it.
 
     Available reparameterizations:
 
     - ``log``: :math:`\phi = \phi_0 2^\theta`, starting at :math:`\theta = 0`, with a
-      ``relative_stddev``. Keeps the sign of :math:`\phi_0`; the initial estimate may be
+      ``relative_stddev``. Keeps the sign of :math:`\phi_0`; the prior mean may be
       positive or negative, but not zero.
     - ``multiplicative``: :math:`\phi = \phi_0 \theta`, starting at :math:`\theta = 1`, with
-      a ``relative_stddev``. The initial estimate must not be zero; :math:`\phi` can change
+      a ``relative_stddev``. The prior mean must not be zero; :math:`\phi` can change
       sign.
     - ``additive``: :math:`\phi = \phi_0 + \theta`, starting at :math:`\theta = 0`, with an
-      absolute ``stddev``. :math:`\theta` is the deviation from the initial estimate, in the
-      parameter's physical unit. Accepts any initial estimate, including zero."""
+      absolute ``stddev``. :math:`\theta` is the deviation from the prior mean, in the
+      parameter's physical unit. Accepts any prior mean, including zero."""
 
-    select: Annotated[
+    priors: Annotated[
         dict[str, ParameterPrior],
         Field(min_length=1, json_schema_extra={"keys": "a parameter of the solver"}),
     ]
-    """Estimated parameters: parameter name -> initial estimate and uncertainty. All other
+    """Estimated parameters: parameter name -> prior (mean and standard deviation). All other
     parameters keep their nominal values."""
 
     def __post_init__(self) -> None:
@@ -132,17 +134,17 @@ class ParametersOptions:
         Raises:
             ValueError: if a parameter gives the wrong kind of standard deviation, or none
         """
-        for name, prior in self.select.items():
+        for name, prior in self.priors.items():
             reparameterization = prior.reparameterization or self.reparameterization
             if reparameterization == "additive":
                 if prior.stddev is None or prior.relative_stddev is not None:
                     raise ValueError(
-                        f"select.{name}: 'additive' needs an absolute 'stddev' "
+                        f"priors.{name}: 'additive' needs an absolute 'stddev' "
                         "(and no 'relative_stddev')"
                     )
             elif prior.relative_stddev is None or prior.stddev is not None:
                 raise ValueError(
-                    f"select.{name}: '{reparameterization}' needs a 'relative_stddev' "
+                    f"priors.{name}: '{reparameterization}' needs a 'relative_stddev' "
                     "(and no 'stddev')"
                 )
 

@@ -169,7 +169,7 @@ def run_count(study: StudyOptions) -> int:
     if study.parameters is None:
         raise StudyFileError("sensitivity needs a parameters section")
 
-    return 2 * len(study.parameters.select)
+    return 2 * len(study.parameters.priors)
 
 
 def run_directory(study: StudyOptions, index: int) -> Path:

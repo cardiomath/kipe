@@ -4,9 +4,10 @@ Estimation
 Configuration
 -------------
 
-Select parameters and their initial estimates in the ``parameters`` section of the study file.
-Set ``initial`` to choose where estimation starts. Use ``relative_stddev`` for ``log`` and
-``multiplicative`` reparameterizations, or absolute ``stddev`` for ``additive`` reparameterizations. In the example:
+The ``parameters`` section of the study file lists the estimated parameters with their priors:
+the ``mean``, where the estimation starts, and the standard deviation, a ``relative_stddev`` for
+``log`` and ``multiplicative`` reparameterizations, an absolute ``stddev`` for ``additive``. In
+the example:
 
 .. literalinclude:: ../../../examples/fitzhugh_nagumo/study.yaml
    :language: yaml
@@ -14,8 +15,8 @@ Set ``initial`` to choose where estimation starts. Use ``relative_stddev`` for `
    :end-before: measurements:
 
 
-Parameters not selected remain fixed at their nominal values. In a twin experiment, choose
-initial values different from the truth, to test whether the measurements can recover it.
+Parameters without a prior remain fixed at their nominal values. In a twin experiment, the prior
+means differ from the truth: the estimation then tests whether the measurements recover it.
 See :doc:`../reference/study_file` for the available options.
 
 Run ``kipe estimation study.yaml`` to estimate parameters from the data specified in the study's

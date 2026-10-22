@@ -234,8 +234,8 @@ def _load_study(path: Path) -> StudyOptions:
 def _list_parameters(args: argparse.Namespace) -> None:
     """Print the solver's estimable parameters and their nominal values.
 
-    If the study file selects parameters, also print their initial estimate, standard
-    deviation and the resulting physical 1σ range.
+    If the study file selects parameters, also print their prior mean, standard deviation
+    and the resulting physical 1σ range.
 
     Args:
         args: parsed command line arguments, with the path to the study file
@@ -251,7 +251,7 @@ def _list_parameters(args: argparse.Namespace) -> None:
         ranges = parameterization.one_sigma_range()
 
         for parameter, (lower, upper) in zip(parameterization.parameters, ranges, strict=True):
-            prior = study.parameters.select[parameter.name]
+            prior = study.parameters.priors[parameter.name]
             if prior.relative_stddev is not None:
                 stddev = f"{prior.relative_stddev:.3g} (relative)"
             else:
@@ -265,7 +265,7 @@ def _list_parameters(args: argparse.Namespace) -> None:
             )
 
     rows: list[tuple[str, ...]] = [
-        ("parameter", "nominal", "reparameterization", "initial", "stddev", "1σ range")
+        ("parameter", "nominal", "reparameterization", "mean", "stddev", "1σ range")
     ]
 
     for name, value in nominal.items():

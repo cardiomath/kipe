@@ -1,4 +1,4 @@
-"""Selection, initial estimate and reparameterization of the estimated parameters."""
+"""Priors and reparameterization of the estimated parameters."""
 
 import numpy as np
 import pytest
@@ -23,12 +23,12 @@ def _build(data: dict):
         ("additive", {"stddev": 0.1}, 0.0),
     ],
 )
-def test_new_parameterization_anchored_at_initial_estimates(reparameterization, spread, theta0):
-    """A new parameterization is anchored at the initial estimates: theta at the anchor maps to
+def test_new_parameterization_anchored_at_prior_means(reparameterization, spread, theta0):
+    """A new parameterization is anchored at the prior means: theta at the anchor maps to
     them."""
     parameterization = _build({
         "reparameterization": reparameterization,
-        "select": {"c": {"initial": 2.0, **spread}, "a": {"initial": 0.25, **spread}},
+        "priors": {"c": {"mean": 2.0, **spread}, "a": {"mean": 0.25, **spread}},
     })
     theta = parameterization.anchor_theta()
 
@@ -49,7 +49,7 @@ def test_new_parameterization_anchored_at_initial_estimates(reparameterization, 
 def test_to_physical(reparameterization, spread, theta, phi):
     parameterization = _build({
         "reparameterization": reparameterization,
-        "select": {"c": {"initial": 3.0, **spread}},
+        "priors": {"c": {"mean": 3.0, **spread}},
     })
 
     assert parameterization.to_physical(np.array([theta])) == pytest.approx({"c": phi})
@@ -60,7 +60,7 @@ def test_relative_stddev_is_first_order_equivalent(reparameterization):
     """A small relative stddev gives about the same physical 1σ range for both maps."""
     parameterization = _build({
         "reparameterization": reparameterization,
-        "select": {"c": {"initial": 3.0, "relative_stddev": 0.01}},
+        "priors": {"c": {"mean": 3.0, "relative_stddev": 0.01}},
     })
     np.testing.assert_allclose(parameterization.one_sigma_range(), [(2.97, 3.03)], rtol=1e-4)
 
@@ -68,10 +68,10 @@ def test_relative_stddev_is_first_order_equivalent(reparameterization):
 def test_one_sigma_range():
     parameterization = _build({
         "reparameterization": "log",
-        "select": {
+        "priors": {
             # stddev_theta = 1: a factor of 2
-            "c": {"initial": 3.0, "relative_stddev": np.log(2)},
-            "a": {"reparameterization": "additive", "initial": 0.0, "stddev": 0.1},
+            "c": {"mean": 3.0, "relative_stddev": np.log(2)},
+            "a": {"reparameterization": "additive", "mean": 0.0, "stddev": 0.1},
         },
     })
     np.testing.assert_allclose(parameterization.one_sigma_range(), [(1.5, 6.0), (-0.1, 0.1)])
@@ -81,9 +81,9 @@ def test_reparameterization_per_parameter():
     """The section's reparameterization is the default; each parameter can override it."""
     parameterization = _build({
         "reparameterization": "log",
-        "select": {
-            "c": {"initial": 3.0, "relative_stddev": 0.1},
-            "a": {"reparameterization": "additive", "initial": 0.0, "stddev": 0.05},
+        "priors": {
+            "c": {"mean": 3.0, "relative_stddev": 0.1},
+            "a": {"reparameterization": "additive", "mean": 0.0, "stddev": 0.05},
         },
     })
     kinds = [parameter.reparameterization for parameter in parameterization.parameters]
@@ -104,7 +104,7 @@ def test_with_anchor_moves_the_anchor_to_the_estimate(reparameterization, spread
     the estimate; the standard deviations of theta stay."""
     parameterization = _build({
         "reparameterization": reparameterization,
-        "select": {"c": {"initial": 3.0, **spread}, "a": {"initial": 0.2, **spread}},
+        "priors": {"c": {"mean": 3.0, **spread}, "a": {"mean": 0.2, **spread}},
     })
     theta = parameterization.anchor_theta() + np.array([0.5, -0.25])
     estimate = parameterization.to_physical(theta)
@@ -121,37 +121,40 @@ def test_unknown_parameter_lists_available():
     with pytest.raises(StudyFileError, match=r"no parameter d\. Available: a, b, c"):
         _build({
             "reparameterization": "log",
-            "select": {"d": {"initial": 1.0, "relative_stddev": 1}},
+            "priors": {"d": {"mean": 1.0, "relative_stddev": 1}},
         })
 
 
 @pytest.mark.parametrize(
-    ("reparameterization", "initial"),
+    ("reparameterization", "mean"),
     [("log", 0.0), ("multiplicative", 0.0)],
 )
-def test_inadmissible_initial_estimate(reparameterization, initial):
-    with pytest.raises(StudyFileError, match=f"'{reparameterization}' needs"):
+def test_inadmissible_mean(reparameterization, mean):
+    with pytest.raises(StudyFileError, match=f"'{reparameterization}' needs a nonzero mean"):
         _build({
             "reparameterization": reparameterization,
-            "select": {"c": {"relative_stddev": 0.1, "initial": initial}},
+            "priors": {"c": {"relative_stddev": 0.1, "mean": mean}},
         })
 
 
 @pytest.mark.parametrize(
     "data",
     [
-        {"select": {"c": {"relative_stddev": 0.1}}},  # reparameterization has no default
-        {"reparameterization": "none", "select": {"c": {"relative_stddev": 0.1}}},
-        {"reparameterization": "log", "select": {}},  # nothing selected
-        {"reparameterization": "log", "select": {"c": {"relative_stddev": 0.0}}},
-        {"reparameterization": "log", "select": {"c": {"initial": 1.0}}},  # no stddev
-        {"reparameterization": "log", "select": {"c": {"stddev": 0.1}}},  # absolute for log
-        {"reparameterization": "additive", "select": {"c": {"relative_stddev": 0.1}}},
+        {"priors": {"c": {"relative_stddev": 0.1}}},  # reparameterization has no default
+        {"reparameterization": "none", "priors": {"c": {"relative_stddev": 0.1}}},
+        {"reparameterization": "log", "priors": {}},  # nothing selected
+        {"reparameterization": "log", "priors": {"c": {"relative_stddev": 0.0}}},
+        {"reparameterization": "log", "priors": {"c": {"mean": 1.0}}},  # no stddev
+        {"reparameterization": "log", "priors": {"c": {"stddev": 0.1}}},  # absolute for log
+        {"reparameterization": "additive", "priors": {"c": {"relative_stddev": 0.1}}},
         {
             "reparameterization": "log",
-            "select": {"c": {"relative_stddev": 0.1, "stddev": 0.1}},  # both
+            "priors": {"c": {"relative_stddev": 0.1, "stddev": 0.1}},  # both
         },
-        {"reparameterization": "log", "select": {"c": {"mean": 1.0, "relative_stddev": 0.1}}},
+        {  # the former key
+            "reparameterization": "log",
+            "priors": {"c": {"initial": 1.0, "relative_stddev": 0.1}},
+        },
     ],
 )
 def test_invalid_options(data):

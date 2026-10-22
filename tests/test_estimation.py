@@ -62,8 +62,8 @@ def _options(
     data = tmp_path / ("r{realization}" if realizations > 1 else "")
     parameters_options = ParametersOptions(
         reparameterization="log",
-        select={
-            name: ParameterPrior(initial=value, relative_stddev=relative_stddev)
+        priors={
+            name: ParameterPrior(mean=value, relative_stddev=relative_stddev)
             for name, value in initial.items()
         },
     )
@@ -242,7 +242,7 @@ def test_estimation_from_python(tmp_path):
     )
     measurement = Measurement("v", operator, times, np.array(values), stddev=0.1)
     parameters = ParametersOptions(
-        reparameterization="log", select={"c": ParameterPrior(initial=3.0, relative_stddev=0.5)}
+        reparameterization="log", priors={"c": ParameterPrior(mean=3.0, relative_stddev=0.5)}
     )
     parameterization = build_parameterization(parameters, solver.nominal_parameters().keys())
 

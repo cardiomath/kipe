@@ -23,14 +23,14 @@ from kipe.plot import PlotError, plot_histories, read_history, render_histories
 pytest.importorskip("matplotlib")
 
 
-def _study(tmp_path: Path, select: tuple[str, ...] = ("a", "c")) -> str:
+def _study(tmp_path: Path, names: tuple[str, ...] = ("a", "c")) -> str:
     """Write and run a small FitzHugh-Nagumo estimation; return the study file."""
     study = StudyOptions(
         output=OutputOptions(path=str(tmp_path / "results")),
         forward_solver=ForwardSolverOptions(factory="kipe.examples.fitzhugh_nagumo:Solver"),
         parameters=ParametersOptions(
             reparameterization="log",
-            select={name: ParameterPrior(initial=0.25, relative_stddev=0.1) for name in select},
+            priors={name: ParameterPrior(mean=0.25, relative_stddev=0.1) for name in names},
         ),
         measurements={
             "v": MeasurementOptions(
@@ -94,8 +94,8 @@ def test_plot_without_history(tmp_path, capsys):
 
 
 def test_plot_rejects_different_parameters(tmp_path, capsys):
-    first = _study(tmp_path / "first", select=("a", "c"))
-    second = _study(tmp_path / "second", select=("a",))
+    first = _study(tmp_path / "first", names=("a", "c"))
+    second = _study(tmp_path / "second", names=("a",))
     assert main(["plot", first, second, "--save", str(tmp_path / "x.png")]) == 1
     assert "estimate different parameters" in capsys.readouterr().err
 

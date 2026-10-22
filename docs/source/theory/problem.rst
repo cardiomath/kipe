@@ -26,8 +26,8 @@ depends on, so the model can be restarted from any state. The model carries no p
 so the parameters are the only unknowns.
 
 **The parameters.** The filter estimates reparameterized parameters
-:math:`\bs{\theta} \in \mathbb{R}^p`, relative to the initial estimate :math:`\bs{\phi}^0`
-(``parameters.reparameterization``):
+:math:`\bs{\theta} \in \mathbb{R}^p`, relative to the initial estimate :math:`\bs{\phi}^0`, the
+prior mean (``parameters.reparameterization``, ``parameters.priors``):
 
 .. math::
 

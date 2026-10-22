@@ -14,10 +14,10 @@ forward_solver:
 
 parameters:
   reparameterization: log
-  select:
-    a: {initial: 0.3, relative_stddev: 0.1}
-    b: {initial: 0.3, relative_stddev: 0.1}
-    c: {initial: 2.0, relative_stddev: 0.1}
+  priors:
+    a: {mean: 0.3, relative_stddev: 0.1}
+    b: {mean: 0.3, relative_stddev: 0.1}
+    c: {mean: 2.0, relative_stddev: 0.1}
 
 measurements:
   v:

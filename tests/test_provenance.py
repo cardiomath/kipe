@@ -33,7 +33,7 @@ def _study(tmp_path: Path) -> Path:
         forward_solver=ForwardSolverOptions(factory="kipe.examples.fitzhugh_nagumo:Solver"),
         parameters=ParametersOptions(
             reparameterization="log",
-            select={name: ParameterPrior(initial=0.25, relative_stddev=0.1) for name in ["a"]},
+            priors={name: ParameterPrior(mean=0.25, relative_stddev=0.1) for name in ["a"]},
         ),
         measurements={
             "v": MeasurementOptions(
