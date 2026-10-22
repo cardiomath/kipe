@@ -46,6 +46,7 @@ repos:
         name: sphinx docs build
         stages: [manual]
         entry: >-
+          rm -fr docs/build docs/source/{_apidoc,_generated} &&
           bash -c 'python -m sphinx -q -W --keep-going -c docs -b html docs/source
           docs/build/html
           && python -m webbrowser -t "file://$(pwd)/docs/build/html/index.html"'
