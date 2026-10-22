@@ -259,7 +259,7 @@ def _list_parameters(args: argparse.Namespace) -> None:
 
             selected[parameter.name] = (
                 parameter.reparameterization,
-                f"{parameter.initial:g}",
+                f"{parameter.anchor:g}",
                 stddev,
                 f"[{lower:.3g}, {upper:.3g}]",
             )

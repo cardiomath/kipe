@@ -17,10 +17,11 @@ from kipe.options import ParametersOptions, Reparameterization, StudyFileError
 
 @dataclass(frozen=True)
 class EstimatedParameter:
-    r"""One estimated parameter: its reparameterization and initial estimate.
+    r"""One estimated parameter: its reparameterization, the parameter value at which the
+    reparameterization is anchored, and the standard deviation of :math:`\theta`.
 
     Raises:
-        ValueError: if the initial estimate is not admissible for the reparameterization
+        ValueError: if the anchor is not admissible for the reparameterization
     """
 
     name: str
@@ -29,22 +30,27 @@ class EstimatedParameter:
     reparameterization: Reparameterization
     """See :attr:`kipe.options.ParametersOptions.reparameterization`."""
 
-    initial: float
-    r"""Initial estimate :math:`\phi_0`, physical value."""
+    anchor: float
+    r"""The physical value :math:`\phi^0` that :math:`\theta` is relative to, e.g.,
+    :math:`\phi = \phi^0 \, 2^\theta` for ``log``: in an estimation, first the study's initial
+    estimate, then, in later outer iterations, the previous estimate
+    (:meth:`Parameterization.recenter`); in the sensitivity analysis, the nominal value
+    (:meth:`Parameterization.with_anchor`)."""
 
     stddev_theta: float
     r"""Initial standard deviation of :math:`\theta`."""
 
     def __post_init__(self) -> None:
-        """Check that the initial estimate is admissible for the reparameterization."""
-        if self.reparameterization == "log" and self.initial == 0:
+        """Check that the anchor is admissible for the reparameterization."""
+        if self.reparameterization == "log" and self.anchor == 0:
             raise ValueError(f"{self.name}: 'log' needs a nonzero initial estimate")
 
-        if self.reparameterization == "multiplicative" and self.initial == 0:
+        if self.reparameterization == "multiplicative" and self.anchor == 0:
             raise ValueError(f"{self.name}: 'multiplicative' needs a nonzero initial estimate")
 
     def initial_theta(self) -> float:
-        r"""Return the initial :math:`\theta`, which maps to the initial estimate.
+        r"""Return :math:`\theta` at the anchor, where the filter starts: 0, or 1 for
+        ``multiplicative``.
 
         Returns:
             initial :math:`\theta`
@@ -66,7 +72,7 @@ class EstimatedParameter:
         Returns:
             physical value
         """
-        phi0 = self.initial
+        phi0 = self.anchor
 
         match self.reparameterization:
             case "log":
@@ -82,15 +88,15 @@ class EstimatedParameter:
         r"""Return the step in :math:`\theta` corresponding to a step in the parameter.
 
         With ``log`` and ``multiplicative`` reparameterizations, ``step`` is the relative step in
-        the parameter, at its initial value; with ``additive``, a fraction of the parameter's
+        the parameter, at its anchor; with ``additive``, a fraction of the parameter's
         prior standard deviation, which gives the step its unit:
 
         - ``log``: :math:`h_\theta = h / \ln 2`, to first order;
         - ``multiplicative``: :math:`h_\theta = h`;
         - ``additive``: :math:`h_\theta = h \sigma_\theta`.
 
-        Used by the sensitivity analysis (:mod:`kipe.sensitivity`), whose parameterization has
-        the nominal values as initial values.
+        Used by the sensitivity analysis (:mod:`kipe.sensitivity`), whose parameterization is
+        anchored at the nominal values.
 
         Args:
             step: relative change of the parameter (``log``, ``multiplicative``), or fraction of
@@ -115,9 +121,9 @@ class Parameterization:
     r"""The estimated parameters as one vector :math:`\theta`, in the order of the study file.
 
     Converts :math:`\theta` to the physical values passed to the forward solver
-    (:meth:`to_physical`), each entry by its parameter's reparameterization. The initial
-    estimates that the reparameterizations refer to stay fixed during one pass of the filter
-    over the measurements; outer iterations move them to the estimate (:meth:`recenter`).
+    (:meth:`to_physical`), each entry by its parameter's reparameterization, relative to its
+    anchor (:attr:`EstimatedParameter.anchor`). The anchors stay fixed during one pass of the
+    filter over the measurements; outer iterations move them to the estimate (:meth:`recenter`).
     """
 
     parameters: list[EstimatedParameter]
@@ -148,7 +154,7 @@ class Parameterization:
         return np.array([parameter.theta_step(step) for parameter in self.parameters])
 
     def initial_theta(self) -> NDArray_f64:
-        r"""Return the initial :math:`\theta`, which maps to the initial estimates.
+        r"""Return :math:`\theta` at the anchors, where the filter starts.
 
         Returns:
             initial :math:`\theta`
@@ -169,25 +175,25 @@ class Parameterization:
             for parameter, value in zip(self.parameters, theta, strict=True)
         }
 
-    def with_initial(self, values: Mapping[str, float]) -> Self:
-        r"""Return the parameterization with other initial estimates.
+    def with_anchor(self, values: Mapping[str, float]) -> Self:
+        r"""Return the parameterization with other anchors.
 
-        The standard deviations of :math:`\theta` stay. Used by the sensitivity analysis,
-        whose :math:`\theta_0` maps to the nominal values.
+        The standard deviations of :math:`\theta` stay. Used by the sensitivity analysis, which
+        anchors :math:`\theta` at the nominal values.
 
         Args:
-            values: the new initial estimates, as physical values, by parameter name
+            values: the new anchors, as physical values, by parameter name
 
         Returns:
             new parameterization
         """
         return replace(
             self,
-            parameters=[replace(p, initial=values[p.name]) for p in self.parameters],
+            parameters=[replace(p, anchor=values[p.name]) for p in self.parameters],
         )
 
     def recenter(self, theta: NDArray_f64) -> Self:
-        r"""Return the parameterization with the initial estimates moved to ``theta``.
+        r"""Return the parameterization with the anchors moved to ``theta``.
 
         Used between outer iterations: the next pass starts from the estimate, with the
         initial standard deviations of :math:`\theta`.
@@ -196,21 +202,22 @@ class Parameterization:
             theta: estimated parameters, in the order of :attr:`parameters`
 
         Returns:
-            new parameterization, whose initial estimates are the physical values of ``theta``
+            new parameterization, whose anchors are the physical values of ``theta``
         """
         return replace(
             self,
             parameters=[
-                replace(parameter, initial=parameter.to_physical(float(value)))
+                replace(parameter, anchor=parameter.to_physical(float(value)))
                 for parameter, value in zip(self.parameters, theta, strict=True)
             ],
         )
 
     def one_sigma_range(self) -> list[tuple[float, float]]:
-        r"""Return the physical values at the initial :math:`\theta_0 \pm \sigma_\theta`.
+        r"""Return the physical values at :math:`\theta` of the anchors
+        :math:`\pm \sigma_\theta`.
 
-        Shows what the uncertainty means in physical terms. Asymmetric around the initial
-        estimate for ``log``.
+        Shows what the uncertainty means in physical terms. Asymmetric around the anchor for
+        ``log``.
 
         Returns:
             (lower, upper) physical value per parameter
