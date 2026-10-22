@@ -1,34 +1,41 @@
 Estimation
 ==========
 
+Configuration
+-------------
+
 Select parameters and their initial estimates in the ``parameters`` section of the study file.
 Set ``initial`` to choose where estimation starts. Use ``relative_stddev`` for ``log`` and
-``multiplicative`` reparameterizations, or absolute ``stddev`` for ``additive``:
+``multiplicative`` reparameterizations, or absolute ``stddev`` for ``additive`` reparameterizations. In the example:
 
-.. code-block:: yaml
+.. literalinclude:: ../../../examples/fitzhugh_nagumo/study.yaml
+   :language: yaml
+   :start-at: parameters:
+   :end-before: measurements:
 
-    parameters:
-      reparameterization: log
-      select:
-        c:
-          initial: 0.8  # log requires a positive initial value
-          relative_stddev: 0.1
 
 If ``initial`` is omitted, estimation starts at the solver's nominal value. Parameters not
 selected remain fixed at their nominal values. In a twin experiment, choose an initial value
 different from the truth to test whether the measurements can recover it. See :doc:`../reference/study_file`
 for the available options.
 
-Run ``kipe estimation study.yaml`` to estimate parameters from the data named by the study's
-measurements. The ``estimation`` section configures the sigma-point stencil and number of
-iterations. With multiple noise realizations, estimation processes each in turn and writes its
-results to a separate directory. ``kipe estimation study.yaml --realization R`` runs just one, e.g., as a task of a job array on a cluster (:doc:`parallel`).
+Run ``kipe estimation study.yaml`` to estimate parameters from the data specified in the study's
+``measurements`` section. The ``estimation`` section configures the setup of the estimation process, as exemplified in the following snippet:
+
+.. literalinclude:: ../../../examples/fitzhugh_nagumo/study.yaml
+   :language: yaml
+   :start-at: estimation:
+   :end-before: end-of-study-file
+
+With multiple noise realizations, estimation processes each realization in
+turn and writes its results to a separate directory. To run a single realization — for example, as a
+task in a cluster job array — use ``kipe estimation study.yaml --realization R`` (:doc:`parallel`).
 
 Results
 -------
 
 Each command writes to its own subdirectory of ``output.path``: ``synthesis/`` or
-``estimation/``. The generated measurement data instead go to their configured ``data.path``.
+``estimation/``. Generated measurement data are written to their configured ``data.path`` locations.
 
 Estimation writes ``history.csv`` and ``history.npz`` under ``estimation/``; with multiple
 realizations, each has its own subdirectory, e.g., ``estimation/r07/``. The CSV has one row per

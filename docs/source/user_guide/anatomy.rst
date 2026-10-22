@@ -1,24 +1,22 @@
 Anatomy of a study
 ==================
 
-In kipe, a *study* is a parameter estimation problem, described by a study file. The study file defines the forward model, the parameters to estimate with their priors, the measurements and where their data are, and the settings of the Kalman filter. The data are either measured or synthesized from the model with ``kipe synthesis``. For synthetic data, a study can define several independent noise realizations, to study the statistics of the estimates under noise.
+In kipe, a *study* is a parameter estimation problem defined by a study file. It specifies the forward model, parameters and priors, measurement settings and data paths, and Kalman filter settings. Data can be measured or synthesized, and synthesized data can include multiple independent noise realizations.
 
-A single study file also defines a *twin experiment*: ``kipe synthesis`` computes a ground truth with known parameters and generates noisy data from it, and ``kipe estimation`` then estimates the parameters from these data, starting from an inaccurate prior.
-That is, the following commands generate the synthetic data, estimate the parameters, and plot the estimates against the true parameters:
+For instance, using a single study file, *twin experiments* can be conducted:
 
 .. code-block:: bash
 
-    kipe synthesis study.yaml
-    kipe estimation study.yaml
-    kipe plot study.yaml --truth
+    kipe synthesis study.yaml     # generates noisy data from known ground-truth parameters
+    kipe estimation study.yaml    # recovers them from an inaccurate prior using ROUKF
+    kipe plot study.yaml --truth  # compares estimates with the true parameters
 
-The commands read the study file, and pass their results on through files: synthesis writes
-the data to the measurements' ``data.path``, and estimation writes its estimates to
+``synthesis`` writes data to the measurements' ``data.path``; ``estimation`` writes results to
 ``output.path``.
 
 .. mermaid::
 
-    flowchart LR
+    flowchart TB
         study[/"study.yaml"/] --> synthesis["kipe synthesis"]
         synthesis --> data[/"data files (data.path)"/]
         measured[/"measured data"/] -.-> data
@@ -26,7 +24,7 @@ the data to the measurements' ``data.path``, and estimation writes its estimates
         data --> estimation
         estimation --> results[/"estimates & uncertainties (output.path)"/]
 
-:doc:`measurements` explains how kipe compares the model with measured data and :doc:`../extending/architecture` describes the data flow and the code structure in detail, for those who extend kipe.
+:doc:`measurements` explains how kipe compares the model with measured data, while :doc:`../extending/architecture` describes the data flow and code structure for readers who want to extend kipe.
 
 The study file
 --------------

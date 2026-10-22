@@ -39,9 +39,9 @@ starting from a wrong initial guess. The FitzHugh–Nagumo example
     kipe plot study.yaml --truth  # the estimates with their 1σ range; --terminal without a display
 
 Everything is configured in the study file, ``study.yaml``: the forward solver, the estimated
-parameters with their initial guess and uncertainty, the measurements and the filter. The
-results, a log and the provenance of the runs go to the directory ``output.path`` names, here
-``results/``. :doc:`anatomy` introduces the study file and :doc:`estimation` explains the results.
+parameters with their initial guesses and uncertainties, the measurements, and the filter. The
+results, a log, and run provenance go to the directory named by ``output.path``; here, that is
+``results/``. :doc:`anatomy` introduces the study file, and :doc:`estimation` explains the results.
 
 Your own model
 --------------
@@ -64,8 +64,7 @@ arguments kipe passes to it:
       arguments: {dt: 0.01}                     # MySolver(dt=0.01)
 
 ``kipe list-parameters study.yaml`` then shows the parameters your solver offers. The
-FitzHugh–Nagumo solver, :mod:`kipe.examples.fitzhugh_nagumo`, is a complete example in about
-150 lines, docstrings included.
+FitzHugh–Nagumo solver, :mod:`kipe.examples.fitzhugh_nagumo`, is a complete example.
 
 FEniCSx models
 --------------
@@ -76,8 +75,8 @@ state, and also provides their function spaces
 interpolate a field onto a measurement mesh, which need not match the solver's, or evaluate it
 at points (:doc:`measurements`).
 
-The heat equation example (:mod:`kipe.fenicsx.examples.heat`) shows a complete setup, also on
-several MPI ranks:
+The heat equation example (:mod:`kipe.fenicsx.examples.heat`) shows a complete setup, including
+execution across several MPI ranks:
 
 .. code-block:: bash
 

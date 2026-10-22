@@ -1,11 +1,11 @@
 Synthetic data
 ==============
 
-In a twin experiment, the true parameters are known. Comparing estimated parameters with the
-truth shows whether, and how precisely, the measurements identify them before you use measured
-data. ``kipe synthesis`` generates data that ``kipe estimation`` reads just like measured data.
+In a twin experiment, the true parameters are known. Comparing the estimates with the true
+values shows whether, and how precisely, the measurements identify the parameters before
+measured data are used.
 
-For each measurement, synthesis:
+For each measurement, ``kipe synthesis``:
 
 1. obtains the true state at the measurement times, either by running the forward solver with its
    nominal parameters (the default) or by reading checkpoints from an earlier run;
@@ -14,6 +14,10 @@ For each measurement, synthesis:
 
 The checkpoint run may use a different model or time step. The ``synthesis.truth`` option selects
 the source of the true state; see :doc:`../reference/study_file` for its options.
+
+Then, ``kipe estimation`` reads the synthetic data just as it would measured data and estimates
+the parameters from it.
+
 
 Noise
 -----
@@ -49,6 +53,6 @@ realization number, starting at 0:
     synthesis:
       realizations: 30
 
-The noise for realization :math:`r` at the :math:`k`-th time of a measurement is drawn from
+The noise for realization :math:`r` at the :math:`k`-th measurement time is generated using
 ``numpy.random.default_rng([seed, k, r])``. Realization 0 has the same noise as a study without
 multiple realizations.
