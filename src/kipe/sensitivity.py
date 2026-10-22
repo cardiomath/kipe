@@ -5,10 +5,11 @@ the estimated parameters, and which combinations of the parameters they barely d
 is evaluated at the nominal parameters, i.e., the truth of a twin experiment, and in
 :math:`\bs{\theta}` of the ``parameters`` section, the space the filter estimates in.
 
-Two forward runs per parameter, at :math:`\bs{\theta}_\mathrm{true} \pm h \sigma_\theta` along it
-(``sensitivity.step`` :math:`h`, the prior standard deviation :math:`\sigma_\theta`), give the
-noise-weighted sensitivities of the predicted data at each measurement time :math:`t^k` by
-centered differences,
+Two forward runs per parameter, at :math:`\bs{\theta}_\mathrm{true} \pm h_\theta` along it, give
+the noise-weighted sensitivities of the predicted data at each measurement time :math:`t^k` by
+centered differences. :math:`h_\theta` is the step in :math:`\theta` of ``sensitivity.step``, a
+relative change of the parameter, or a fraction of its prior standard deviation for ``additive``
+parameters (:meth:`~kipe.parameters.EstimatedParameter.theta_step`):
 
 .. math::
 
@@ -194,8 +195,9 @@ def run_directory(study: StudyOptions, index: int) -> Path:
 def run(study: StudyOptions, index: int, comm: MPI.Comm = MPI.COMM_WORLD) -> None:
     r"""Compute one forward run of the sensitivity analysis, and write its predicted data.
 
-    Run :math:`i` perturbs parameter :math:`i // 2`, by :math:`+h \sigma_\theta` for even
-    :math:`i`, by :math:`-h \sigma_\theta` for odd :math:`i`.
+    Run :math:`i` perturbs parameter :math:`i // 2`, by :math:`+h_\theta` for even :math:`i`, by
+    :math:`-h_\theta` for odd :math:`i`, the step in :math:`\theta` of ``sensitivity.step``
+    (:meth:`~kipe.parameters.EstimatedParameter.theta_step`).
 
     Args:
         study: the study options
@@ -269,7 +271,7 @@ def assemble(study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD) -> Sensitivit
         parameterization = _at_nominal(study, nominal)
         _check_runs(study, parameterization)
 
-        step = study.sensitivity.step * parameterization.stddev_theta()
+        step = parameterization.theta_step(study.sensitivity.step)
         jacobians = {}
         for name in study.measurements:
             plus, minus = [
@@ -314,7 +316,7 @@ def _perturbed_theta(parameterization: Parameterization, step: float, index: int
 
     Args:
         parameterization: the parameterization, centered at the nominal parameters
-        step: the step, as a fraction of :math:`\sigma_\theta`
+        step: the step, see :attr:`kipe.options.SensitivityOptions.step`
         index: number of the run
 
     Returns:
@@ -323,7 +325,7 @@ def _perturbed_theta(parameterization: Parameterization, step: float, index: int
     theta = parameterization.initial_theta()
     j = index // 2
     sign = 1.0 if index % 2 == 0 else -1.0
-    theta[j] += sign * step * parameterization.stddev_theta()[j]
+    theta[j] += sign * parameterization.theta_step(step)[j]
     return theta
 
 
@@ -452,8 +454,7 @@ def _write(path: Path, sensitivity: Sensitivity, step: float) -> None:
     Args:
         path: path to the file
         sensitivity: the result
-        step: the step of the finite differences, as a fraction of the prior standard
-            deviations
+        step: the step of the finite differences, ``sensitivity.step``
     """
     arrays: dict[str, Any] = {
         "names": np.array(sensitivity.names),
@@ -482,10 +483,9 @@ def _log(sensitivity: Sensitivity, parameterization: Parameterization, step: flo
     Args:
         sensitivity: the result
         parameterization: the parameterization, with its center at the nominal values
-        step: the step of the finite differences, as a fraction of the prior standard
-            deviations
+        step: the step of the finite differences, ``sensitivity.step``
     """
-    logger.info("sensitivity at the nominal parameters (step %g σ_θ)", step)
+    logger.info("sensitivity at the nominal parameters (step %g)", step)
     ranges = parameterization.physical_range(sensitivity.theta, sensitivity.stddev)
     rows = [("parameter", "nominal", "prior σ_θ", "CR σ_θ", "CR 1σ range", "with prior σ_θ")]
     for i, name in enumerate(sensitivity.names):

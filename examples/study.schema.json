@@ -449,8 +449,8 @@
       "description": "Sensitivity analysis with the Fisher information (``kipe sensitivity``).\n\nIt computes the sensitivities of the measurements to the estimated parameters, and from\nthem the Fisher information the measurements carry about the parameters. The sensitivities\nare evaluated at the nominal parameters, i.e., the truth of a twin experiment, in\n:math:`\\theta` of the ``parameters`` section, by centered finite differences with two\nforward runs per parameter. The measurements are those of the study, their predicted data\nnoise-free, and weighted with the measurements' ``noise.stddev``, the noise that estimation\nassumes.",
       "properties": {
         "step": {
-          "default": 0.1,
-          "description": "Step of the finite differences, as a fraction of each parameter's prior standard\ndeviation :math:`\\sigma_\\theta`: the runs are at :math:`\\theta_\\mathrm{true} \\pm`\n``step`` :math:`\\sigma_\\theta`. With ``log`` and ``relative_stddev: 0.1``, the default\nchanges the parameter by about 1 %.",
+          "default": 0.01,
+          "description": "Step of the finite differences: the relative change of each parameter, e.g., 0.01 for\n1 % (``log``, ``multiplicative``); for ``additive`` parameters, a fraction of their prior\n``stddev``, which gives the step its unit.",
           "exclusiveMinimum": 0,
           "title": "Step",
           "type": "number"

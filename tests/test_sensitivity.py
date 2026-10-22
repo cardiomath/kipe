@@ -145,7 +145,8 @@ def test_runs_one_by_one(tmp_path, linear):
 
 
 def test_runs_are_perturbations(tmp_path, linear):
-    """Run i: parameter i // 2, + for even i, by step σ_θ."""
+    """Run i: parameter i // 2, + for even i, by the step: for additive, a fraction of the
+    stddev."""
     study = _study(tmp_path, step=0.5)
     sensitivity.run(study, 3)  # -b
 
@@ -153,6 +154,16 @@ def test_runs_are_perturbations(tmp_path, linear):
     a, b = 1.5, -0.5 - 0.5 * STDDEV["b"]
     np.testing.assert_allclose(values, [[a * t + b, 2 * a - b * t] for t in TIMES])
     np.testing.assert_array_equal(times, TIMES)
+
+
+def test_relative_steps(tmp_path, linear):
+    """For multiplicative, the step is a relative change of the parameter."""
+    study = _study(tmp_path, step=0.02, reparameterization="multiplicative")
+    sensitivity.run(study, 2)  # +b
+
+    _, values = np.load(sensitivity.run_directory(study, 2) / "y.npz").values()
+    a, b = 1.5, -0.5 * 1.02
+    np.testing.assert_allclose(values, [[a * t + b, 2 * a - b * t] for t in TIMES])
 
 
 def test_missing_runs(tmp_path, linear):
