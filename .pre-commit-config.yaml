@@ -45,7 +45,7 @@ repos:
     hooks:
       - id: study-schema
         name: generate study schema
-        entry: bash -c 'kipe schema > study.schema.json'
+        entry: bash -c 'kipe schema > examples/study.schema.json'
         language: system
         pass_filenames: false
         always_run: true

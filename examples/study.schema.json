@@ -332,7 +332,7 @@
             }
           ],
           "default": null,
-          "description": "Standard deviation relative to ``initial``, e.g., ``0.3`` for 30%. For ``log`` and\n``multiplicative``.\n\nConverted to the standard deviation of :math:`\\theta`, to first order around ``initial``:\n:math:`\\sigma_\\theta` = ``relative_stddev`` / ln 2 for ``log``, :math:`\\sigma_\\theta` =\n``relative_stddev`` for ``multiplicative``. So both give the same prior as long as\n``relative_stddev`` is small. For large values they differ: ``log`` keeps the parameter\npositive, at the price of an asymmetric distribution. ``kipe list-parameters`` shows the\nresulting 1\u03c3 range.",
+          "description": "Standard deviation relative to ``initial``, e.g., ``0.3`` for 30%. For ``log`` and\n``multiplicative``.\n\nConverted to the standard deviation of :math:`\\theta`, to first order around ``initial``:\n:math:`\\sigma_\\theta` = ``relative_stddev`` / ln 2 for ``log``, :math:`\\sigma_\\theta` =\n``relative_stddev`` for ``multiplicative``. So both give the same prior as long as\n``relative_stddev`` is small. For large values they differ: ``log`` keeps the sign of the\nparameter, at the price of an asymmetric distribution. ``kipe list-parameters`` shows the\nresulting 1\u03c3 range.",
           "title": "Relative Stddev"
         },
         "stddev": {
@@ -371,7 +371,7 @@
       "properties": {
         "reparameterization": {
           "$ref": "#/$defs/Reparameterization",
-          "description": "How the estimated parameter :math:`\\theta` relates to the physical value :math:`\\phi`,\nrelative to the initial estimate :math:`\\phi_0`. Default for all parameters in\n``select``, each can override it.\n\nAvailable reparameterizations:\n\n- ``log``: :math:`\\phi = \\phi_0 2^\\theta`, starting at :math:`\\theta = 0`, with a\n  ``relative_stddev``. Keeps :math:`\\phi` positive; the initial estimate must be positive.\n- ``multiplicative``: :math:`\\phi = \\phi_0 \\theta`, starting at :math:`\\theta = 1`, with\n  a ``relative_stddev``. The initial estimate must not be zero; :math:`\\phi` can change\n  sign.\n- ``additive``: :math:`\\phi = \\phi_0 + \\theta`, starting at :math:`\\theta = 0`, with an\n  absolute ``stddev``. :math:`\\theta` is the deviation from the initial estimate, in the\n  parameter's physical unit. Accepts any initial estimate, including zero."
+          "description": "How the estimated parameter :math:`\\theta` relates to the physical value :math:`\\phi`,\nrelative to the initial estimate :math:`\\phi_0`. Default for all parameters in\n``select``, each can override it.\n\nAvailable reparameterizations:\n\n- ``log``: :math:`\\phi = \\phi_0 2^\\theta`, starting at :math:`\\theta = 0`, with a\n  ``relative_stddev``. Keeps the sign of :math:`\\phi_0`; the initial estimate may be\n  positive or negative, but not zero.\n- ``multiplicative``: :math:`\\phi = \\phi_0 \\theta`, starting at :math:`\\theta = 1`, with\n  a ``relative_stddev``. The initial estimate must not be zero; :math:`\\phi` can change\n  sign.\n- ``additive``: :math:`\\phi = \\phi_0 + \\theta`, starting at :math:`\\theta = 0`, with an\n  absolute ``stddev``. :math:`\\theta` is the deviation from the initial estimate, in the\n  parameter's physical unit. Accepts any initial estimate, including zero."
         },
         "select": {
           "additionalProperties": {
