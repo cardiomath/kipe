@@ -37,7 +37,9 @@ so the parameters are the only unknowns.
 
 so that the initial estimate is :math:`\theta^0_i = 0` for the log and additive forms, and
 :math:`\theta^0_i = 1` for the multiplicative form. The reparameterized parameters are then of
-similar size, though their physical values may differ by orders of magnitude.
+similar size, though their physical values may differ by orders of magnitude. The log form keeps
+the sign of :math:`\phi_i^0` (positive or negative), so the initial estimate must be nonzero, as
+for the multiplicative form.
 [NAB26]_ uses the multiplicative one. In kipe, the prior parameter covariance
 :math:`\bs{P}_\theta^0` is diagonal, containing the squared standard deviations after
 conversion from the study-file uncertainties to :math:`\bs{\theta}`.
