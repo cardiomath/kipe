@@ -85,8 +85,8 @@ class ParameterPrior:
     Converted to the standard deviation of :math:`\theta`, to first order around ``initial``:
     :math:`\sigma_\theta` = ``relative_stddev`` / ln 2 for ``log``, :math:`\sigma_\theta` =
     ``relative_stddev`` for ``multiplicative``. So both give the same prior as long as
-    ``relative_stddev`` is small. For large values they differ: ``log`` keeps the parameter
-    positive, at the price of an asymmetric distribution. ``kipe list-parameters`` shows the
+    ``relative_stddev`` is small. For large values they differ: ``log`` keeps the sign of the
+    parameter, at the price of an asymmetric distribution. ``kipe list-parameters`` shows the
     resulting 1σ range."""
 
     stddev: PositiveFloat | None = None
@@ -111,7 +111,8 @@ class ParametersOptions:
     Available reparameterizations:
 
     - ``log``: :math:`\phi = \phi_0 2^\theta`, starting at :math:`\theta = 0`, with a
-      ``relative_stddev``. Keeps :math:`\phi` positive; the initial estimate must be positive.
+      ``relative_stddev``. Keeps the sign of :math:`\phi_0`; the initial estimate may be
+      positive or negative, but not zero.
     - ``multiplicative``: :math:`\phi = \phi_0 \theta`, starting at :math:`\theta = 1`, with
       a ``relative_stddev``. The initial estimate must not be zero; :math:`\phi` can change
       sign.
