@@ -81,12 +81,13 @@ class ParameterPrior:
     r"""Standard deviation relative to the ``mean``, e.g., ``0.3`` for 30%. For ``log`` and
     ``multiplicative``.
 
-    Converted to the standard deviation of :math:`\theta`, to first order around the ``mean``:
-    :math:`\sigma_\theta` = ``relative_stddev`` / ln 2 for ``log``, :math:`\sigma_\theta` =
-    ``relative_stddev`` for ``multiplicative``. So both give the same prior as long as
-    ``relative_stddev`` is small. For large values they differ: ``log`` keeps the sign of the
-    parameter, at the price of an asymmetric distribution. ``kipe list-parameters`` shows the
-    resulting 1σ range."""
+    The standard deviation of :math:`\theta` is :math:`\sigma_\theta` = ``relative_stddev``,
+    i.e., that of :math:`\ln \phi` for ``log`` and that of :math:`\phi / \phi_0` for
+    ``multiplicative``. To first order, both are the standard deviation of :math:`\phi`
+    relative to the ``mean``, so both give about the same prior as long as ``relative_stddev``
+    is small. For large values they differ: ``log`` keeps the sign of the parameter, at the
+    price of an asymmetric distribution. ``kipe list-parameters`` shows the resulting 1σ
+    range."""
 
     stddev: PositiveFloat | None = None
     """Absolute standard deviation, in the parameter's physical unit. For ``additive``."""
@@ -111,7 +112,7 @@ class ParametersOptions:
 
     Available reparameterizations:
 
-    - ``log``: :math:`\phi = \phi_0 2^\theta`, starting at :math:`\theta = 0`, with a
+    - ``log``: :math:`\phi = \phi_0 e^\theta`, starting at :math:`\theta = 0`, with a
       ``relative_stddev``. Keeps the sign of :math:`\phi_0`; the prior mean may be
       positive or negative, but not zero.
     - ``multiplicative``: :math:`\phi = \phi_0 \theta`, starting at :math:`\theta = 1`, with

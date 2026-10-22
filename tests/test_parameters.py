@@ -40,8 +40,8 @@ def test_new_parameterization_anchored_at_prior_means(reparameterization, spread
 @pytest.mark.parametrize(
     ("reparameterization", "spread", "theta", "phi"),
     [
-        ("log", {"relative_stddev": 0.1}, 1.0, 6.0),
-        ("log", {"relative_stddev": 0.1}, -1.0, 1.5),
+        ("log", {"relative_stddev": 0.1}, np.log(2.0), 6.0),
+        ("log", {"relative_stddev": 0.1}, -np.log(2.0), 1.5),
         ("multiplicative", {"relative_stddev": 0.1}, 0.5, 1.5),
         ("additive", {"stddev": 0.1}, -0.5, 2.5),
     ],
@@ -69,8 +69,7 @@ def test_one_sigma_range():
     parameterization = _build({
         "reparameterization": "log",
         "priors": {
-            # stddev_theta = 1: a factor of 2
-            "c": {"mean": 3.0, "relative_stddev": np.log(2)},
+            "c": {"mean": 3.0, "relative_stddev": np.log(2.0)},
             "a": {"reparameterization": "additive", "mean": 0.0, "stddev": 0.1},
         },
     })
@@ -88,7 +87,7 @@ def test_reparameterization_per_parameter():
     })
     kinds = [parameter.reparameterization for parameter in parameterization.parameters]
     assert kinds == ["log", "additive"]
-    np.testing.assert_allclose(parameterization.stddev_theta(), [0.1 / np.log(2), 0.05])
+    np.testing.assert_allclose(parameterization.stddev_theta(), [0.1, 0.05])
 
 
 @pytest.mark.parametrize(
@@ -165,7 +164,7 @@ def test_invalid_options(data):
 @pytest.mark.parametrize(
     ("reparameterization", "stddev_theta", "lower", "upper", "rtol"),
     [
-        ("log", 0.1 / np.log(2), 2.0 * 0.99, 2.0 * 1.01, 1e-4),  # to first order
+        ("log", 0.1, 2.0 * 0.99, 2.0 * 1.01, 1e-4),  # to first order
         ("multiplicative", 0.1, 2.0 * 0.99, 2.0 * 1.01, 1e-14),
         ("additive", 0.5, 2.0 - 0.005, 2.0 + 0.005, 1e-14),  # 0.01 of the stddev
     ],

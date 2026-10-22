@@ -107,9 +107,7 @@ def test_twin_experiment_recovers_parameters(tmp_path):
     history = _history(tmp_path)
     names = list(history["names"])
     theta, P = history["theta"][-1], history["P_theta"][-1]
-    theta_true = np.log2([
-        TRUE[name] / INITIAL[name] for name in names
-    ])  # log reparameterization
+    theta_true = np.log([TRUE[name] / INITIAL[name] for name in names])  # log reparameterization
     error = np.abs(theta - theta_true)
     np.testing.assert_array_less(error, 3 * np.sqrt(np.diag(P)))
 
