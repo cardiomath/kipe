@@ -32,12 +32,12 @@ themselves are noise-free.
   to :math:`\bs{M}^{-1}` only where the data dominate the prior (see below).
 - For ``log`` and ``additive``, :math:`\bs{\theta}` here differs from the filter's only by a
   constant, so :math:`\bs{M}` is the same in both. ``multiplicative``,
-  :math:`\phi_i = \phi_i^0 \theta_i`, scales by the initial values :math:`\phi_i^0` in the
-  filter, by the nominal values :math:`\phi_{\mathrm{true},i}` here: the filter's
-  :math:`\bs{P}_\theta` corresponds to :math:`\bs{D} \bs{P}_\theta \bs{D}` here,
+  :math:`\phi_i = \phi_i^0 \theta_i`, scales by the anchors :math:`\phi_i^0` in the filter,
+  i.e., the initial values, by the nominal values :math:`\phi_{\mathrm{true},i}` here: the
+  filter's :math:`\bs{P}_\theta` corresponds to :math:`\bs{D} \bs{P}_\theta \bs{D}` here,
   :math:`\bs{D} = \operatorname{diag}(\phi_i^0 / \phi_{\mathrm{true},i})`. The correlations
-  are the same in both. With several iterations, :math:`\phi_i^0` is the center of the last
-  pass, the estimate of the one before. Its prior is relative to that center too, so the
+  are the same in both. With several iterations, :math:`\phi_i^0` is the anchor of the last
+  pass, the estimate of the one before. Its prior is relative to that anchor too, so the
   Bayesian bound to compare with is :math:`(\bs{M} + (\bs{D} \bs{P}^0_\theta \bs{D})^{-1})^{-1}`
   here, the reported one only for :math:`\bs{D} \approx \bs{1}`.
 - The singular values :math:`s_1 \geq \dots \geq s_p` of :math:`\bs{\tilde{J}}` and its right
@@ -294,7 +294,7 @@ def assemble(study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD) -> Sensitivit
 
 
 def _at_nominal(study: StudyOptions, nominal: dict[str, float]) -> Parameterization:
-    r"""Return the study's parameterization, centered at the nominal parameters: its initial
+    r"""Return the study's parameterization, anchored at the nominal parameters: its initial
     :math:`\bs{\theta}` maps to them, :math:`\bs{\theta}_\mathrm{true}`.
 
     Args:
@@ -308,14 +308,14 @@ def _at_nominal(study: StudyOptions, nominal: dict[str, float]) -> Parameterizat
         raise StudyFileError("sensitivity needs a parameters section")
 
     parameterization = build_parameterization(study.parameters, nominal)
-    return parameterization.with_initial(nominal)
+    return parameterization.with_anchor(nominal)
 
 
 def _perturbed_theta(parameterization: Parameterization, step: float, index: int) -> NDArray_f64:
     r"""Return :math:`\theta` of a run.
 
     Args:
-        parameterization: the parameterization, centered at the nominal parameters
+        parameterization: the parameterization, anchored at the nominal parameters
         step: the step, see :attr:`kipe.options.SensitivityOptions.step`
         index: number of the run
 
@@ -369,7 +369,7 @@ def _check_runs(study: StudyOptions, parameterization: Parameterization) -> None
 
     Args:
         study: the study options
-        parameterization: the parameterization, with its center at the nominal values
+        parameterization: the parameterization, anchored at the nominal values
 
     Raises:
         StudyFileError: if a run is missing or unfinished, or has other parameters
@@ -404,7 +404,7 @@ def _sensitivity(
 
     Args:
         study: the study options, with measurements
-        parameterization: the parameterization, with its center at the nominal values
+        parameterization: the parameterization, anchored at the nominal values
         jacobians: the sensitivities of each measurement
 
     Returns:
@@ -482,7 +482,7 @@ def _log(sensitivity: Sensitivity, parameterization: Parameterization, step: flo
 
     Args:
         sensitivity: the result
-        parameterization: the parameterization, with its center at the nominal values
+        parameterization: the parameterization, anchored at the nominal values
         step: the step of the finite differences, ``sensitivity.step``
     """
     logger.info("sensitivity at the nominal parameters (step %g)", step)
@@ -492,7 +492,7 @@ def _log(sensitivity: Sensitivity, parameterization: Parameterization, step: flo
         lower, upper = ranges[i]
         rows.append((
             name,
-            f"{parameterization.parameters[i].initial:.4g}",
+            f"{parameterization.parameters[i].anchor:.4g}",
             f"{sensitivity.stddev_theta[i]:.3g}",
             f"{sensitivity.stddev[i]:.3g}",
             f"[{lower:.4g}, {upper:.4g}]",

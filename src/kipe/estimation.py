@@ -176,7 +176,7 @@ class Estimation:
             parameters.append((
                 p.name,
                 p.reparameterization,
-                f"{p.initial:.4g}",
+                f"{p.anchor:.4g}",
                 f"[{lower:.4g}, {upper:.4g}]",
             ))
         for line in format_table(parameters, "<<><"):
