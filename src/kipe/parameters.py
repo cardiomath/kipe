@@ -78,6 +78,37 @@ class EstimatedParameter:
             case _:
                 assert_never(self.reparameterization)
 
+    def theta_step(self, step: float) -> float:
+        r"""Return the step in :math:`\theta` corresponding to a step in the parameter.
+
+        With ``log`` and ``multiplicative`` reparameterizations, ``step`` is the relative step in
+        the parameter, at its initial value; with ``additive``, a fraction of the parameter's
+        prior standard deviation, which gives the step its unit:
+
+        - ``log``: :math:`h_\theta = h / \ln 2`, to first order;
+        - ``multiplicative``: :math:`h_\theta = h`;
+        - ``additive``: :math:`h_\theta = h \sigma_\theta`.
+
+        Used by the sensitivity analysis (:mod:`kipe.sensitivity`), whose parameterization has
+        the nominal values as initial values.
+
+        Args:
+            step: relative change of the parameter (``log``, ``multiplicative``), or fraction of
+                its prior standard deviation (``additive``)
+
+        Returns:
+            step in :math:`\theta`
+        """
+        match self.reparameterization:
+            case "log":
+                return step / np.log(2.0)
+            case "multiplicative":
+                return step
+            case "additive":
+                return self.stddev_theta * step
+            case _:
+                assert_never(self.reparameterization)
+
 
 @dataclass(frozen=True)
 class Parameterization:
@@ -104,6 +135,17 @@ class Parameterization:
             initial standard deviations of :math:`\theta`
         """
         return np.array([parameter.stddev_theta for parameter in self.parameters])
+
+    def theta_step(self, step: float) -> NDArray_f64:
+        r"""Return the steps in :math:`\theta` of a step in the parameters, one per parameter.
+
+        Args:
+            step: the step, see :meth:`EstimatedParameter.theta_step`
+
+        Returns:
+            the step in :math:`\theta` of each parameter
+        """
+        return np.array([parameter.theta_step(step) for parameter in self.parameters])
 
     def initial_theta(self) -> NDArray_f64:
         r"""Return the initial :math:`\theta`, which maps to the initial estimates.

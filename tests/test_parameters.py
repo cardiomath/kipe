@@ -5,7 +5,7 @@ import pytest
 from pydantic import TypeAdapter, ValidationError
 
 from kipe.options import ParametersOptions, StudyFileError
-from kipe.parameters import build_parameterization
+from kipe.parameters import EstimatedParameter, build_parameterization
 
 NOMINAL = {"a": 0.2, "b": 0.2, "c": 3.0}
 
@@ -151,3 +151,19 @@ def test_inadmissible_initial_estimate(reparameterization, initial):
 def test_invalid_options(data):
     with pytest.raises(ValidationError):
         TypeAdapter(ParametersOptions).validate_python(data)
+
+
+@pytest.mark.parametrize(
+    ("reparameterization", "stddev_theta", "lower", "upper", "rtol"),
+    [
+        ("log", 0.1 / np.log(2), 2.0 * 0.99, 2.0 * 1.01, 1e-4),  # to first order
+        ("multiplicative", 0.1, 2.0 * 0.99, 2.0 * 1.01, 1e-14),
+        ("additive", 0.5, 2.0 - 0.005, 2.0 + 0.005, 1e-14),  # 0.01 of the stddev
+    ],
+)
+def test_theta_step(reparameterization, stddev_theta, lower, upper, rtol):
+    """A step of 0.01: 1 % of the parameter (log, multiplicative), 0.01 stddev (additive)."""
+    parameter = EstimatedParameter("x", reparameterization, 2.0, stddev_theta)
+    step, theta = parameter.theta_step(0.01), parameter.initial_theta()
+    assert parameter.to_physical(theta - step) == pytest.approx(lower, rel=rtol)
+    assert parameter.to_physical(theta + step) == pytest.approx(upper, rel=rtol)

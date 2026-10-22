@@ -430,11 +430,10 @@ class SensitivityOptions:
     assumes.
     """
 
-    step: PositiveFloat = 0.1
-    r"""Step of the finite differences, as a fraction of each parameter's prior standard
-    deviation :math:`\sigma_\theta`: the runs are at :math:`\theta_\mathrm{true} \pm`
-    ``step`` :math:`\sigma_\theta`. With ``log`` and ``relative_stddev: 0.1``, the default
-    changes the parameter by about 1 %."""
+    step: PositiveFloat = 0.01
+    r"""Step of the finite differences: the relative change of each parameter, e.g., 0.01 for
+    1 % (``log``, ``multiplicative``); for ``additive`` parameters, a fraction of their prior
+    ``stddev``, which gives the step its unit."""
 
 
 @dataclass(frozen=True, config=_CONFIG)

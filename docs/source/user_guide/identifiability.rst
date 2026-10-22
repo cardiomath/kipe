@@ -16,11 +16,12 @@ Running it
     kipe sensitivity study.yaml
 
 The analysis consists of two forward runs per estimated parameter, at
-:math:`\theta_\mathrm{true} \pm h \sigma_\theta` along it. The step :math:`h`,
-``sensitivity.step`` (:ref:`study-sensitivity`), is a fraction of the parameter's prior standard
-deviation :math:`\sigma_\theta`. The runs do not depend on each other: for an expensive model,
-``--run I`` computes one of them, e.g., as a task of a job array (:doc:`parallel`), and
-``--assemble`` combines them once all are done. The results go to
+:math:`\theta_\mathrm{true} \pm h_\theta` along it. The step ``sensitivity.step``
+(:ref:`study-sensitivity`) is a relative change of the parameter, by default 0.01, i.e., 1 %; for
+``additive`` parameters, it is a fraction of their prior ``stddev``, which gives it its unit.
+:math:`h_\theta` is that step in :math:`\theta`. The runs do not depend on each other: for an
+expensive model, ``--run I`` computes one of them, e.g., as a task of a job array
+(:doc:`parallel`), and ``--assemble`` combines them once all are done. The results go to
 ``<output.path>/sensitivity/``: the predicted data of each run in ``runs/``, the result in
 ``sensitivity.npz``, and a summary in the log.
 
@@ -32,7 +33,7 @@ prior of 10 %, i.e., :math:`\sigma_\theta = 0.1 / \ln 2 = 0.144`, the log shows:
 
 .. code-block:: text
 
-    sensitivity at the nominal parameters (step 0.1 σ_θ)
+    sensitivity at the nominal parameters (step 0.01)
       parameter  nominal  prior σ_θ    CR σ_θ  CR 1σ range       with prior σ_θ
       a              0.2      0.144   0.00528  [0.1993, 0.2007]         0.00526
       b              0.2      0.144    0.0272  [0.1963, 0.2038]          0.0267
