@@ -4,7 +4,7 @@ kipe estimates the reparameterized parameters :math:`\theta`, the forward solver
 physical values :math:`\phi`. :class:`Parameterization` maps between the two.
 """
 
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass, replace
 from typing import Self, assert_never
 
@@ -226,12 +226,16 @@ class Parameterization:
         return ranges
 
 
-def build_parameterization(options: ParametersOptions, nominal: Parameters) -> Parameterization:
+def build_parameterization(
+    options: ParametersOptions, available_parameters: Collection[str]
+) -> Parameterization:
     """Check the selected parameters against the solver's and build the parameterization.
 
     Args:
         options: ``parameters`` section of the study file
-        nominal: the forward solver's parameters and their nominal values
+        available_parameters: the names of the forward solver's parameters
+            (:meth:`~kipe.forward_solver.ForwardSolver.nominal_parameters`), to check the
+            selection against
 
     Returns:
         the parameterization, with the parameters in the order of ``options.select``
@@ -240,18 +244,17 @@ def build_parameterization(options: ParametersOptions, nominal: Parameters) -> P
         StudyFileError: if a selected parameter is unknown to the solver, or an initial
             estimate is not admissible for its reparameterization
     """
-    unknown = [name for name in options.select if name not in nominal]
+    unknown = [name for name in options.select if name not in available_parameters]
     if unknown:
-        available = ", ".join(f"{name} = {value:g}" for name, value in nominal.items())
         raise StudyFileError(
             f"parameters.select: the forward solver has no parameter {', '.join(unknown)}. "
-            f"Available: {available}"
+            f"Available: {', '.join(available_parameters)} "
+            "(kipe list-parameters study.yaml shows their nominal values)"
         )
 
     parameters = []
     for name, prior in options.select.items():
         reparameterization = prior.reparameterization or options.reparameterization
-        initial = nominal[name] if prior.initial is None else prior.initial
 
         # the options check that each reparameterization has its kind of stddev
         match reparameterization:
@@ -266,7 +269,7 @@ def build_parameterization(options: ParametersOptions, nominal: Parameters) -> P
 
         try:
             parameters.append(
-                EstimatedParameter(name, reparameterization, initial, float(stddev_theta))
+                EstimatedParameter(name, reparameterization, prior.initial, float(stddev_theta))
             )
         except ValueError as err:
             raise StudyFileError(f"parameters.select.{err}") from err

@@ -14,10 +14,9 @@ Set ``initial`` to choose where estimation starts. Use ``relative_stddev`` for `
    :end-before: measurements:
 
 
-If ``initial`` is omitted, estimation starts at the solver's nominal value. Parameters not
-selected remain fixed at their nominal values. In a twin experiment, choose an initial value
-different from the truth to test whether the measurements can recover it. See :doc:`../reference/study_file`
-for the available options.
+Parameters not selected remain fixed at their nominal values. In a twin experiment, choose
+initial values different from the truth, to test whether the measurements can recover it.
+See :doc:`../reference/study_file` for the available options.
 
 Run ``kipe estimation study.yaml`` to estimate parameters from the data specified in the study's
 ``measurements`` section. The ``estimation`` section configures the setup of the estimation process, as exemplified in the following snippet:

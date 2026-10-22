@@ -7,12 +7,12 @@ from pydantic import TypeAdapter, ValidationError
 from kipe.options import ParametersOptions, StudyFileError
 from kipe.parameters import EstimatedParameter, build_parameterization
 
-NOMINAL = {"a": 0.2, "b": 0.2, "c": 3.0}
+AVAILABLE = ("a", "b", "c")  # the forward solver's parameters
 
 
 def _build(data: dict):
     options = TypeAdapter(ParametersOptions).validate_python(data)
-    return build_parameterization(options, NOMINAL)
+    return build_parameterization(options, AVAILABLE)
 
 
 @pytest.mark.parametrize(
@@ -24,21 +24,21 @@ def _build(data: dict):
     ],
 )
 def test_new_parameterization_anchored_at_initial_estimates(reparameterization, spread, theta0):
-    """A new parameterization is anchored at the initial estimates, nominal or ``initial``:
-    theta at the anchor maps to them."""
+    """A new parameterization is anchored at the initial estimates: theta at the anchor maps to
+    them."""
     parameterization = _build({
         "reparameterization": reparameterization,
-        "select": {"c": spread, "a": {**spread, "initial": 0.25}},
+        "select": {"c": {"initial": 2.0, **spread}, "a": {"initial": 0.25, **spread}},
     })
     theta = parameterization.anchor_theta()
 
     np.testing.assert_allclose(theta, [theta0, theta0])
-    assert parameterization.to_physical(theta) == pytest.approx({"c": 3.0, "a": 0.25})
+    assert parameterization.to_physical(theta) == pytest.approx({"c": 2.0, "a": 0.25})
     assert parameterization.names == ["c", "a"]  # order of the study file
 
 
 @pytest.mark.parametrize(
-    ("reparameterization", "spread", "theta", "c"),
+    ("reparameterization", "spread", "theta", "phi"),
     [
         ("log", {"relative_stddev": 0.1}, 1.0, 6.0),
         ("log", {"relative_stddev": 0.1}, -1.0, 1.5),
@@ -46,13 +46,13 @@ def test_new_parameterization_anchored_at_initial_estimates(reparameterization, 
         ("additive", {"stddev": 0.1}, -0.5, 2.5),
     ],
 )
-def test_to_physical(reparameterization, spread, theta, c):
+def test_to_physical(reparameterization, spread, theta, phi):
     parameterization = _build({
         "reparameterization": reparameterization,
-        "select": {"c": spread},
+        "select": {"c": {"initial": 3.0, **spread}},
     })
 
-    assert parameterization.to_physical(np.array([theta])) == pytest.approx({"c": c})
+    assert parameterization.to_physical(np.array([theta])) == pytest.approx({"c": phi})
 
 
 @pytest.mark.parametrize("reparameterization", ["log", "multiplicative"])
@@ -60,7 +60,7 @@ def test_relative_stddev_is_first_order_equivalent(reparameterization):
     """A small relative stddev gives about the same physical 1σ range for both maps."""
     parameterization = _build({
         "reparameterization": reparameterization,
-        "select": {"c": {"relative_stddev": 0.01}},
+        "select": {"c": {"initial": 3.0, "relative_stddev": 0.01}},
     })
     np.testing.assert_allclose(parameterization.one_sigma_range(), [(2.97, 3.03)], rtol=1e-4)
 
@@ -69,7 +69,8 @@ def test_one_sigma_range():
     parameterization = _build({
         "reparameterization": "log",
         "select": {
-            "c": {"relative_stddev": np.log(2)},  # stddev_theta = 1: a factor of 2
+            # stddev_theta = 1: a factor of 2
+            "c": {"initial": 3.0, "relative_stddev": np.log(2)},
             "a": {"reparameterization": "additive", "initial": 0.0, "stddev": 0.1},
         },
     })
@@ -81,7 +82,7 @@ def test_reparameterization_per_parameter():
     parameterization = _build({
         "reparameterization": "log",
         "select": {
-            "c": {"relative_stddev": 0.1},
+            "c": {"initial": 3.0, "relative_stddev": 0.1},
             "a": {"reparameterization": "additive", "initial": 0.0, "stddev": 0.05},
         },
     })
@@ -103,7 +104,7 @@ def test_with_anchor_moves_the_anchor_to_the_estimate(reparameterization, spread
     the estimate; the standard deviations of theta stay."""
     parameterization = _build({
         "reparameterization": reparameterization,
-        "select": {"c": spread, "a": spread},
+        "select": {"c": {"initial": 3.0, **spread}, "a": {"initial": 0.2, **spread}},
     })
     theta = parameterization.anchor_theta() + np.array([0.5, -0.25])
     estimate = parameterization.to_physical(theta)
@@ -117,8 +118,11 @@ def test_with_anchor_moves_the_anchor_to_the_estimate(reparameterization, spread
 
 
 def test_unknown_parameter_lists_available():
-    with pytest.raises(StudyFileError, match=r"no parameter d\. Available: a = 0\.2, b = 0\.2"):
-        _build({"reparameterization": "log", "select": {"d": {"relative_stddev": 1}}})
+    with pytest.raises(StudyFileError, match=r"no parameter d\. Available: a, b, c"):
+        _build({
+            "reparameterization": "log",
+            "select": {"d": {"initial": 1.0, "relative_stddev": 1}},
+        })
 
 
 @pytest.mark.parametrize(

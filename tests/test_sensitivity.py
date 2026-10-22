@@ -73,10 +73,17 @@ def _study(
     reparameterization: Reparameterization = "additive",
     estimation: EstimationOptions | None = None,
 ) -> StudyOptions:
+    # the prior's mean at the truth: the filter comparisons start there
+    initial = _LinearSolver().nominal_parameters()
     if reparameterization == "additive":
-        priors = {name: ParameterPrior(stddev=s) for name, s in STDDEV.items()}
+        priors = {
+            name: ParameterPrior(initial=initial[name], stddev=s) for name, s in STDDEV.items()
+        }
     else:
-        priors = {name: ParameterPrior(relative_stddev=s) for name, s in RELATIVE_STDDEV.items()}
+        priors = {
+            name: ParameterPrior(initial=initial[name], relative_stddev=s)
+            for name, s in RELATIVE_STDDEV.items()
+        }
     return StudyOptions(
         output=OutputOptions(path=str(tmp_path / "results")),
         forward_solver=ForwardSolverOptions("linear_solver:Solver"),
@@ -206,9 +213,10 @@ def test_fisher_information_is_what_the_filter_learns(
     the data, its covariance is the posterior (M + P_0^-1)^-1 of the Fisher information M and
     the prior, the Bayesian Cramer-Rao bound.
 
-    The data are the model's own, without noise: the estimate stays at the nominal values, so
-    for multiplicative, theta keeps its scale over the passes (each anchors it at the
-    previous estimate), and needs no rescaling to compare with M.
+    The prior's mean is the truth and the data are the model's own, without noise: the
+    estimate stays at the nominal values, so for multiplicative, theta keeps its scale over
+    the passes (each anchors it at the previous estimate), and needs no rescaling to compare
+    with M.
     """
     options = EstimationOptions(sigma_points=sigma_points, iterations=iterations)
     study = _study(tmp_path, reparameterization=reparameterization, estimation=options)
