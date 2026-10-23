@@ -22,7 +22,7 @@ jobs:
           fetch-depth: 0  # version from git tags
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: '3.12'
           cache: pip
       - name: Install project and docs dependencies
         run: pip install -e ".[docs]"
@@ -31,7 +31,6 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: docs/build/html
-
   deploy:
     needs: build
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'

@@ -4,7 +4,6 @@ name: Release
 # a pre-release (e.g., tag 0.1.0rc1) to TestPyPI, a release (e.g., tag 0.1.0) to PyPI.
 # Uploads use trusted publishing: no token; the projects on (Test)PyPI name this workflow
 # and its environment as their publisher.
-
 on:
   release:
     types: [published]
@@ -18,7 +17,7 @@ jobs:
           fetch-depth: 0  # all tags, for the version (hatch-vcs)
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: '3.12'
       - run: pip install build twine
       - run: python -m build
       - run: twine check --strict dist/*
@@ -26,7 +25,6 @@ jobs:
         with:
           name: dist
           path: dist/
-
   testpypi:
     if: github.event.release.prerelease
     needs: build
@@ -42,7 +40,6 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
-
   pypi:
     if: ${{ !github.event.release.prerelease }}
     needs: build

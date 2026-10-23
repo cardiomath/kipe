@@ -4,13 +4,12 @@
 #   kipe synthesis study.yaml  # generates data/u.npz on it, with the nominal parameters
 #   kipe estimation study.yaml  # estimates kappa and a from it, starting from a wrong guess
 # Both kipe commands also run in parallel, e.g., mpirun -n 2 kipe estimation study.yaml
-
 output:
   path: results
   log_level: info
 
 forward_solver:
-  factory: "kipe.fenicsx.examples.heat:Solver"
+  factory: kipe.fenicsx.examples.heat:Solver
   arguments: {n: 16, dt: 0.01}  # nominal (true) parameters: kappa = 0.1, a = 1
 
 parameters:
