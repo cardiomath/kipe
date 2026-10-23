@@ -30,6 +30,7 @@ if TYPE_CHECKING:
 # matplotlib's first colors, so that terminal and figure agree
 _COLORS = [(31, 119, 180), (255, 127, 14), (44, 160, 44), (214, 39, 40), (148, 103, 189)]
 _GRAY = (128, 128, 128)
+_GREEN = (0, 200, 0)  # starts of the outer iterations
 _TRUTH = (227, 119, 194)  # matplotlib's pink, not used for the estimates
 _ROWS_PER_PARAMETER = 12
 
@@ -199,7 +200,7 @@ def render_histories(
     Like :func:`plot_histories`, with the 1σ range drawn as gray lines below and above the
     estimate. With a single history, each subplot title shows the latest estimate and range.
     Several histories or a truth get a legend below the plot, and a last line explains the
-    lines: the colored estimate, the gray 1σ range and the gray vertical lines at the starts
+    lines: the colored estimate, the gray 1σ range and the green vertical lines at the starts
     of the outer iterations.
 
     Args:
@@ -253,7 +254,7 @@ def render_histories(
         # lines (the truth below the 1σ ranges, which jump across it at each outer iteration),
         # the estimates on top
         for start in first.iteration_starts():  # outer iterations
-            draw(subplot, [float(start)] * 2, [low, high], _GRAY)
+            draw(subplot, [float(start)] * 2, [low, high], _GREEN)
 
         if truth is not None and name in truth:
             draw(subplot, [0.0, float(last)], [truth[name]] * 2, _TRUTH)
@@ -281,10 +282,11 @@ def render_histories(
             lines.append(f"\x1b[38;2;{r};{g};{b}m━━\x1b[0m {label}" if color else f"━━ {label}")
 
     gray = "\x1b[38;2;128;128;128m{}\x1b[0m" if color else "{}"
+    green = "\x1b[38;2;0;200;0m{}\x1b[0m" if color else "{}"
     lines.append(
         f"colored line: estimate   {gray.format('gray lines')}: 1σ range (hidden under the "
         f"estimate where narrower than a dot), "
-        f"{gray.format('gray vertical lines')}: starts of outer iterations"
+        f"{green.format('green vertical lines')}: starts of outer iterations"
     )
 
     return "\n".join(lines)
