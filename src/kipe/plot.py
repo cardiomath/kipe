@@ -257,14 +257,16 @@ def render_histories(
         if truth is not None and name in truth:
             draw(subplot, [0.0, float(last)], [truth[name]] * 2, _TRUTH)
 
+        # each outer iteration is drawn on its own: the estimate jumps back to the initial guess
+        # at its start, and a line across the jump would pile dots up vertically
         for history in histories.values():
-            steps = np.arange(len(history.iteration)).tolist()
-            draw(subplot, steps, history.lower[:, j].tolist(), _GRAY)
-            draw(subplot, steps, history.upper[:, j].tolist(), _GRAY)
+            for steps, sl in _segments(history):
+                draw(subplot, steps, history.lower[sl, j].tolist(), _GRAY)
+                draw(subplot, steps, history.upper[sl, j].tolist(), _GRAY)
 
         for k, history in enumerate(histories.values()):
-            steps = np.arange(len(history.iteration)).tolist()
-            draw(subplot, steps, history.parameters[:, j].tolist(), _color(k))
+            for steps, sl in _segments(history):
+                draw(subplot, steps, history.parameters[sl, j].tolist(), _color(k))
 
         subplot.title(_title(name, histories, truth))
         if last > 0:
@@ -279,7 +281,8 @@ def render_histories(
 
     gray = "\x1b[38;2;128;128;128m{}\x1b[0m" if color else "{}"
     lines.append(
-        f"colored line: estimate   {gray.format('gray lines')}: 1σ range, "
+        f"colored line: estimate   {gray.format('gray lines')}: 1σ range (hidden under the "
+        f"estimate where narrower than a dot), "
         f"{gray.format('gray vertical lines')}: starts of outer iterations"
     )
 
@@ -339,6 +342,23 @@ def _common_names(histories: Mapping[str, History]) -> list[str]:
         raise PlotError("the histories estimate different parameters and cannot be compared")
 
     return names
+
+
+def _segments(history: History) -> list[tuple[list[float], slice]]:
+    """Split a history into its outer iterations.
+
+    Args:
+        history: the history
+
+    Returns:
+        for each outer iteration, its step numbers and the slice of its rows
+    """
+    changes = (np.flatnonzero(np.diff(history.iteration)) + 1).tolist()
+    bounds = [0, *changes, len(history.iteration)]
+    return [
+        (np.arange(a, b).tolist(), slice(a, b))
+        for a, b in zip(bounds[:-1], bounds[1:], strict=True)
+    ]
 
 
 def _last_step(histories: Mapping[str, History]) -> int:
