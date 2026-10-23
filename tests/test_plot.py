@@ -187,6 +187,18 @@ def test_render_histories_keeps_terminal_background(tmp_path):
     assert "\x1b[48;" not in text
 
 
+def test_plot_terminal_columns(tmp_path, capsys):
+    """--cpr puts several plots in a row, so the output is shorter than one plot per row."""
+    study = _study(tmp_path)
+    assert main(["plot", study, "--terminal"]) == 0
+    one = capsys.readouterr().out
+    assert main(["plot", study, "--terminal", "--cpr", "2"]) == 0
+    two = capsys.readouterr().out
+    assert len(two.splitlines()) < len(one.splitlines())
+    assert "a = " in two
+    assert "c = " in two
+
+
 def test_read_history_reads_the_plan(tmp_path):
     """The plan from the run's provenance: 2 iterations of 2 times and the initial state."""
     _study(tmp_path)
