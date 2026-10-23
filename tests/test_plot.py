@@ -199,6 +199,18 @@ def test_plot_terminal_columns(tmp_path, capsys):
     assert "c = " in two
 
 
+def test_plot_terminal_current_iteration_by_default(tmp_path, capsys):
+    """Only the current outer iteration, unless --all: the key then has no iteration lines."""
+    study = _study(tmp_path)
+    assert main(["plot", study, "--terminal"]) == 0
+    current = capsys.readouterr().out
+    assert main(["plot", study, "--terminal", "--all"]) == 0
+    everything = capsys.readouterr().out
+    assert "step of the current iteration" in current
+    assert "outer iterations" not in current
+    assert "outer iterations" in everything
+
+
 def test_read_history_reads_the_plan(tmp_path):
     """The plan from the run's provenance: 2 iterations of 2 times and the initial state."""
     _study(tmp_path)

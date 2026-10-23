@@ -195,14 +195,18 @@ def render_histories(
     height: int | None = None,
     color: bool = True,
     columns: int = 1,
+    all_iterations: bool = False,
 ) -> str:
     """Render estimation histories as text for the terminal, one subplot per parameter.
 
     Like :func:`plot_histories`, with the 1σ range drawn as gray lines below and above the
     estimate. With a single history, each subplot title shows the latest estimate and range.
     Several histories or a truth get a legend below the plot, and a last line explains the
-    lines: the colored estimate, the gray 1σ range and the green vertical lines at the starts
-    of the outer iterations.
+    lines: the colored estimate, the gray 1σ range and, with all iterations, the green vertical
+    lines at the starts of the outer iterations.
+
+    By default, only the current (latest) outer iteration is drawn, which zooms in on where the
+    estimate converges; its x axis counts the steps of that iteration.
 
     Args:
         histories: label -> history; all must estimate the same parameters
@@ -211,6 +215,7 @@ def render_histories(
             than that, so that the plots keep their resolution in a small terminal
         color: whether to color the output with ANSI escape codes
         columns: number of subplots per row; the parameters fill the grid row by row
+        all_iterations: whether to draw all outer iterations instead of the current one
 
     Returns:
         the rendered plot
@@ -247,7 +252,22 @@ def render_histories(
         marker = plotext.marker("braille", pixel=plotext.pixel(foreground=rgb))
         subplot.draw(subplot.signal(x, y, marker=marker).lines(True))
 
-    last = _last_step(histories)
+    segments = {label: _segments(history) for label, history in histories.items()}
+    if not all_iterations:  # the current iteration, counted from its first step
+        segments = {
+            label: [(list(range(len(steps))), sl) for steps, sl in parts[-1:]]
+            for label, parts in segments.items()
+        }
+    if all_iterations:
+        last = _last_step(histories)
+    else:
+        last = (
+            max(
+                history.steps_per_iteration or len(segments[label][0][0])
+                for label, history in histories.items()
+            )
+            - 1
+        )
     for j, name in enumerate(names):
         subplot = figure.subplot(j // columns + 1, j % columns + 1)
         first = next(iter(histories.values()))
@@ -257,7 +277,7 @@ def render_histories(
         # where lines share a cell, the last one drawn colors all its dots: first the reference
         # lines (the truth below the 1σ ranges, which jump across it at each outer iteration),
         # the estimates on top
-        for start in first.iteration_starts():  # outer iterations
+        for start in first.iteration_starts() if all_iterations else []:  # outer iterations
             draw(subplot, [float(start)] * 2, [low, high], _GREEN)
 
         if truth is not None and name in truth:
@@ -265,22 +285,23 @@ def render_histories(
 
         # each outer iteration is drawn on its own: the estimate jumps back to the initial guess
         # at its start, and a line across the jump would pile dots up vertically
-        for history in histories.values():
-            for steps, sl in _segments(history):
+        for label, history in histories.items():
+            for steps, sl in segments[label]:
                 draw(subplot, steps, history.lower[sl, j].tolist(), _GRAY)
                 draw(subplot, steps, history.upper[sl, j].tolist(), _GRAY)
 
-        for k, history in enumerate(histories.values()):
-            for steps, sl in _segments(history):
+        for k, (label, history) in enumerate(histories.items()):
+            for steps, sl in segments[label]:
                 draw(subplot, steps, history.parameters[sl, j].tolist(), _color(k))
 
         subplot.title(_title(name, histories, truth))
         if last > 0:
             subplot.ruler(0).lim(0, last)
 
+    xlabel = "assimilation step" if all_iterations else "step of the current iteration"
     for j in range(len(names)):  # the x axis label under the last plot of each column
         if j + columns >= len(names):
-            figure.subplot(j // columns + 1, j % columns + 1).label("assimilation step", axis=0)
+            figure.subplot(j // columns + 1, j % columns + 1).label(xlabel, axis=0)
 
     lines = [figure.build().string(colorless=not color)]
     if len(legend) > 1:  # below the plot, so that it covers nothing
@@ -289,11 +310,13 @@ def render_histories(
 
     gray = "\x1b[38;2;128;128;128m{}\x1b[0m" if color else "{}"
     green = "\x1b[38;2;0;200;0m{}\x1b[0m" if color else "{}"
-    lines.append(
+    key = (
         f"colored line: estimate   {gray.format('gray lines')}: 1σ range (hidden under the "
-        f"estimate where narrower than a dot), "
-        f"{green.format('green vertical lines')}: starts of outer iterations"
+        f"estimate where narrower than a dot)"
     )
+    if all_iterations:
+        key += f", {green.format('green vertical lines')}: starts of outer iterations"
+    lines.append(key)
 
     return "\n".join(lines)
 
@@ -303,6 +326,7 @@ def watch_histories(
     truth: Parameters | None = None,
     interval: float = 2.0,
     columns: int = 1,
+    all_iterations: bool = False,
 ) -> None:
     """Redraw estimation histories in the terminal as they grow, until Ctrl+C.
 
@@ -314,6 +338,7 @@ def watch_histories(
         truth: true values, drawn as reference lines
         interval: seconds between redraws
         columns: number of subplots per row
+        all_iterations: whether to draw all outer iterations instead of the current one
 
     Raises:
         PlotError: if the histories estimate different parameters
@@ -331,7 +356,12 @@ def watch_histories(
                 text = f"kipe: {err}; waiting ..."
             else:
                 text = render_histories(
-                    histories, truth, height=rows, color=color, columns=columns
+                    histories,
+                    truth,
+                    height=rows,
+                    color=color,
+                    columns=columns,
+                    all_iterations=all_iterations,
                 )
 
             plotext.terminal.clean(-1)  # clear the screen without flickering

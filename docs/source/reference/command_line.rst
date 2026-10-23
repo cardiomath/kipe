@@ -21,7 +21,8 @@ Command                                   Purpose
 ``kipe plot`` accepts several study files to plot in one figure. Its options include ``--truth``
 to show nominal parameter values, ``--save FILE`` to save a figure, ``--terminal`` to draw in
 the terminal, ``--watch`` to redraw while estimation runs, and ``--cpr N`` to put N plots per
-row in the terminal (e.g., ``--cpr 3`` for many parameters). ``kipe estimation`` and
+row in the terminal (e.g., ``--cpr 3`` for many parameters). The terminal plot shows only the current outer
+iteration; ``--all`` shows all of them. ``kipe estimation`` and
 ``kipe plot`` accept ``--realization R`` to select one noise realization, and
 ``kipe estimation`` accepts ``--resume`` to continue an interrupted estimation.
 ``kipe sensitivity`` accepts ``--run I`` to compute one of its forward runs, e.g., as a task of

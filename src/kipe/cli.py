@@ -139,6 +139,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="plots per row with --terminal or --watch, e.g., 3 for many parameters "
         "(default: %(default)s)",
     )
+    plot.add_argument(
+        "--all",
+        action="store_true",
+        help="with --terminal or --watch, draw all outer iterations, not only the current one",
+    )
     plot.set_defaults(func=_plot)
 
     analysis = subparsers.add_parser(
@@ -419,13 +424,21 @@ def _plot(args: argparse.Namespace) -> None:
         truth = build_forward_solver(studies[0].forward_solver).nominal_parameters()
 
     if args.watch:
-        watch_histories(paths, truth, args.interval, args.cpr)
+        watch_histories(paths, truth, args.interval, args.cpr, args.all)
         return
 
     histories = {label: read_history(path) for label, path in paths.items()}
 
     if args.terminal:
-        print(render_histories(histories, truth, color=sys.stdout.isatty(), columns=args.cpr))
+        print(
+            render_histories(
+                histories,
+                truth,
+                color=sys.stdout.isatty(),
+                columns=args.cpr,
+                all_iterations=args.all,
+            )
+        )
         return
 
     import matplotlib.pyplot as plt
