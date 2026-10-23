@@ -398,7 +398,7 @@ def _common_names(histories: Mapping[str, History]) -> list[str]:
     return names
 
 
-def _segments(history: History) -> list[tuple[list[float], slice]]:
+def _segments(history: History) -> list[tuple[list[int], slice]]:
     """Split a history into its outer iterations.
 
     Args:
