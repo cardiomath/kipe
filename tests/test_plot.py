@@ -18,7 +18,7 @@ from kipe.options import (
     StudyOptions,
     dump_study,
 )
-from kipe.plot import PlotError, _runs, plot_histories, read_history, render_histories
+from kipe.plot import PlotError, plot_histories, read_history, render_histories
 
 pytest.importorskip("matplotlib")
 
@@ -254,8 +254,3 @@ def test_without_plan_the_axis_follows_the_history(tmp_path):
     assert history.steps == 6
     assert history.iteration_starts() == [3]
 
-
-def test_runs():
-    """Runs of consecutive true entries, e.g., the steps where a bound is drawn."""
-    assert _runs([True, True, False, True, False, False, True, True]) == [[0, 1], [3], [6, 7]]
-    assert _runs([False, False]) == []

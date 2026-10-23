@@ -33,7 +33,6 @@ _GRAY = (128, 128, 128)
 _GREEN = (0, 200, 0)  # starts of the outer iterations
 _TRUTH = (227, 119, 194)  # matplotlib's pink, not used for the estimates
 _ROWS_PER_PARAMETER = 12
-_PLOT_OVERHEAD_ROWS = 5  # title, frame, tick labels and axis label around each plot
 
 
 class PlotError(Exception):
@@ -286,22 +285,10 @@ def render_histories(
 
         # each outer iteration is drawn on its own: the estimate jumps back to the initial guess
         # at its start, and a line across the jump would pile dots up vertically
-        # a bound within a character cell of the estimate is left out: it would only add dots
-        # to the estimate's cell, which takes the estimate's color anyway
-        shown = [
-            bound[sl, j]
-            for label, history in histories.items()
-            for _, sl in segments[label]
-            for bound in (history.lower, history.upper)
-        ]
-        extent = float(max(v.max() for v in shown) - min(v.min() for v in shown))
-        cell = extent / max(rows // grid_rows - _PLOT_OVERHEAD_ROWS, 1)
         for label, history in histories.items():
             for steps, sl in segments[label]:
-                estimate = history.parameters[sl, j]
-                for bound in (history.lower[sl, j], history.upper[sl, j]):
-                    for run in _runs(np.abs(bound - estimate) >= cell):
-                        draw(subplot, [steps[i] for i in run], bound[run].tolist(), _GRAY)
+                draw(subplot, steps, history.lower[sl, j].tolist(), _GRAY)
+                draw(subplot, steps, history.upper[sl, j].tolist(), _GRAY)
 
         for k, (label, history) in enumerate(histories.items()):
             for steps, sl in segments[label]:
@@ -425,22 +412,6 @@ def _segments(history: History) -> list[tuple[list[float], slice]]:
         (np.arange(a, b).tolist(), slice(a, b))
         for a, b in zip(bounds[:-1], bounds[1:], strict=True)
     ]
-
-
-def _runs(mask: Sequence[bool]) -> list[list[int]]:
-    """Return the runs of consecutive true entries of a mask.
-
-    Args:
-        mask: flags per index
-
-    Returns:
-        the indices of each run
-    """
-    indices = np.flatnonzero(mask)
-    if len(indices) == 0:
-        return []
-    breaks = np.flatnonzero(np.diff(indices) > 1) + 1
-    return [run.tolist() for run in np.split(indices, breaks)]
 
 
 def _last_step(histories: Mapping[str, History]) -> int:
