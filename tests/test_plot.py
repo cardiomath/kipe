@@ -122,8 +122,9 @@ def test_plot_terminal(tmp_path, capsys):
     assert "a = " in out
     assert "c = " in out
     assert "truth 3" in out  # c of the FitzHugh-Nagumo solver
-    assert "assimilation step" in out
-    assert out.rstrip().splitlines()[-2:] == [f"━━ {study}", "━━ truth"]  # legend
+    assert "step of iteration 2/2" in out
+    assert out.rstrip().splitlines()[-3:-1] == [f"━━ {study}", "━━ truth"]  # legend
+    assert "1σ range" in out.splitlines()[-1]  # key to the lines
     assert "\x1b[" not in out  # no colors when not printing to a terminal
 
 
@@ -184,6 +185,38 @@ def test_render_histories_keeps_terminal_background(tmp_path):
     text = render_histories({"study": history}, truth={"a": 0.2, "c": 3.0})
     assert "\x1b[38;" in text
     assert "\x1b[48;" not in text
+
+
+def test_plot_terminal_columns(tmp_path, capsys):
+    """--cpr puts several plots in a row, so the output is shorter than one plot per row."""
+    study = _study(tmp_path)
+    assert main(["plot", study, "--terminal"]) == 0
+    one = capsys.readouterr().out
+    assert main(["plot", study, "--terminal", "--cpr", "2"]) == 0
+    two = capsys.readouterr().out
+    assert len(two.splitlines()) < len(one.splitlines())
+    assert "a = " in two
+    assert "c = " in two
+
+
+def test_plot_terminal_unused_cells_are_empty(tmp_path, capsys):
+    """Three parameters in rows of two: the fourth cell has no frame."""
+    study = _study(tmp_path, names=("a", "b", "c"))
+    assert main(["plot", study, "--terminal", "--cpr", "2"]) == 0
+    out = capsys.readouterr().out
+    assert out.count("┌") == 3
+
+
+def test_plot_terminal_current_iteration_by_default(tmp_path, capsys):
+    """Only the current outer iteration, unless --all: the key then has no iteration lines."""
+    study = _study(tmp_path)
+    assert main(["plot", study, "--terminal"]) == 0
+    current = capsys.readouterr().out
+    assert main(["plot", study, "--terminal", "--all"]) == 0
+    everything = capsys.readouterr().out
+    assert "step of iteration 2/2" in current
+    assert "outer iterations" not in current
+    assert "outer iterations" in everything
 
 
 def test_read_history_reads_the_plan(tmp_path):
