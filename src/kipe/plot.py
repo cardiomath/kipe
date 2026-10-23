@@ -288,10 +288,12 @@ def render_histories(
         # at its start, and a line across the jump would pile dots up vertically
         # a bound within a character cell of the estimate is left out: it would only add dots
         # to the estimate's cell, which takes the estimate's color anyway
-        shown = [history.lower[sl, j] for label, history in histories.items()
-                 for _, sl in segments[label]]
-        shown += [history.upper[sl, j] for label, history in histories.items()
-                  for _, sl in segments[label]]
+        shown = [
+            bound[sl, j]
+            for label, history in histories.items()
+            for _, sl in segments[label]
+            for bound in (history.lower, history.upper)
+        ]
         extent = float(max(v.max() for v in shown) - min(v.min() for v in shown))
         cell = extent / max(rows // grid_rows - _PLOT_OVERHEAD_ROWS, 1)
         for label, history in histories.items():
