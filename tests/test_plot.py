@@ -253,4 +253,3 @@ def test_without_plan_the_axis_follows_the_history(tmp_path):
     assert history.steps_per_iteration is None
     assert history.steps == 6
     assert history.iteration_starts() == [3]
-

@@ -10,6 +10,7 @@ Draws with matplotlib (:func:`plot_histories`) or as text in the terminal with p
 (:func:`render_histories`), e.g., to follow an estimation on a cluster (:func:`watch_histories`).
 """
 
+import itertools
 import sys
 import time
 from collections.abc import Mapping, Sequence
@@ -408,10 +409,7 @@ def _segments(history: History) -> list[tuple[list[float], slice]]:
     """
     changes = (np.flatnonzero(np.diff(history.iteration)) + 1).tolist()
     bounds = [0, *changes, len(history.iteration)]
-    return [
-        (np.arange(a, b).tolist(), slice(a, b))
-        for a, b in zip(bounds[:-1], bounds[1:], strict=True)
-    ]
+    return [(np.arange(a, b).tolist(), slice(a, b)) for a, b in itertools.pairwise(bounds)]
 
 
 def _last_step(histories: Mapping[str, History]) -> int:
