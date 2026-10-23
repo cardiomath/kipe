@@ -298,6 +298,9 @@ def render_histories(
         if last > 0:
             subplot.ruler(0).lim(0, last)
 
+    for j in range(len(names), grid_rows * columns):  # unused cells of the last row: no frame
+        figure.subplot(j // columns + 1, j % columns + 1).axes(False)
+
     xlabel = "assimilation step" if all_iterations else "step of the current iteration"
     for j in range(len(names)):  # the x axis label under the last plot of each column
         if j + columns >= len(names):

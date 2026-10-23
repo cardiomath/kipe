@@ -199,6 +199,14 @@ def test_plot_terminal_columns(tmp_path, capsys):
     assert "c = " in two
 
 
+def test_plot_terminal_unused_cells_are_empty(tmp_path, capsys):
+    """Three parameters in rows of two: the fourth cell has no frame."""
+    study = _study(tmp_path, names=("a", "b", "c"))
+    assert main(["plot", study, "--terminal", "--cpr", "2"]) == 0
+    out = capsys.readouterr().out
+    assert out.count("┌") == 3
+
+
 def test_plot_terminal_current_iteration_by_default(tmp_path, capsys):
     """Only the current outer iteration, unless --all: the key then has no iteration lines."""
     study = _study(tmp_path)
