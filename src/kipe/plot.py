@@ -295,7 +295,8 @@ def watch_histories(
 ) -> None:
     """Redraw estimation histories in the terminal as they grow, until Ctrl+C.
 
-    Fills the terminal, or is taller (as with ``--terminal``) if it is too small; waits while a history does not exist yet or holds no steps.
+    Fills the terminal, but each plot keeps at least the height it has with ``--terminal``;
+    waits while a history does not exist yet or holds no steps.
 
     Args:
         paths: label -> path to ``history.csv``
