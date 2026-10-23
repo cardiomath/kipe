@@ -57,9 +57,11 @@ changes.
 
 ``kipe plot`` draws one subplot per parameter over the assimilation steps. The title shows the
 latest estimate and its 1σ range. The colored line is the estimate after each step; the two gray
-lines around it are the ends of its 1σ range (lower and upper), hidden behind the estimate wherever the range is narrower than one dot of the terminal plot; green vertical lines mark the
-starts of the outer iterations; and, with ``--truth``, a differently colored horizontal line is
-the true value. With ``--terminal`` or ``--watch``, a line below the plot explains these.
+lines around it are the ends of its 1σ range (lower and upper), hidden behind the estimate wherever
+the range is narrower than one dot of the terminal plot; vertical lines mark the starts of the outer
+iterations (green with ``--terminal`` or ``--watch``, gray in the figure); and, with ``--truth``, a
+differently colored horizontal line is the true value. With ``--terminal`` or ``--watch``, a line
+below the plot explains these.
 
 The next run of the same command overwrites its files. To keep previous results, change
 ``output.path`` before rerunning. Synthesis also overwrites files at the measurements'
