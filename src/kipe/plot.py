@@ -198,7 +198,9 @@ def render_histories(
 
     Like :func:`plot_histories`, with the 1σ range drawn as gray lines below and above the
     estimate. With a single history, each subplot title shows the latest estimate and range.
-    Several histories or a truth get a legend below the plot.
+    Several histories or a truth get a legend below the plot, and a last line explains the
+    lines: the colored estimate, the gray 1σ range and the gray vertical lines at the starts
+    of the outer iterations.
 
     Args:
         histories: label -> history; all must estimate the same parameters
@@ -220,7 +222,7 @@ def render_histories(
     legend = [(label, _color(k)) for k, label in enumerate(histories)]
     if truth is not None and any(name in truth for name in names):
         legend.append(("truth", _TRUTH))
-    legend_rows = len(legend) if len(legend) > 1 else 0
+    legend_rows = (len(legend) if len(legend) > 1 else 0) + 1  # plus the key to the line styles
 
     plotext.terminal.limit(height=False)  # taller than the terminal is fine, it scrolls
     figure = plotext.figure
@@ -271,9 +273,15 @@ def render_histories(
     figure.subplot(len(names), 1).label("assimilation step", axis=0)
 
     lines = [figure.build().string(colorless=not color)]
-    if legend_rows:  # below the plot, so that it covers nothing
+    if len(legend) > 1:  # below the plot, so that it covers nothing
         for label, (r, g, b) in legend:
             lines.append(f"\x1b[38;2;{r};{g};{b}m━━\x1b[0m {label}" if color else f"━━ {label}")
+
+    gray = "\x1b[38;2;128;128;128m{}\x1b[0m" if color else "{}"
+    lines.append(
+        f"colored line: estimate   {gray.format('gray lines')}: 1σ range, "
+        f"{gray.format('gray vertical lines')}: starts of outer iterations"
+    )
 
     return "\n".join(lines)
 

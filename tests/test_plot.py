@@ -123,7 +123,8 @@ def test_plot_terminal(tmp_path, capsys):
     assert "c = " in out
     assert "truth 3" in out  # c of the FitzHugh-Nagumo solver
     assert "assimilation step" in out
-    assert out.rstrip().splitlines()[-2:] == [f"━━ {study}", "━━ truth"]  # legend
+    assert out.rstrip().splitlines()[-3:-1] == [f"━━ {study}", "━━ truth"]  # legend
+    assert "1σ range" in out.splitlines()[-1]  # key to the lines
     assert "\x1b[" not in out  # no colors when not printing to a terminal
 
 

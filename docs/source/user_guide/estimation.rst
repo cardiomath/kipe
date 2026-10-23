@@ -55,6 +55,12 @@ Both run directories also contain ``kipe.log`` and provenance files: ``run.yaml`
 ``study.yaml``, ``environment.yaml``, ``packages.txt``, and patches for uncommitted package
 changes.
 
+``kipe plot`` draws one subplot per parameter over the assimilation steps. The title shows the
+latest estimate and its 1σ range. The colored line is the estimate after each step; the two gray
+lines around it are the ends of its 1σ range (lower and upper); gray vertical lines mark the
+starts of the outer iterations; and, with ``--truth``, a differently colored horizontal line is
+the true value. With ``--terminal`` or ``--watch``, a line below the plot explains these.
+
 The next run of the same command overwrites its files. To keep previous results, change
 ``output.path`` before rerunning. Synthesis also overwrites files at the measurements'
 ``data.path`` values; changing ``output.path`` does not relocate them. Change those paths or
