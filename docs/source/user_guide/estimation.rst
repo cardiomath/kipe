@@ -59,11 +59,11 @@ changes.
 latest estimate and its 1σ range. The colored line is the estimate after each step; the two gray
 lines around it are the ends of its 1σ range (lower and upper), hidden behind the estimate wherever
 the range is narrower than one dot of the terminal plot; vertical lines mark the starts of the outer
-iterations (gray in the figure; in the terminal, green and only with ``--all``, since the terminal
-plot shows just the current outer iteration by default, which zooms in on the convergence); and, with ``--truth``, a
-differently colored horizontal line is the true value. With ``--terminal`` or ``--watch``, a line
-below the plot explains these. With many parameters, ``--cpr N`` arranges N plots per row so
-that all fit on the screen.
+iterations; and, with ``--truth``, a differently colored horizontal line is the true value. With
+``--terminal`` or ``--watch``, only the current outer iteration is drawn, which zooms in on where
+the estimate converges, and ``--all`` draws all of them (with green vertical lines at the starts of
+the iterations). A line below the plot explains the lines. With many parameters, ``--cpr N``
+arranges N plots per row so that all fit on the screen.
 
 The next run of the same command overwrites its files. To keep previous results, change
 ``output.path`` before rerunning. Synthesis also overwrites files at the measurements'
