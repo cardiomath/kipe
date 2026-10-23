@@ -7,3 +7,5 @@ rules:
   document-start: disable  # no "---" at the top of each file
   truthy:
     check-keys: false  # GitHub Actions' "on:" key
+  empty-lines:
+    max: 1
