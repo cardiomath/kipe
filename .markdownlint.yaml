@@ -1,5 +1,5 @@
+---
 # markdownlint: https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md
 default: true
-
 MD013:
   line_length: 97  # as for ruff

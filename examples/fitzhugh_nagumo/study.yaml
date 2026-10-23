@@ -1,24 +1,21 @@
+---
 # yaml-language-server: $schema=../study.schema.json
 # FitzHugh-Nagumo twin experiment. Run from this directory:
-#   kipe synthesis study.yaml     # generates data/v.npz, data/w.npz with the nominal parameters
-#   kipe estimation study.yaml    # estimates a, b, c from them, starting from a wrong guess
-#   kipe sensitivity study.yaml   # the Cramér-Rao bounds of a, b, c at the true parameters
-
+#   kipe synthesis study.yaml  # generates data/v.npz, data/w.npz with the nominal parameters
+#   kipe estimation study.yaml  # estimates a, b, c from them, starting from a wrong guess
+#   kipe sensitivity study.yaml  # the Cramér-Rao bounds of a, b, c at the true parameters
 output:
   path: results
   log_level: info
-
 forward_solver:
-  factory: "kipe.examples.fitzhugh_nagumo:Solver"
-  arguments: {dt: 0.05}   # nominal parameter values in solver: a = 0.2, b = 0.2, c = 3
-
+  factory: kipe.examples.fitzhugh_nagumo:Solver
+  arguments: {dt: 0.05}  # nominal parameter values in solver: a = 0.2, b = 0.2, c = 3
 parameters:
   reparameterization: log
   priors:
     a: {mean: 0.3, relative_stddev: 0.1}
     b: {mean: 0.3, relative_stddev: 0.1}
     c: {mean: 2.0, relative_stddev: 0.1}
-
 measurements:
   v:
     fields: [v]
@@ -30,12 +27,9 @@ measurements:
     times: {start: 0.5, stop: 20.0, step: 0.5}
     data: {type: numpy, path: data/w.npz}
     noise: {stddev: 0.01, seed: 1}
-
 synthesis:
-  truth: {type: run}                # run the solver with its nominal parameters (the default)
-
+  truth: {type: run}  # run the solver with its nominal parameters (the default)
 estimation:
-  sigma_points: simplex             # shape of the UKF's sigma-point stencil
-  iterations: 5                     # outer iterations: restart from the previous estimate
-
+  sigma_points: simplex  # shape of the UKF's sigma-point stencil
+  iterations: 5  # outer iterations: restart from the previous estimate
 # end-of-study-file
