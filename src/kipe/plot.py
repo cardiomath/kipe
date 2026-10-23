@@ -194,6 +194,7 @@ def render_histories(
     truth: Parameters | None = None,
     height: int | None = None,
     color: bool = True,
+    columns: int = 1,
 ) -> str:
     """Render estimation histories as text for the terminal, one subplot per parameter.
 
@@ -209,6 +210,7 @@ def render_histories(
         height: number of lines, legend included; if not given, 12 per parameter; never less
             than that, so that the plots keep their resolution in a small terminal
         color: whether to color the output with ANSI escape codes
+        columns: number of subplots per row; the parameters fill the grid row by row
 
     Returns:
         the rendered plot
@@ -224,14 +226,16 @@ def render_histories(
     legend = [(label, _color(k)) for k, label in enumerate(histories)]
     if truth is not None and any(name in truth for name in names):
         legend.append(("truth", _TRUTH))
+    columns = max(1, min(columns, len(names)))
+    grid_rows = -(-len(names) // columns)
     legend_rows = (len(legend) if len(legend) > 1 else 0) + 1  # plus the key to the line styles
 
     plotext.terminal.limit(height=False)  # taller than the terminal is fine, it scrolls
     figure = plotext.figure
     figure.clear()
-    figure.subplots(len(names), 1)
+    figure.subplots(grid_rows, columns)
     figure.theme("simple")  # the terminal's own colors; after subplots(), to reach them too
-    rows = _ROWS_PER_PARAMETER * len(names)
+    rows = _ROWS_PER_PARAMETER * grid_rows
     if height is not None:
         rows = max(rows, height - legend_rows)
     figure.plot_size(None, rows)
@@ -245,7 +249,7 @@ def render_histories(
 
     last = _last_step(histories)
     for j, name in enumerate(names):
-        subplot = figure.subplot(j + 1, 1)
+        subplot = figure.subplot(j // columns + 1, j % columns + 1)
         first = next(iter(histories.values()))
         low = min(float(history.lower[:, j].min()) for history in histories.values())
         high = max(float(history.upper[:, j].max()) for history in histories.values())
@@ -274,7 +278,9 @@ def render_histories(
         if last > 0:
             subplot.ruler(0).lim(0, last)
 
-    figure.subplot(len(names), 1).label("assimilation step", axis=0)
+    for j in range(len(names)):  # the x axis label under the last plot of each column
+        if j + columns >= len(names):
+            figure.subplot(j // columns + 1, j % columns + 1).label("assimilation step", axis=0)
 
     lines = [figure.build().string(colorless=not color)]
     if len(legend) > 1:  # below the plot, so that it covers nothing
@@ -293,7 +299,10 @@ def render_histories(
 
 
 def watch_histories(
-    paths: Mapping[str, Path], truth: Parameters | None = None, interval: float = 2.0
+    paths: Mapping[str, Path],
+    truth: Parameters | None = None,
+    interval: float = 2.0,
+    columns: int = 1,
 ) -> None:
     """Redraw estimation histories in the terminal as they grow, until Ctrl+C.
 
@@ -304,6 +313,7 @@ def watch_histories(
         paths: label -> path to ``history.csv``
         truth: true values, drawn as reference lines
         interval: seconds between redraws
+        columns: number of subplots per row
 
     Raises:
         PlotError: if the histories estimate different parameters
@@ -320,7 +330,9 @@ def watch_histories(
             except PlotError as err:
                 text = f"kipe: {err}; waiting ..."
             else:
-                text = render_histories(histories, truth, height=rows, color=color)
+                text = render_histories(
+                    histories, truth, height=rows, color=color, columns=columns
+                )
 
             plotext.terminal.clean(-1)  # clear the screen without flickering
             print(text, flush=True)

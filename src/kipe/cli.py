@@ -131,6 +131,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         metavar="SECONDS",
         help="time between redraws with --watch (default: %(default)s)",
     )
+    plot.add_argument(
+        "--cpr",
+        type=int,
+        default=1,
+        metavar="N",
+        help="plots per row with --terminal or --watch, e.g., 3 for many parameters "
+        "(default: %(default)s)",
+    )
     plot.set_defaults(func=_plot)
 
     analysis = subparsers.add_parser(
@@ -160,6 +168,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     schema.set_defaults(func=_schema)
 
     args = parser.parse_args(argv)
+    if args.command == "plot" and args.cpr < 1:
+        plot.error("--cpr must be at least 1")
     if args.command == "plot" and args.save and (args.terminal or args.watch):
         plot.error("--save writes a matplotlib figure, not with --terminal or --watch")
 
@@ -409,13 +419,13 @@ def _plot(args: argparse.Namespace) -> None:
         truth = build_forward_solver(studies[0].forward_solver).nominal_parameters()
 
     if args.watch:
-        watch_histories(paths, truth, args.interval)
+        watch_histories(paths, truth, args.interval, args.cpr)
         return
 
     histories = {label: read_history(path) for label, path in paths.items()}
 
     if args.terminal:
-        print(render_histories(histories, truth, color=sys.stdout.isatty()))
+        print(render_histories(histories, truth, color=sys.stdout.isatty(), columns=args.cpr))
         return
 
     import matplotlib.pyplot as plt
