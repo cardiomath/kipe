@@ -25,10 +25,16 @@ repos:
         pass_filenames: false
         additional_dependencies: [matplotlib, mpi4py, numpy, pytest, pydantic, ruamel.yaml]
 
+  - repo: https://github.com/lyz-code/yamlfix
+    rev: 1.19.1
+    hooks:
+      - id: yamlfix
+
   - repo: https://github.com/adrienverge/yamllint
     rev: v1.38.0
     hooks:
       - id: yamllint
+        stages: [manual]
         args: [--strict]  # warnings fail too, e.g., one space before a comment
 
   - repo: https://github.com/DavidAnson/markdownlint-cli2

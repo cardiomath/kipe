@@ -24,7 +24,7 @@ jobs:
       - run: ruff format --check .
       - run: mypy
       # with the versions in .pre-commit-config.yaml
-      - run: pre-commit run yamllint --all-files
+      - run: pre-commit run yamllint --all-files --hook-stage manual
       - run: pre-commit run markdownlint-cli2 --all-files
 
   test:
