@@ -205,7 +205,8 @@ def render_histories(
     Args:
         histories: label -> history; all must estimate the same parameters
         truth: true values, drawn as reference lines (e.g., in a twin experiment)
-        height: number of lines, legend included; if not given, 12 per parameter
+        height: number of lines, legend included; if not given, 12 per parameter; never less
+            than that, so that the plots keep their resolution in a small terminal
         color: whether to color the output with ANSI escape codes
 
     Returns:
@@ -229,10 +230,10 @@ def render_histories(
     figure.clear()
     figure.subplots(len(names), 1)
     figure.theme("simple")  # the terminal's own colors; after subplots(), to reach them too
-    if height is None:
-        figure.plot_size(None, _ROWS_PER_PARAMETER * len(names))
-    else:
-        figure.plot_size(None, height - legend_rows)
+    rows = _ROWS_PER_PARAMETER * len(names)
+    if height is not None:
+        rows = max(rows, height - legend_rows)
+    figure.plot_size(None, rows)
 
     # all lines are signals: plotext's own reference lines paint a white background
     def draw(
@@ -294,7 +295,7 @@ def watch_histories(
 ) -> None:
     """Redraw estimation histories in the terminal as they grow, until Ctrl+C.
 
-    Fills the terminal; waits while a history does not exist yet or holds no steps.
+    Fills the terminal, or is taller (as with ``--terminal``) if it is too small; waits while a history does not exist yet or holds no steps.
 
     Args:
         paths: label -> path to ``history.csv``
