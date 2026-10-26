@@ -56,3 +56,18 @@ realization number, starting at 0:
 The noise for realization :math:`r` at the :math:`k`-th measurement time is generated using
 ``numpy.random.default_rng([seed, k, r])``. Realization 0 has the same noise as a study without
 multiple realizations.
+
+Checking the data files
+-----------------------
+
+Synthesis writes ``data.sha256`` to ``<output.path>/synthesis/``: the SHA-256 hash and the path
+of each data file it wrote, in the format of ``sha256sum``. Run from the directory kipe ran in,
+since the paths are relative to it,
+
+.. code-block:: bash
+
+    sha256sum -c results/synthesis/data.sha256
+
+checks that the data files are the ones synthesis wrote, e.g., after copying them to a cluster.
+Estimation records the hashes of the data files it reads in its ``run.yaml``, and compares them
+when it resumes (:ref:`resuming-an-estimation`).
