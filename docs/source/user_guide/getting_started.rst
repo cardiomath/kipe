@@ -48,23 +48,8 @@ Your own model
 --------------
 
 kipe calls your model through a small interface, the
-:class:`~kipe.forward_solver.ForwardSolver` protocol: its state fields
-(:attr:`~kipe.forward_solver.ForwardSolver.state_spec`), its parameters with their nominal
-values (:meth:`~kipe.forward_solver.ForwardSolver.nominal_parameters`), the initial state
-(:meth:`~kipe.forward_solver.ForwardSolver.initial_state`), and a stateless step from one time
-to the next (:meth:`~kipe.forward_solver.ForwardSolver.propagate`). Your solver conforms
-structurally: it does not import kipe.
-
-The study file names a factory that builds your solver, a class or a function, and the
-arguments kipe passes to it:
-
-.. code-block:: yaml
-
-    forward_solver:
-      factory: "my_package.my_module:MySolver"  # module:name, imported by kipe
-      arguments: {dt: 0.01}                     # MySolver(dt=0.01)
-
-``kipe list-parameters study.yaml`` then shows the parameters your solver offers. The
+:class:`~kipe.forward_solver.ForwardSolver` protocol, which your solver implements without
+importing kipe. :doc:`forward_solver` lists what kipe expects from a solver; the
 FitzHugh–Nagumo solver, :mod:`kipe.examples.fitzhugh_nagumo`, is a complete example.
 
 FEniCSx models
