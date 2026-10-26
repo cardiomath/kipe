@@ -28,6 +28,7 @@ from kipe.parameters import build_parameterization
 from kipe.plot import (
     PlotError,
     plot_histories,
+    plot_sensitivity,
     read_history,
     render_histories,
     watch_histories,
@@ -152,6 +153,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     _add_log_level_argument(analysis)
     analysis.set_defaults(func=_sensitivity)
+
+    plot_analysis = subparsers.add_parser(
+        "plot-sensitivity",
+        help="plot the result of the sensitivity analysis: the singular values, the right "
+        "singular vectors and the Cramér-Rao correlations",
+    )
+    plot_analysis.add_argument("study", type=Path, help="study file (YAML)")
+    plot_analysis.add_argument(
+        "--save", type=Path, metavar="FILE", help="save the figure, don't show it"
+    )
+    plot_analysis.set_defaults(func=_plot_sensitivity)
 
     schema = subparsers.add_parser(
         "schema",
@@ -424,6 +436,34 @@ def _plot(args: argparse.Namespace) -> None:
     figure = Figure(layout="constrained") if args.save else plt.figure(layout="constrained")
     figure.set_size_inches(4 * len(next(iter(histories.values())).names), 3.5)
     plot_histories(figure, histories, truth)
+    if args.save:
+        figure.savefig(args.save, dpi=150)
+    else:
+        plt.show()
+
+
+def _plot_sensitivity(args: argparse.Namespace) -> None:
+    """Plot the result of the sensitivity analysis of a study.
+
+    Args:
+        args: parsed command line arguments: the study file and the plot options
+
+    Raises:
+        PlotError: if the study has no result of a sensitivity analysis
+    """
+    study = _load_study(args.study)
+    path = Path(study.output.path) / "sensitivity" / "sensitivity.npz"
+    if not path.exists():
+        raise PlotError(f"{path} does not exist: run kipe sensitivity {args.study} first")
+    result = sensitivity.read_sensitivity(path)
+
+    import matplotlib.pyplot as plt
+    from matplotlib.figure import Figure
+
+    figure = Figure(layout="constrained") if args.save else plt.figure(layout="constrained")
+    p = len(result.names)
+    figure.set_size_inches(4 + 2 * (1.5 + 0.6 * p), max(3.5, 1.5 + 0.5 * p))
+    plot_sensitivity(figure, result)
     if args.save:
         figure.savefig(args.save, dpi=150)
     else:

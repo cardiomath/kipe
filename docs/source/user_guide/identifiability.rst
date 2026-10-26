@@ -71,6 +71,49 @@ prior of 10 %, i.e., :math:`\sigma_\theta = 0.1`, the log shows:
 measurement (:class:`~kipe.sensitivity.Sensitivity`). The Fisher information of several
 measurements adds up, so the information of a combination of measurements is the sum of theirs.
 
+Plotting the result
+-------------------
+
+.. code-block:: bash
+
+    kipe plot-sensitivity study.yaml   # --save FILE writes the figure to a file
+
+draws the result in three panels:
+
+- **The singular values** over their index, with the condition number, and the noise floor
+  :math:`s = 1` if it is within their range: below it, a unit change of :math:`\theta` along the
+  singular vector changes the predicted data by less than the noise. The shape of the decline
+  says more than the condition number alone, e.g., whether only the last combination is poorly
+  determined.
+- **The right singular vectors**, one row each, from the best to the worst determined
+  combination. Within a vector, entries of opposite signs mean that the data determine a
+  difference of these parameters. The sign of a whole vector is arbitrary: each is shown with
+  its largest entry positive.
+- **The Cramér–Rao correlations.**
+
+Both heatmaps order the parameters by identifiability: first the parameter that dominates
+:math:`\bs{v}_1`, then the one of the others that dominates :math:`\bs{v}_2`, and so on. Where
+each combination is mainly one parameter, the diagonal of the singular vectors is dominant, and
+the order is the ranking from the best to the worst determined parameter: for FitzHugh–Nagumo,
+c, a, b. The log lists the parameters in the order of the study file.
+
+For figures of one's own, :func:`~kipe.sensitivity.read_sensitivity` reads the result back,
+and :func:`~kipe.plot.plot_sensitivity` draws the three panels into a matplotlib figure:
+
+.. code-block:: python
+
+    from matplotlib.figure import Figure
+
+    from kipe.plot import plot_sensitivity
+    from kipe.sensitivity import read_sensitivity
+
+    result = read_sensitivity("results/sensitivity/sensitivity.npz")
+    result.singular_values, result.right_singular_vectors, result.correlation
+
+    figure = Figure(layout="constrained", figsize=(12, 3.5))
+    plot_sensitivity(figure, result)
+    figure.savefig("sensitivity.png")
+
 Comparison with the estimation
 ------------------------------
 
