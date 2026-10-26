@@ -31,9 +31,8 @@ the ``dolfinx/dolfinx`` Docker image.
 Checks and commits
 ------------------
 
-The pre-commit hooks run on each commit: yamlfix (configured in ``.yamlfix.toml``), ruff (lint
-and format), mypy and markdownlint (configured in ``.markdownlint.yaml``). yamllint checks YAML
-in CI and can be run manually; it uses ``.yamllint.yaml``. The commit message follows
+Pre-commit and CI run yamlfix, ruff (lint and format), mypy, markdownlint and yamllint. Commit
+messages follow
 `Conventional Commits <https://www.conventionalcommits.org>`_, e.g., ``fix(roukf): ...``. The
 scope is optional: the module a commit is about, or the area of other changes;
 ``.pre-commit-config.yaml`` lists the allowed ones. To run the hooks on all files:
