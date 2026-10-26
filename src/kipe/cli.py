@@ -67,10 +67,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     """
     parser = build_parser()
     args = parser.parse_args(argv)
-    if args.command == "plot-estimation" and args.save and (args.terminal or args.watch):
-        parser.error(
-            "plot-estimation: --save writes a matplotlib figure, not with --terminal or --watch"
-        )
 
     errors = MPI.COMM_WORLD.Dup()  # for reporting errors, apart from the run's communication
     try:
@@ -461,7 +457,12 @@ def _plot(args: argparse.Namespace) -> None:
     Args:
         args: parsed command line arguments: the study files and the plot options
 
+    Raises:
+        PlotError: if --save is combined with --terminal or --watch
     """
+    if args.save and (args.terminal or args.watch):
+        raise PlotError("--save writes a matplotlib figure, not with --terminal or --watch")
+
     studies = [_load_study(path) for path in args.studies]
     for path, study in zip(args.studies, studies, strict=True):
         if args.realization is None and study.synthesis.realizations > 1:

@@ -161,8 +161,8 @@ def test_plot_watch_waits_for_history(tmp_path, capsys, monkeypatch):
 
 @pytest.mark.parametrize("option", ["--terminal", "--watch"])
 def test_plot_terminal_excludes_save(tmp_path, capsys, option):
-    with pytest.raises(SystemExit):
-        main(["plot-estimation", "study.yaml", option, "--save", str(tmp_path / "x.png")])
+    figure = str(tmp_path / "x.png")
+    assert main(["plot-estimation", "study.yaml", option, "--save", figure]) == 1
     assert "--save writes a matplotlib figure" in capsys.readouterr().err
 
 
