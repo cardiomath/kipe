@@ -32,11 +32,14 @@ repos:
     rev: 1.19.1
     hooks:
       - id: yamlfix
+        args: [-c, pyproject.toml]
+        files: ^.*\.ya?ml$
   - repo: https://github.com/adrienverge/yamllint
     rev: v1.38.0
     hooks:
       - id: yamllint
         args: [--strict]  # warnings fail too, e.g., one space before a comment
+        files: ^.*\.ya?ml$
   - repo: https://github.com/DavidAnson/markdownlint-cli2
     rev: v0.23.3
     hooks:

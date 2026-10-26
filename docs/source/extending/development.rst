@@ -41,7 +41,7 @@ scope is optional: the module a commit is about, or the area of other changes;
 .. code-block:: bash
 
     pre-commit run --all-files
-    pre-commit run yamllint --all-files --hook-stage manual
+    pre-commit run yamllint --all-files
 
 Documentation
 -------------
