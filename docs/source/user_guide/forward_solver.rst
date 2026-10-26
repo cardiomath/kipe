@@ -68,32 +68,16 @@ The interface
 What kipe relies on
 -------------------
 
-- **propagate is stateless.** Its result depends only on its arguments. The filter calls it for
-  every sigma point at every measurement time, each time from another state and with other
-  parameters, so nothing the solver keeps between calls (time levels, the states of boundary
-  models, parameters updated in place) may change the result.
-- **The state is complete.** Everything a step depends on is a field of the state: earlier time
-  levels of a multistep scheme, the states of lumped-parameter boundary models, and so on. The
-  filter corrects the states, so ``propagate`` continues from states the solver has not
-  computed itself.
-- **propagate lands exactly on t1.** How many internal steps it takes is up to the solver. A
-  solver on a fixed time grid raises a ``ValueError`` if ``t1`` is not on the grid; an adaptive
-  one builds its integrator from the state on every call.
-- **Parameters are physical values, applied per call.** ``propagate`` receives the estimated
-  parameters as physical values (the reparameterization is kipe's business), and the
-  parameters it does not receive keep their nominal values. Synthesis, for instance, runs the
-  solver without parameters, i.e., with the nominal ones.
-- **initial_state returns the same state every time.** Every outer iteration of an estimation,
-  and every run of synthesis and of the sensitivity analysis, starts from it. Its time is
-  before the first measurement time.
-- **Arrays are handed over.** ``propagate`` may modify or reuse the arrays of the state it
-  receives, and the arrays it returns may share memory with the solver's own data. They only
-  need to stay valid until the next call: kipe copies what it keeps.
-- **Fields are distributed or replicated.** On several MPI ranks, a ``distributed`` field
-  holds the entries this rank owns, each entry on exactly one rank (e.g., the owned degrees of
-  freedom of a finite element function); a ``replicated`` field holds the full, identical
-  array on every rank (e.g., the state of a small lumped-parameter model). The local sizes stay
-  the same from call to call.
+- The filter calls :meth:`~kipe.forward_solver.ForwardSolver.propagate` once for each sigma
+  point (a candidate state and parameter set) at each measurement time. Calls may therefore
+  arrive with different states and parameters; each result must depend only on that call's
+  arguments. Put everything needed to continue from a state, such as multistep history or
+  boundary-model state, in the state itself. See the method's API documentation for details.
+- ``propagate`` receives physical parameter values and must return the state exactly at ``t1``.
+  Parameters it does not receive retain their nominal values.
+- ``initial_state`` must return the same state each time, at a time before the first measurement.
+- On each rank, state fields must match the names, layout and local sizes in ``state_spec``
+  (:class:`~kipe.forward_solver.FieldSpec`).
 
 If ``propagate`` raises an exception, the estimation stops, and the log shows the step, the
 times and the parameters of the sigma point that failed.
