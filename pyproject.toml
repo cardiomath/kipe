@@ -36,6 +36,7 @@ dependencies = [
   "ruamel.yaml>=0.18", # YAML 1.2: 1e-3 is a float
   "matplotlib>=3.8",   # kipe plot
   "plotext>=6.1,<7",   # kipe plot --terminal, --watch
+  "shtab>=1.7",        # kipe completion
 ]
 
 [project.scripts]
