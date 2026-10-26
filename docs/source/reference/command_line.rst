@@ -15,6 +15,7 @@ Command                                   Purpose
 ``kipe list-parameters study.yaml``       List the solver's parameters and nominal values
 ``kipe list-fields study.yaml``           List the solver's state fields and their sizes
 ``kipe sensitivity study.yaml``           Analyze the identifiability: the Fisher information
+``kipe plot-sensitivity study.yaml``      Plot the result of the sensitivity analysis
 ``kipe schema``                           Print the study-file JSON schema
 ========================================= ============================================================
 
