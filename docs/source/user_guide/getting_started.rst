@@ -34,9 +34,10 @@ starting from a wrong initial guess. The FitzHugh–Nagumo example
 
     git clone https://github.com/cardiomath/kipe
     cd kipe/examples/fitzhugh_nagumo
-    kipe synthesis study.yaml     # the measurement data, from the true parameters
-    kipe estimation study.yaml    # the estimate of a, b, c, from a wrong initial guess
-    kipe plot study.yaml --truth  # the estimates with their 1σ range; --terminal without a display
+    kipe synthesis study.yaml                # the measurement data, from the true parameters
+    kipe estimation study.yaml               # the estimates of a, b, c, from a wrong guess
+    kipe plot-estimation study.yaml --truth  # the estimates with their 1σ range
+    # without a display, e.g., on a cluster: the same with --terminal
 
 Everything is configured in the study file, ``study.yaml``: the forward solver, the estimated
 parameters with their priors (initial guess and uncertainty), the measurements, and the

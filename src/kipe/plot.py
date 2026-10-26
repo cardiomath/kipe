@@ -1,5 +1,5 @@
-"""Plots of the estimation history, ``kipe plot``, and of the sensitivity analysis,
-``kipe plot-sensitivity`` (:func:`plot_sensitivity`).
+"""Plots of the estimation history, ``kipe plot-estimation``, and of the sensitivity
+analysis, ``kipe plot-sensitivity`` (:func:`plot_sensitivity`).
 
 The estimation history:
 

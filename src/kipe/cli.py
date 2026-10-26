@@ -95,7 +95,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     estimation.set_defaults(func=_estimation)
 
     plot = subparsers.add_parser(
-        "plot",
+        "plot-estimation",
         help="plot the estimation history: the estimates with their 1σ range",
     )
     plot.add_argument(
@@ -172,7 +172,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     schema.set_defaults(func=_schema)
 
     args = parser.parse_args(argv)
-    if args.command == "plot" and args.save and (args.terminal or args.watch):
+    if args.command == "plot-estimation" and args.save and (args.terminal or args.watch):
         plot.error("--save writes a matplotlib figure, not with --terminal or --watch")
 
     errors = MPI.COMM_WORLD.Dup()  # for reporting errors, apart from the run's communication
