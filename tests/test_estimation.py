@@ -378,9 +378,9 @@ def test_realizations(tmp_path, capsys):
     assert main(["estimation", study, "--realization", "3"]) == 1
     assert "realization 3: the study has realizations 0 to 2" in capsys.readouterr().err
 
-    assert main(["plot", study, "--terminal"]) == 1
+    assert main(["plot-estimation", study, "--terminal"]) == 1
     assert "choose one with --realization" in capsys.readouterr().err
-    assert main(["plot", study, "--terminal", "--realization", "2"]) == 0
+    assert main(["plot-estimation", study, "--terminal", "--realization", "2"]) == 0
 
 
 SHORT = [0.5, 1.0, 1.5, 2.0]  # 4 steps of 4 sigma points (simplex, 3 parameters)

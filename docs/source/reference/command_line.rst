@@ -11,7 +11,7 @@ Command                                   Purpose
 ``kipe synthesize study.yaml``            Alias for ``kipe synthesis``
 ``kipe estimation study.yaml``            Estimate parameters from measurement data
 ``kipe estimate study.yaml``              Alias for ``kipe estimation``
-``kipe plot study.yaml``                  Plot the estimation history
+``kipe plot-estimation study.yaml``       Plot the estimation history
 ``kipe list-parameters study.yaml``       List the solver's parameters and nominal values
 ``kipe list-fields study.yaml``           List the solver's state fields and their sizes
 ``kipe sensitivity study.yaml``           Analyze the identifiability: the Fisher information

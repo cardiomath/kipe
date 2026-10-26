@@ -177,7 +177,9 @@ def test_list_parameters_reports_errors(tmp_path, capsys):
     assert "unexpected keyword argument 'd'" in capsys.readouterr().err
 
 
-@pytest.mark.parametrize("command", ["list-parameters", "synthesis", "estimation", "plot"])
+@pytest.mark.parametrize(
+    "command", ["list-parameters", "synthesis", "estimation", "plot-estimation"]
+)
 def test_cli_reports_invalid_options(tmp_path, capsys, command):
     study = _write(tmp_path, STUDY.replace("path:", "pth:"))
     assert main([command, str(study)]) == 1

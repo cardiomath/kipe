@@ -7,9 +7,9 @@ For instance, using a single study file, *twin experiments* can be conducted:
 
 .. code-block:: bash
 
-    kipe synthesis study.yaml     # generates noisy data from known ground-truth parameters
-    kipe estimation study.yaml    # recovers them from an inaccurate prior using ROUKF
-    kipe plot study.yaml --truth  # compares estimates with the true parameters
+    kipe synthesis study.yaml                # generates noisy data from known parameters
+    kipe estimation study.yaml               # recovers them from an inaccurate prior using ROUKF
+    kipe plot-estimation study.yaml --truth  # compares estimates with the true parameters
 
 ``synthesis`` writes data to the measurements' ``data.path``; ``estimation`` writes results to
 ``output.path``.
