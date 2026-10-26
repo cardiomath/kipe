@@ -22,6 +22,9 @@ The latest development version installs from GitHub:
 into the Python environment of your FEniCSx installation (e.g., Spack, conda or the
 ``dolfinx/dolfinx`` Docker image): its MPI is then the one kipe uses.
 
+The shell can complete kipe's commands and options on Tab, once its completion script is
+installed (:ref:`kipe-completion`).
+
 A first twin experiment
 -----------------------
 
