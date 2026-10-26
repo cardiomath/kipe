@@ -4,16 +4,23 @@ build-backend = "hatchling.build"
 
 [project]
 name = "kipe"
-dynamic = ["version"]  # from the git tags, see [tool.hatch.version]
+dynamic = ["version"] # from the git tags, see [tool.hatch.version]
 description = """Parameter estimation with reduced-order unscented Kalman filtering, and \
 identifiability analysis, for PDE models"""
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
-authors = [{name = "David Nolte", email = "dajuno@users.noreply.github.com"}]
-keywords = ["ROUKF", "unscented-kalman-filter", "data-assimilation",
-            "parameter-estimation", "identifiability", "FEniCS",
-            "inverse-problems", "fisher-information"]
+authors = [{ name = "David Nolte", email = "dajuno@users.noreply.github.com" }]
+keywords = [
+  "ROUKF",
+  "unscented-kalman-filter",
+  "data-assimilation",
+  "parameter-estimation",
+  "identifiability",
+  "FEniCS",
+  "inverse-problems",
+  "fisher-information",
+]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Science/Research",
@@ -23,12 +30,12 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Mathematics",
 ]
 dependencies = [
-  "mpi4py>=4",  # needs an MPI library at runtime, e.g., the system's or `pip install mpich`
+  "mpi4py>=4",         # needs an MPI library at runtime, e.g., the system's or `pip install mpich`
   "numpy>=1.26",
-  "pydantic>=2.7",  # use_attribute_docstrings
-  "ruamel.yaml>=0.18",  # YAML 1.2: 1e-3 is a float
-  "matplotlib>=3.8",  # kipe plot
-  "plotext>=6.1,<7",  # kipe plot --terminal, --watch
+  "pydantic>=2.7",     # use_attribute_docstrings
+  "ruamel.yaml>=0.18", # YAML 1.2: 1e-3 is a float
+  "matplotlib>=3.8",   # kipe plot
+  "plotext>=6.1,<7",   # kipe plot --terminal, --watch
 ]
 
 [project.scripts]
@@ -37,16 +44,16 @@ kipe = "kipe.cli:main"
 [project.optional-dependencies]
 dev = [
   "pytest>=8",
-  "jsonschema>=4",  # the example study files against `kipe schema`, in tests only
-  "scipy>=1.12",  # reference solutions in tests only
+  "jsonschema>=4", # the example study files against `kipe schema`, in tests only
+  "scipy>=1.12",   # reference solutions in tests only
   "ruff==0.16.9",  # pinned: preview formatting differs between versions
   "mypy==2.3.1",
   "pre-commit",
 ]
 docs = [
-  "sphinx>=9,<10",  # conf.py's _show_annotated_as_its_type wraps Sphinx 9's internals
-  "sphinx-rtd-theme>=3.1,<4",  # the first with Sphinx 9
-  "myst-parser>=5,<6",  # the first with Sphinx 9
+  "sphinx>=9,<10",               # conf.py's _show_annotated_as_its_type wraps Sphinx 9's internals
+  "sphinx-rtd-theme>=3.1,<4",    # the first with Sphinx 9
+  "myst-parser>=5,<6",           # the first with Sphinx 9
   "sphinxcontrib-mermaid>=1,<3",
 ]
 
@@ -56,56 +63,58 @@ Issues = "https://github.com/cardiomath/kipe/issues"
 
 [tool.hatch.version]
 source = "vcs"
-raw-options = {fallback_version = "0.0.0"}  # without git, e.g., from an archive
+raw-options = { fallback_version = "0.0.0" } # without git, e.g., from an archive
 
 [tool.ruff]
 line-length = 97
 preview = true
-extend-exclude = ["*.md"]  # design docs contain deliberately aligned illustrative snippets
+extend-exclude = [
+  "*.md",
+] # design docs contain deliberately aligned illustrative snippets
 
 [tool.ruff.lint]
 # see https://docs.astral.sh/ruff/rules/
 select = [
-    "E",      # pycodestyle errors
-    "W",      # pycodestyle warnings
-    "F",      # pyflakes
-    "FA",     # flake8-future-annotations
-    "B",      # flake8-bugbear
-    "I",      # isort
-    "UP",     # pyupgrade
-    "ICN",    # flake8-import-conventions
-    "NPY",    # numpy-specific rules
-    "FLY",    # use f-string not static joins
-    "G",      # logging format (lazy %-formatting, no f-strings in logging calls)
-    "D",      # pydocstyle
-    "DOC",    # pydoclint
-    "RUF",    # Ruff-specific rules
+  "E",   # pycodestyle errors
+  "W",   # pycodestyle warnings
+  "F",   # pyflakes
+  "FA",  # flake8-future-annotations
+  "B",   # flake8-bugbear
+  "I",   # isort
+  "UP",  # pyupgrade
+  "ICN", # flake8-import-conventions
+  "NPY", # numpy-specific rules
+  "FLY", # use f-string not static joins
+  "G",   # logging format (lazy %-formatting, no f-strings in logging calls)
+  "D",   # pydocstyle
+  "DOC", # pydoclint
+  "RUF", # Ruff-specific rules
 ]
 ignore = [
-    "undocumented-magic-method",         # D105
-    "undocumented-public-init",          # D107: constructor args documented in class docstring
-    "blank-line-after-function",         # D202
-    "missing-blank-line-after-summary",  # D205
-    "docstring-missing-exception",       # DOC501
-    "docstring-extraneous-exception",    # DOC502
+  "undocumented-magic-method",        # D105
+  "undocumented-public-init",         # D107: constructor args documented in class docstring
+  "blank-line-after-function",        # D202
+  "missing-blank-line-after-summary", # D205
+  "docstring-missing-exception",      # DOC501
+  "docstring-extraneous-exception",   # DOC502
 ]
 allowed-confusables = ["σ"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["D", "DOC"]  # test docstrings are optional
+"tests/**" = ["D", "DOC"] # test docstrings are optional
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
 [tool.ruff.lint.isort]
 section-order = [
-    "future",
-    "standard-library",
-    "mpi",
-    "petsc",
-    "third-party",
-    "first-party",
-    "local-folder",
+  "future",
+  "standard-library",
+  "mpi",
+  "petsc",
+  "third-party",
+  "first-party",
+  "local-folder",
 ]
 
 [tool.ruff.lint.isort.sections]
@@ -135,7 +144,7 @@ no_implicit_reexport = false
 warn_return_any = false
 
 [[tool.mypy.overrides]]
-module = "plotext"  # no type information
+module = "plotext"            # no type information
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
@@ -143,10 +152,25 @@ ignore_missing_imports = true
 # without them (they are missing in the core checks; petsc4py's stubs lack names that exist
 # at runtime, dolfinx's assemble_* dispatch at runtime): kipe.fenicsx is checked without
 # their types
-module = ["basix", "basix.*", "dolfinx", "dolfinx.*", "ufl", "ufl.*", "petsc4py", "petsc4py.*"]
+module = [
+  "basix",
+  "basix.*",
+  "dolfinx",
+  "dolfinx.*",
+  "ufl",
+  "ufl.*",
+  "petsc4py",
+  "petsc4py.*",
+]
 ignore_missing_imports = true
 follow_imports = "skip"
 
 [[tool.mypy.overrides]]
 module = "kipe.fenicsx.*"
-disallow_any_unimported = false  # dolfinx's types are unknown without dolfinx
+disallow_any_unimported = false # dolfinx's types are unknown without dolfinx
+
+[tool.yamlfix]
+line_length = 97
+explicit_start = false
+section_whitelines = 1
+whitelines = 0

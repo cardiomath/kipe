@@ -31,12 +31,11 @@ the ``dolfinx/dolfinx`` Docker image.
 Checks and commits
 ------------------
 
-The pre-commit hooks run on each commit: ruff (lint and format), mypy, yamllint and
-markdownlint (configured in ``.yamllint.yaml`` and ``.markdownlint.yaml``), and a check of the
-commit message, which follows `Conventional Commits <https://www.conventionalcommits.org>`_,
-e.g., ``fix(roukf): ...``. The scope is optional: the module a commit is about, or the area of
-other changes; ``.pre-commit-config.yaml`` lists the allowed ones. To run the hooks on all
-files:
+Pre-commit and CI run yamlfix, ruff (lint and format), mypy, markdownlint and yamllint. Commit
+messages follow
+`Conventional Commits <https://www.conventionalcommits.org>`_, e.g., ``fix(roukf): ...``. The
+scope is optional: the module a commit is about, or the area of other changes;
+``.pre-commit-config.yaml`` lists the allowed ones. To run the hooks on all files:
 
 .. code-block:: bash
 

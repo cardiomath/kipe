@@ -18,7 +18,7 @@ jobs:
           fetch-depth: 0  # all tags, for the version (hatch-vcs)
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: '3.12'
       - run: pip install ".[dev]"
       - run: ruff check .
       - run: ruff format --check .
@@ -26,7 +26,6 @@ jobs:
       # with the versions in .pre-commit-config.yaml
       - run: pre-commit run yamllint --all-files
       - run: pre-commit run markdownlint-cli2 --all-files
-
   test:
     runs-on: ubuntu-latest
     env:
@@ -37,7 +36,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.12", "3.13"]
+        python-version: ['3.12', '3.13']
     steps:
       - uses: actions/checkout@v4
         with:
@@ -52,7 +51,6 @@ jobs:
       - name: MPI start
         run: python -c "from mpi4py import MPI; print(MPI.Get_library_version().splitlines()[0])"
       - run: pytest -q
-
   test-fenicsx:
     runs-on: ubuntu-latest
     container: dolfinx/dolfinx:v0.9.0
@@ -69,7 +67,7 @@ jobs:
       - run: python3 -m pip install ".[dev]"
       # for the optional check of the mesh file's content (test_reference_is_the_file_content):
       # a binary wheel only, so that pip never builds HDF5; nothing to do if the image has h5py
-      - run: "python3 -m pip install --only-binary=:all: h5py"
+      - run: 'python3 -m pip install --only-binary=:all: h5py'
       # fail here if dolfinx is missing, instead of skipping all tests
       - name: dolfinx and MPI
         run: |
