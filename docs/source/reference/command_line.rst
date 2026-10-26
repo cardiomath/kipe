@@ -1,8 +1,8 @@
 Command line interface
 ======================
 
-The commands take a study file unless noted otherwise. Run ``kipe <command> --help`` for all
-options.
+The commands take a study file unless noted otherwise. The sections below the table list the
+options of every command, as ``kipe <command> --help`` shows them.
 
 ========================================= ============================================================
 Command                                   Purpose
@@ -18,14 +18,10 @@ Command                                   Purpose
 ``kipe schema``                           Print the study-file JSON schema
 ========================================= ============================================================
 
-``kipe plot`` accepts several study files to plot in one figure. Its options include ``--truth``
-to show nominal parameter values, ``--save FILE`` to save a figure, ``--terminal`` to draw in
-the terminal, and ``--watch`` to redraw while estimation runs. ``kipe estimation`` and
-``kipe plot`` accept ``--realization R`` to select one noise realization, and
-``kipe estimation`` accepts ``--resume`` to continue an interrupted estimation.
-``kipe sensitivity`` accepts ``--run I`` to compute one of its forward runs, e.g., as a task of
-a job array, and ``--assemble`` to combine them once all are done. ``kipe synthesis``,
-``kipe estimation`` and ``kipe sensitivity`` accept ``--log-level`` to override
-``output.log_level`` on the console.
-
-Use ``kipe --version`` to print the installed version.
+.. sphinx_argparse_cli::
+   :module: kipe.cli
+   :func: main
+   :hook:
+   :prog: kipe
+   :title:
+   :description: Generated from kipe's argument parser.
