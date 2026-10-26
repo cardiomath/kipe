@@ -102,8 +102,12 @@ class ForwardSolver(Protocol):
         """Advance the state from ``t0`` to exactly ``t1``.
 
         The solver may take any number of internal steps, but must land exactly on ``t1``.
-        Adaptive solvers rebuild their integrator from ``state`` on every call rather than
-        keeping step-size history across calls.
+        kipe calls this method for every sigma point at every measurement time, so calls may
+        arrive with different states and parameters. The result must depend only on the arguments
+        of this call, not on previous calls. Put everything needed to continue a step, including
+        multistep history or boundary-model state, in ``state``; the filter may pass a corrected
+        state that the solver has not computed itself. Adaptive solvers rebuild their integrator
+        from ``state`` on every call rather than keeping step-size history across calls.
 
         Args:
             t0: time of ``state``
