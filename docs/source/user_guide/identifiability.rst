@@ -20,8 +20,9 @@ The analysis consists of two forward runs per estimated parameter, at
 (:ref:`study-sensitivity`) is a relative change of the parameter, by default 0.01, i.e., 1 %; for
 ``additive`` parameters, it is a fraction of their prior ``stddev``, which gives it its unit.
 :math:`h_\theta` is that step in :math:`\theta`. The runs do not depend on each other: for an
-expensive model, ``--run I`` computes one of them, e.g., as a task of a job array
-(:doc:`parallel`), and ``--assemble`` combines them once all are done. The results go to
+expensive model, :option:`--run I <kipe sensitivity --run>` computes one of them, e.g., as a
+task of a job array (:doc:`parallel`), and :option:`--assemble <kipe sensitivity --assemble>`
+combines them once all are done. The results go to
 ``<output.path>/sensitivity/``: the predicted data of each run in ``runs/``, the result in
 ``sensitivity.npz``, and a summary in the log.
 

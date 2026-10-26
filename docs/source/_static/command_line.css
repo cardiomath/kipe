@@ -1,0 +1,12 @@
+/* The command line reference (sphinx-argparse-cli): each command is a section of the page, with
+   a rule above it; its argument groups ("positional arguments", "options") are small headings,
+   so that the commands stand out. */
+#command-line-interface > .container > section > h2 {
+    border-top: 1px solid #e1e4e5;
+    margin-top: 2em;
+    padding-top: 1em;
+}
+
+#command-line-interface > .container > section > section > h3 {
+    font-size: 100%;
+}

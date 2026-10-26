@@ -29,7 +29,8 @@ Run ``kipe estimation study.yaml`` to estimate parameters from the data specifie
 
 With multiple noise realizations, estimation processes each realization in
 turn and writes its results to a separate directory. To run a single realization — for example, as a
-task in a cluster job array — use ``kipe estimation study.yaml --realization R`` (:doc:`parallel`).
+task in a cluster job array — use ``kipe estimation study.yaml --realization R``
+(:option:`kipe estimation --realization`, :doc:`parallel`).
 
 Results
 -------

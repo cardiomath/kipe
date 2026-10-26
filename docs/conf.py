@@ -23,6 +23,7 @@ extensions = [
     "sphinx.ext.viewcode",
     "myst_parser",
     "sphinxcontrib.mermaid",
+    "sphinx_argparse_cli",
 ]
 source_suffix = {".rst": "restructuredtext", ".md": "markdown"}
 exclude_patterns = ["_apidoc/modules.rst", "_generated/*"]  # _generated: included by pages
@@ -30,7 +31,7 @@ html_theme = "sphinx_rtd_theme"
 # \bs{x}: bold symbols, as in the article the theory page follows
 mathjax3_config = {"tex": {"macros": {"bs": [r"\boldsymbol{#1}", 1]}}}
 html_static_path = ["source/_static"]
-html_css_files = ["mermaid.css", "tables.css"]
+html_css_files = ["mermaid.css", "tables.css", "command_line.css"]
 mermaid_height = "auto"  # in proportion to the width, not a fixed box; see mermaid.css
 autodoc_member_order = "bysource"
 # compiled dependencies (MPI, FEniCSx) are not needed to render the API
