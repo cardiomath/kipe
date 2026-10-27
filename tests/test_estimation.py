@@ -15,13 +15,9 @@ from kipe._yaml import write_yaml
 from kipe.cli import main
 from kipe.estimation import Estimation
 from kipe.examples.fitzhugh_nagumo import Solver
-from kipe.measurements import (
-    DifferenceModel,
-    Measurement,
-    ObservationOperator,
-    read_numpy,
-    write_numpy,
-)
+from kipe.measurements.data import Measurement, read_numpy, write_numpy
+from kipe.measurements.models import DifferenceModel
+from kipe.measurements.operator import ObservationOperator
 from kipe.options import (
     EstimationOptions,
     ForwardSolverOptions,

@@ -9,7 +9,7 @@ import pytest
 from kipe.cli import main
 from kipe.examples import fitzhugh_nagumo
 from kipe.examples.fitzhugh_nagumo import Solver
-from kipe.measurements import read_numpy
+from kipe.measurements.data import read_numpy
 from kipe.options import (
     CheckpointsTruthOptions,
     ForwardSolverOptions,

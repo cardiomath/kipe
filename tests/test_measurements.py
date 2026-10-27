@@ -7,15 +7,9 @@ import numpy as np
 import pytest
 
 from kipe.examples.fitzhugh_nagumo import FieldSpec, Solver
-from kipe.measurements import (
-    DifferenceModel,
-    MeasurementModel,
-    build_model,
-    build_observation_operator,
-    measurement_times,
-    read_numpy,
-    write_numpy,
-)
+from kipe.measurements.data import measurement_times, read_numpy, write_numpy
+from kipe.measurements.models import DifferenceModel, MeasurementModel, build_model
+from kipe.measurements.operator import build_observation_operator
 from kipe.options import (
     ArraySamplingOptions,
     DifferenceModelOptions,

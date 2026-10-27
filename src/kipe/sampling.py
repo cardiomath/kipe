@@ -2,7 +2,7 @@ r"""Spatial sampling: bringing the model fields to the measurement locations.
 
 A :class:`SpatialSampler` evaluates the fields a measurement observes where the measurement
 is taken, giving the sampled state :math:`y` that the measurement model (see
-:mod:`kipe.measurements`) compares with the data. The samplers here need only the field
+:mod:`kipe.measurements.models`) compares with the data. The samplers here need only the field
 arrays and their own configuration; samplers that need the discretization (mesh, degrees of
 freedom) live with their backend, e.g., in :mod:`kipe.fenicsx.sampling`.
 

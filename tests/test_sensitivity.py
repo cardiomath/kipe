@@ -12,7 +12,7 @@ import pytest
 from kipe import sensitivity
 from kipe.cli import main
 from kipe.estimation import estimate
-from kipe.measurements import write_numpy
+from kipe.measurements.data import write_numpy
 from kipe.options import (
     EstimationOptions,
     ForwardSolverOptions,
