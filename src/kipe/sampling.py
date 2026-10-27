@@ -136,13 +136,13 @@ def build_sampler(
             return ArraySampler(fields, solver.state_spec, comm)
         case MeshSamplingOptions():
             try:  # dolfinx only when a study uses it
-                from kipe.fenicsx.sampling import build_mesh_sampler
+                from kipe.fenicsx.sampling.mesh import build_mesh_sampler
             except ImportError as err:
                 raise StudyFileError(f"fenicsx.mesh needs dolfinx: {err}") from err
             return build_mesh_sampler(options, fields, solver, comm)
         case PointSamplingOptions():
             try:  # dolfinx only when a study uses it
-                from kipe.fenicsx.points import build_point_sampler
+                from kipe.fenicsx.sampling.points import build_point_sampler
             except ImportError as err:
                 raise StudyFileError(f"fenicsx.points needs dolfinx: {err}") from err
             return build_point_sampler(options, fields, solver, comm)

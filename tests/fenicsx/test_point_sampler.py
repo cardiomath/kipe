@@ -11,7 +11,7 @@ from dolfinx import fem, mesh
 
 from kipe._types import NDArray_f64
 from kipe.fenicsx.examples.heat import Solver as Heat
-from kipe.fenicsx.points import PointSampler
+from kipe.fenicsx.sampling.points import PointSampler
 from kipe.measurements import build_observation_operator
 from kipe.options import (
     MeasurementOptions,

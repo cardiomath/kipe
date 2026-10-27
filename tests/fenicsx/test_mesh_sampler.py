@@ -18,7 +18,7 @@ from kipe.cli import main
 from kipe.examples.fitzhugh_nagumo import Solver as FitzHughNagumo
 from kipe.fenicsx.examples.heat import FieldSpec as HeatFieldSpec
 from kipe.fenicsx.examples.heat import Solver as Heat
-from kipe.fenicsx.sampling import MeshSampler, build_mesh_sampler
+from kipe.fenicsx.sampling.mesh import MeshSampler, build_mesh_sampler
 from kipe.options import (
     EstimationOptions,
     ForwardSolverOptions,
