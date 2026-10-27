@@ -12,8 +12,10 @@ For each measurement, ``kipe synthesis``:
 2. predicts the measurement using the observation operator described in :doc:`measurements`;
 3. adds noise and writes the data to the measurement's ``data.path``.
 
-The checkpoint run may use a different model or time step. The ``synthesis.truth`` option selects
-the source of the true state; see :doc:`../reference/study_file` for its options.
+The checkpoint run may use a different model or time step. Instead of steps 1 and 2, synthesis
+can also read true data from files, e.g., the noise-free data of an earlier synthesis
+(:ref:`noise-free-data`). The ``synthesis.truth`` option selects the source; see
+:doc:`../reference/study_file` for its options.
 
 Then, ``kipe estimation`` reads the synthetic data just as it would measured data and estimates
 the parameters from it.
@@ -57,12 +59,41 @@ The noise for realization :math:`r` at the :math:`k`-th measurement time is gene
 ``numpy.random.default_rng([seed, k, r])``. Realization 0 has the same noise as a study without
 multiple realizations.
 
+.. _noise-free-data:
+
+Noise-free data
+---------------
+
+From a run or checkpoints, synthesis also writes the noise-free data: the measurements' true
+data before the noise is added, to ``<output.path>/synthesis/noise_free/<measurement>.npz``, in
+the format of the data files. They are the starting point for further synthetic data without
+running the solver again. The source ``data`` reads the true data of each measurement from a
+file, ``{measurement}`` standing for its name, and adds noise as usual:
+
+.. code-block:: yaml
+
+    output:
+      path: results/noise_0.05      # another directory, to keep the first synthesis' files
+
+    synthesis:
+      truth: {type: data, path: "results/synthesis/noise_free/{measurement}.npz"}
+      noise:
+        u: {stddev: 0.05}
+      realizations: 30
+
+The noise (``synthesis.noise``), the seeds and the realizations work as above. A measurement's
+``times`` select from the file's times; without ``times``, synthesis uses all of them. The
+forward solver is built, for the layout of the measurements, but not run, so further noise
+levels, seeds or realizations take seconds. The source ``data`` also adds noise to measured
+data, e.g., to see how the estimation copes with more noise than the data have. From given
+data, synthesis writes no noise-free data, since they need not be noise-free.
+
 Checking the data files
 -----------------------
 
 Synthesis writes ``data.sha256`` to ``<output.path>/synthesis/``: the SHA-256 hash and the path
-of each data file it wrote, in the format of ``sha256sum``. Run from the directory kipe ran in,
-since the paths are relative to it,
+of each data file it wrote, the noise-free data included, in the format of ``sha256sum``. Run
+from the directory kipe ran in, since the paths are relative to it,
 
 .. code-block:: bash
 

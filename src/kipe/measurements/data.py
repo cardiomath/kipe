@@ -89,6 +89,68 @@ def read_numpy(path: str | Path) -> tuple[NDArray_f64, NDArray_f64]:
     return times.astype(np.float64), values.astype(np.float64)
 
 
+def read_data(
+    name: str,
+    path: str | Path,
+    operator: ObservationOperator,
+    selected: NDArray_f64 | None = None,
+) -> tuple[NDArray_f64, NDArray_f64]:
+    """Read a measurement's data, keep this rank's entries, and select the times.
+
+    Every rank reads the whole file and keeps the entries it holds
+    (``operator.global_indices``).
+
+    Args:
+        name: name of the measurement, for error messages
+        path: path to the ``.npz`` file
+        operator: the measurement's observation operator, which lays out the data
+        selected: the times to keep, e.g., the measurement's ``times``; all if None
+
+    Returns:
+        - the times
+        - this rank's entries of the values at these times, one row per time
+
+    Raises:
+        StudyFileError: if the file cannot be read, does not have the measurement's number of
+            entries per time, or lacks a selected time
+    """
+    times, values = read_numpy(path)
+    if values.shape[1] != operator.size:
+        raise StudyFileError(
+            f"measurements.{name}: the data ({path}) have {values.shape[1]} values per time, "
+            f"the measurement has {operator.size}"
+        )
+    values = values[:, operator.global_indices]
+
+    if selected is not None:
+        indices = [_index_of(t, times, name, path) for t in selected]
+        times, values = times[indices], values[indices]
+
+    return times, values
+
+
+def _index_of(t: float, times: NDArray_f64, name: str, path: str | Path) -> int:
+    """Return the index of time ``t`` in the data's times.
+
+    Args:
+        t: selected time
+        times: the times in the data
+        name: name of the measurement, for the error message
+        path: path to the data, for the error message
+
+    Returns:
+        the index
+
+    Raises:
+        StudyFileError: if ``t`` is not in the data
+    """
+    matches = np.flatnonzero(np.isclose(times, t, rtol=0, atol=1e-12 * max(1.0, abs(t))))
+    if len(matches) == 0:
+        raise StudyFileError(f"measurements.{name}: time {t} is not in the data ({path})")
+
+    return int(matches[0])
+
+
 def write_numpy(path: str | Path, times: NDArray_f64, values: NDArray_f64) -> None:
     """Write measurement data to a ``.npz`` file, creating its directory if needed.
 

@@ -1,14 +1,17 @@
 """Generation of synthetic measurement data from a forward run: ``kipe synthesis``.
 
-The true state at the measurement times comes from the forward solver (``synthesis.truth``):
-it runs with its nominal parameters through all measurement times (``run``), or reads the
-states from the checkpoints of an earlier run (``checkpoints``). At each time, the observation
-operator gives the predicted data and noise is added: the measurement's
-``noise.stddev``, or ``synthesis.noise`` where given (e.g., none, for noise-free data). The
-resulting measurements are written to their ``data`` files, and returned. With several noise
-realizations (``synthesis.realizations``), the true state is computed once, and each
-realization gets its own noise and data files. The provenance of the run is written to
-``<output.path>/synthesis/`` (:mod:`kipe.provenance`).
+The true data at the measurement times come from the source of the truth
+(``synthesis.truth``): the forward solver runs with its nominal parameters through all
+measurement times (``run``), or reads the states from the checkpoints of an earlier run
+(``checkpoints``), and the observation operators give the true data; or they are read from
+files (``data``), e.g., the noise-free data of an earlier synthesis. Noise is then added: the
+measurement's ``noise.stddev``, or ``synthesis.noise`` where given (e.g., none, for
+noise-free data). The resulting measurements are written to their ``data`` files, and
+returned. With several noise realizations (``synthesis.realizations``), the true data are
+computed once, and each realization gets its own noise and data files. From a run or
+checkpoints, the noise-free data are written too, to ``<output.path>/synthesis/noise_free/``.
+The provenance of the run is written to ``<output.path>/synthesis/``
+(:mod:`kipe.provenance`).
 
 The noise-free data come from :func:`observe_run` or :func:`observe_checkpoints`. They are
 public: the sensitivity analysis (:mod:`kipe.sensitivity`) uses :func:`observe_run` for its
@@ -38,17 +41,18 @@ from kipe.forward_solver import (
     SupportsCheckpoints,
     build_forward_solver,
 )
-from kipe.measurements.data import Measurement, measurement_times, write_data
+from kipe.measurements.data import Measurement, measurement_times, read_data, write_data
 from kipe.measurements.operator import ObservationOperator, build_observation_operator
 from kipe.options import (
     CheckpointsTruthOptions,
+    DataTruthOptions,
     MeasurementOptions,
     RunTruthOptions,
     StudyFileError,
     StudyOptions,
     SynthesisOptions,
-    TruthOptions,
     data_path,
+    truth_path,
 )
 from kipe.provenance import recorded_run, sha256
 
@@ -86,16 +90,23 @@ def synthesize(study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD) -> list[lis
     }
 
     output = Path(study.output.path) / "synthesis"
-    with recorded_run(output, study, comm=comm):
+    truth = study.synthesis.truth
+    run = {"truth": _truth_files(study, truth)} if isinstance(truth, DataTruthOptions) else {}
+    with recorded_run(output, study, run, comm):
         _log_plan(study, stddevs)
-        times = {name: _times(name, o) for name, o in study.measurements.items()}
         seeds = {
             name: _seed(name, o) for name, o in study.measurements.items() if stddevs[name] > 0
         }
-        noise_free = _noise_free(study.synthesis.truth, solver, times, operators)
+        times, noise_free = _truth(study, solver, operators)
+
+        written = []
+        if not isinstance(truth, DataTruthOptions):  # given data need not be noise-free
+            for name, operator in operators.items():
+                path = str(output / "noise_free" / f"{name}.npz")
+                write_data(path, operator, times[name], noise_free[name], comm)
+                written.append(path)
 
         realizations = []
-        written = []
         for r in range(study.synthesis.realizations):
             measurements = _realization(study, r, operators, times, noise_free, stddevs, seeds)
             for measurement in measurements:
@@ -126,7 +137,7 @@ def _log_plan(study: StudyOptions, stddevs: Mapping[str, float]) -> None:
     logger.info("synthesis")
     logger.info("  %-16s%s", "forward solver", study.forward_solver.factory)
     truth = study.synthesis.truth
-    if isinstance(truth, CheckpointsTruthOptions):
+    if isinstance(truth, CheckpointsTruthOptions | DataTruthOptions):
         logger.info("  %-16s%s at %s", "truth", truth.type, truth.path)
     else:
         logger.info("  %-16s%s", "truth", truth.type)
@@ -159,32 +170,72 @@ def _log_written(study: StudyOptions, times: Mapping[str, NDArray_f64]) -> None:
         logger.info(
             "wrote %s: %s%d times to %s", name, each, len(times[name]), options.data.path
         )
+    if not isinstance(study.synthesis.truth, DataTruthOptions):
+        output = Path(study.output.path) / "synthesis" / "noise_free"
+        logger.info("wrote the noise-free data to %s", output)
 
 
-def _noise_free(
-    truth: TruthOptions,
+def _truth(
+    study: StudyOptions,
     solver: ForwardSolver,
-    times: Mapping[str, NDArray_f64],
     operators: Mapping[str, ObservationOperator],
-) -> dict[str, NDArray_f64]:
-    """Return the noise-free data of the measurements, from the source of the truth.
+) -> tuple[dict[str, NDArray_f64], dict[str, NDArray_f64]]:
+    """Return the times and the true data of the measurements, from the source of the truth.
 
     Args:
-        truth: the source of the true state, ``synthesis.truth``
+        study: the study options, with measurements
         solver: the forward solver
-        times: the times of each measurement
         operators: the observation operators of the measurements
 
     Returns:
-        this rank's entries of each measurement's noise-free data, one row per time
+        - the times of each measurement
+        - this rank's entries of each measurement's true data, one row per time
+
+    Raises:
+        StudyFileError: if a measurement lacks what its source of the truth needs, e.g., its
+            times for a run, or its true data do not fit it
     """
+    assert study.measurements is not None
+    truth = study.synthesis.truth
+    if isinstance(truth, DataTruthOptions):
+        times, values = {}, {}
+        for name, options in study.measurements.items():
+            selected = None if options.times is None else measurement_times(options.times)
+            path = truth_path(truth, name)
+            times[name], values[name] = read_data(name, path, operators[name], selected)
+        return times, values
+
+    times = {name: _times(name, options) for name, options in study.measurements.items()}
     match truth:
         case RunTruthOptions():
-            return observe_run(solver, times, operators)
+            return times, observe_run(solver, times, operators)
         case CheckpointsTruthOptions(path=path):
-            return observe_checkpoints(solver, path, times, operators)
+            return times, observe_checkpoints(solver, path, times, operators)
         case _:
             assert_never(truth)
+
+
+def _truth_files(study: StudyOptions, truth: DataTruthOptions) -> dict[str, dict[str, str]]:
+    """Return the files of the true data, with their hashes, for the provenance.
+
+    Args:
+        study: the study options, with measurements
+        truth: the source of the truth
+
+    Returns:
+        measurement name -> path and SHA-256 hash of its true data
+
+    Raises:
+        StudyFileError: if a file cannot be read
+    """
+    files = {}
+    for name in study.measurements or {}:
+        path = truth_path(truth, name)
+        try:
+            files[name] = {"path": path, "sha256": sha256(path)}
+        except OSError as err:
+            raise StudyFileError(f"cannot read the true data {path}: {err}") from err
+    return files
 
 
 def _realization(
