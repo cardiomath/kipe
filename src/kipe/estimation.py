@@ -42,7 +42,7 @@ from kipe.forward_solver import (
     State,
     build_forward_solver,
 )
-from kipe.measurements.data import Measurement, measurement_times, read_numpy
+from kipe.measurements.data import Measurement, measurement_times, read_data
 from kipe.measurements.operator import build_observation_operator
 from kipe.options import (
     EstimationOptions,
@@ -464,7 +464,8 @@ def _build_measurements(
 ) -> list[Measurement]:
     """Read the data of the study's measurements and build their observation operators.
 
-    Every rank reads the whole data and keeps the entries it holds (``global_indices``).
+    Every rank reads the whole data and keeps the entries it holds (``global_indices``), see
+    :func:`~kipe.measurements.data.read_data`.
 
     Args:
         study: the study options
@@ -486,43 +487,11 @@ def _build_measurements(
     measurements = []
     for name, options in study.measurements.items():
         operator = build_observation_operator(name, options, solver, comm)
-        times, values = read_numpy(data_path(options, realization))
-
-        if values.shape[1] != operator.size:
-            raise StudyFileError(
-                f"measurements.{name}: the data have {values.shape[1]} values per time, the "
-                f"measurement has {operator.size}"
-            )
-        values = values[:, operator.global_indices]
-
-        if options.times is not None:
-            indices = [_index_of(t, times, name) for t in measurement_times(options.times)]
-            times, values = times[indices], values[indices]
-
+        selected = None if options.times is None else measurement_times(options.times)
+        times, values = read_data(name, data_path(options, realization), operator, selected)
         measurements.append(Measurement(name, operator, times, values, options.noise.stddev))
 
     return measurements
-
-
-def _index_of(t: float, times: NDArray_f64, name: str) -> int:
-    """Return the index of time ``t`` in the data's times.
-
-    Args:
-        t: selected time
-        times: the times in the data
-        name: name of the measurement, for the error message
-
-    Returns:
-        the index
-
-    Raises:
-        StudyFileError: if ``t`` is not in the data
-    """
-    matches = np.flatnonzero(np.isclose(times, t, rtol=0, atol=1e-12 * max(1.0, abs(t))))
-    if len(matches) == 0:
-        raise StudyFileError(f"measurements.{name}: time {t} is not in the data")
-
-    return int(matches[0])
 
 
 def _common_times(measurements: list[Measurement]) -> NDArray_f64:
