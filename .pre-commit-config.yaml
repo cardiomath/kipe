@@ -77,4 +77,4 @@ repos:
       - id: conventional-pre-commit
         stages: [commit-msg]
         args:
-          - --scopes=cli,options,forward-solver,parameters,measurements,sampling,synthesis,sensitivity,estimation,roukf,plot,provenance,fenicsx,examples,docs,ci,pre-commit
+          - --scopes=cli,options,forward-solver,parameters,measurements,sampling,synthesis,sensitivity,estimation,roukf,plot,provenance,fenicsx,examples,docs,results,ci,pre-commit

@@ -11,4 +11,5 @@ User guide
    synthetic_data
    estimation
    identifiability
+   analysis
    parallel
