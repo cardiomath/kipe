@@ -41,7 +41,7 @@ runs the filter.
    flowchart TD
        study[/"study file"/] --> options["options<br/>kipe.options"]
        options --> solver["forward solver<br/>(external)"]
-       options --> operators["observation operators<br/>H = M ∘ S<br/>kipe.measurements"]
+       options --> operators["observation operators<br/>H = M ∘ S<br/>kipe.measurements.operator"]
        options --> parameterization["parameterization<br/>kipe.parameters"]
        solver -- "run, or read checkpoints" --> synthesis["kipe synthesis<br/>kipe.synthesis"]
        operators --> synthesis
@@ -80,15 +80,15 @@ arguments can be any objects, e.g., the solver's own options.
 Measurements
 ------------
 
-A :class:`~kipe.measurements.Measurement` is data at measurement times, with a noise level,
+A :class:`~kipe.measurements.data.Measurement` is data at measurement times, with a noise level,
 and the observation operator that predicts those data from a model state. The observation
 operator :math:`\mathcal{H} = M \circ S` has two parts:
 
 - the **spatial sampler** :math:`S` (:mod:`kipe.sampling`) evaluates the observed fields at
   the measurement locations: interpolation onto a measurement mesh, a projection onto a
   direction or the surface normal, all entries of a field;
-- the **measurement model** :math:`M` (:mod:`kipe.measurements`) predicts the data from the
-  sampled values and compares the prediction with the measured data, giving the innovation.
+- the **measurement model** :math:`M` (:mod:`kipe.measurements.models`) predicts the data from
+  the sampled values and compares the prediction with the measured data, giving the innovation.
 
 The diagram shows one observation operator of the overview, with its two parts, and how its
 result enters the filter.
@@ -148,12 +148,12 @@ Each kind of component follows the same pattern:
 4. **Tests**, with the FitzHugh–Nagumo example for core components, with the heat example
    (:mod:`kipe.fenicsx.examples.heat`) for FEniCSx components.
 
-========================= ================================================ =====================================================
-component                 base class                                        build function
-========================= ================================================ =====================================================
-spatial sampler           :class:`kipe.sampling.SpatialSampler`            :func:`kipe.sampling.build_sampler`
-measurement model         :class:`kipe.measurements.MeasurementModel`      :func:`kipe.measurements.build_model`
-========================= ================================================ =====================================================
+========================= =================================================== =====================================================
+component                 base class                                          build function
+========================= =================================================== =====================================================
+spatial sampler           :class:`kipe.sampling.SpatialSampler`               :func:`kipe.sampling.build_sampler`
+measurement model         :class:`kipe.measurements.models.MeasurementModel`  :func:`kipe.measurements.models.build_model`
+========================= =================================================== =====================================================
 
 **A spatial sampler**: :doc:`write_a_sampler` walks through a complete one. It sets ``size``
 and ``global_indices`` and implements
@@ -161,15 +161,15 @@ and ``global_indices`` and implements
 arrays) and returns this rank's sampled entries. It may take what it needs from the solver at
 construction, e.g., function spaces, through a backend capability.
 
-**A measurement model** implements :meth:`~kipe.measurements.MeasurementModel.predict` and
-:meth:`~kipe.measurements.MeasurementModel.innovation`. It sees this rank's entries as arrays.
-A model that needs all entries at once (e.g., a Fourier transform) will also need the
-communicator; none does so far.
+**A measurement model** implements :meth:`~kipe.measurements.models.MeasurementModel.predict`
+and :meth:`~kipe.measurements.models.MeasurementModel.innovation`. It sees this rank's entries
+as arrays. A model that needs all entries at once (e.g., a Fourier transform) will also need
+the communicator; none does so far.
 
 **A data format** is read where the data are read
 (:func:`kipe.estimation.estimate` and :func:`kipe.synthesis.synthesize`, through
-:func:`~kipe.measurements.read_numpy` and :func:`~kipe.measurements.write_numpy`). kipe has
-one format so far, ``numpy``; the second one will add a build function for readers, following
+:func:`~kipe.measurements.data.read_numpy` and :func:`~kipe.measurements.data.write_numpy`). kipe
+has one format so far, ``numpy``; the second one will add a build function for readers, following
 the pattern above.
 
 **A forward solver** lives outside kipe. It implements

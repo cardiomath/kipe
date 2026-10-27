@@ -81,12 +81,8 @@ from ruamel.yaml import YAML
 from kipe._formatting import format_table
 from kipe._types import NDArray_f64
 from kipe.forward_solver import build_forward_solver
-from kipe.measurements import (
-    build_observation_operator,
-    measurement_times,
-    read_numpy,
-    write_data,
-)
+from kipe.measurements.data import measurement_times, read_numpy, write_data
+from kipe.measurements.operator import build_observation_operator
 from kipe.options import StudyFileError, StudyOptions
 from kipe.parameters import Parameterization, build_parameterization
 from kipe.provenance import recorded_run

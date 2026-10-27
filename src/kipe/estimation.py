@@ -42,12 +42,8 @@ from kipe.forward_solver import (
     State,
     build_forward_solver,
 )
-from kipe.measurements import (
-    Measurement,
-    build_observation_operator,
-    measurement_times,
-    read_numpy,
-)
+from kipe.measurements.data import Measurement, measurement_times, read_numpy
+from kipe.measurements.operator import build_observation_operator
 from kipe.options import (
     EstimationOptions,
     StudyFileError,

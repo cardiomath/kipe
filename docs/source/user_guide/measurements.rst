@@ -57,7 +57,7 @@ from an image, write them in this order:
 
 .. code-block:: python
 
-    from kipe.measurements import write_numpy
+    from kipe.measurements.data import write_numpy
 
     write_numpy("data/u.npz", times, values)  # = numpy.savez(path, times=..., values=...)
 

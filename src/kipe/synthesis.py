@@ -38,13 +38,8 @@ from kipe.forward_solver import (
     SupportsCheckpoints,
     build_forward_solver,
 )
-from kipe.measurements import (
-    Measurement,
-    ObservationOperator,
-    build_observation_operator,
-    measurement_times,
-    write_data,
-)
+from kipe.measurements.data import Measurement, measurement_times, write_data
+from kipe.measurements.operator import ObservationOperator, build_observation_operator
 from kipe.options import (
     CheckpointsTruthOptions,
     MeasurementOptions,
