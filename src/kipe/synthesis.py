@@ -50,7 +50,6 @@ from kipe.options import (
     RunTruthOptions,
     StudyFileError,
     StudyOptions,
-    SynthesisOptions,
     data_path,
     truth_path,
 )
@@ -84,54 +83,35 @@ def synthesize(study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD) -> list[lis
         for name, options in study.measurements.items()
     }
 
-    stddevs = {
-        name: _added_stddev(name, options, study.synthesis)
-        for name, options in study.measurements.items()
-    }
-
     output = Path(study.output.path) / "synthesis"
-    truth = study.synthesis.truth
-    run = {"truth": _truth_files(study, truth)} if isinstance(truth, DataTruthOptions) else {}
-    with recorded_run(output, study, run, comm):
-        _log_plan(study, stddevs)
-        seeds = {
-            name: _seed(name, o) for name, o in study.measurements.items() if stddevs[name] > 0
-        }
-        times, noise_free = _truth(study, solver, operators)
+    with recorded_run(output, study, _run_info(study), comm):
+        noise = _noise(study)
+        _log_plan(study, noise)
+        times, true_data = _truth(study, solver, operators)
 
         written = []
-        if not isinstance(truth, DataTruthOptions):  # given data need not be noise-free
-            for name, operator in operators.items():
-                path = str(output / "noise_free" / f"{name}.npz")
-                write_data(path, operator, times[name], noise_free[name], comm)
-                written.append(path)
+        if not isinstance(study.synthesis.truth, DataTruthOptions):  # need not be noise-free
+            written += _write_noise_free(output, operators, times, true_data, comm)
 
         realizations = []
         for r in range(study.synthesis.realizations):
-            measurements = _realization(study, r, operators, times, noise_free, stddevs, seeds)
-            for measurement in measurements:
-                path = data_path(study.measurements[measurement.name], r)
-                write_data(
-                    path, measurement.operator, measurement.times, measurement.values, comm
-                )
-                written.append(path)
+            measurements = _realization(study, r, operators, times, true_data, noise)
+            written += [_write(study, measurement, r, comm) for measurement in measurements]
             realizations.append(measurements)
 
-        if comm.rank == 0:  # rank 0 wrote the files
-            lines = [f"{sha256(path)}  {path}\n" for path in written]
-            (output / "data.sha256").write_text("".join(lines))
+        _write_checksums(output, written, comm)
         _log_written(study, times)
         logger.info("%-11s%.3g s", "run time", time.perf_counter() - started)
 
     return realizations
 
 
-def _log_plan(study: StudyOptions, stddevs: Mapping[str, float]) -> None:
+def _log_plan(study: StudyOptions, noise: Mapping[str, tuple[float, int | None]]) -> None:
     """Log what synthesis does: the solver, the truth, the realizations and the measurements.
 
     Args:
         study: the study options, with measurements
-        stddevs: standard deviations of the noise added to each measurement's data
+        noise: standard deviation and seed of the noise added to each measurement's data
     """
     assert study.measurements is not None
     logger.info("synthesis")
@@ -147,9 +127,10 @@ def _log_plan(study: StudyOptions, stddevs: Mapping[str, float]) -> None:
 
     rows = [("measurement", "fields", "σ", "seed")]
     for name, options in study.measurements.items():
+        stddev, _ = noise[name]
         seed = "" if options.noise.seed is None else str(options.noise.seed)
-        sigma = f"{stddevs[name]:g}"
-        if stddevs[name] != options.noise.stddev:
+        sigma = f"{stddev:g}"
+        if stddev != options.noise.stddev:
             sigma += f" (assumes {options.noise.stddev:g})"
         rows.append((name, ", ".join(options.fields), sigma, seed))
     for line in format_table(rows, "<<>>"):
@@ -215,19 +196,23 @@ def _truth(
             assert_never(truth)
 
 
-def _truth_files(study: StudyOptions, truth: DataTruthOptions) -> dict[str, dict[str, str]]:
-    """Return the files of the true data, with their hashes, for the provenance.
+def _run_info(study: StudyOptions) -> dict[str, dict[str, dict[str, str]]]:
+    """Return what ``run.yaml`` records beyond the study: the files of given true data.
 
     Args:
-        study: the study options, with measurements
-        truth: the source of the truth
+        study: the study options
 
     Returns:
-        measurement name -> path and SHA-256 hash of its true data
+        with the truth source ``data``: ``{"truth": measurement name -> path and SHA-256 hash
+        of its true data}``; otherwise nothing
 
     Raises:
-        StudyFileError: if a file cannot be read
+        StudyFileError: if a file of the true data cannot be read
     """
+    truth = study.synthesis.truth
+    if not isinstance(truth, DataTruthOptions):
+        return {}
+
     files = {}
     for name in study.measurements or {}:
         path = truth_path(truth, name)
@@ -235,7 +220,67 @@ def _truth_files(study: StudyOptions, truth: DataTruthOptions) -> dict[str, dict
             files[name] = {"path": path, "sha256": sha256(path)}
         except OSError as err:
             raise StudyFileError(f"cannot read the true data {path}: {err}") from err
-    return files
+    return {"truth": files}
+
+
+def _write_noise_free(
+    output: Path,
+    operators: Mapping[str, ObservationOperator],
+    times: Mapping[str, NDArray_f64],
+    true_data: Mapping[str, NDArray_f64],
+    comm: MPI.Comm,
+) -> list[str]:
+    """Write the noise-free data of the measurements, to ``noise_free/`` in the output.
+
+    Args:
+        output: output directory of the synthesis
+        operators: the observation operators of the measurements
+        times: the times of each measurement
+        true_data: this rank's entries of each measurement's true data
+        comm: communicator of the run; rank 0 writes
+
+    Returns:
+        the paths written
+    """
+    written = []
+    for name, operator in operators.items():
+        path = str(output / "noise_free" / f"{name}.npz")
+        write_data(path, operator, times[name], true_data[name], comm)
+        written.append(path)
+    return written
+
+
+def _write(
+    study: StudyOptions, measurement: Measurement, realization: int, comm: MPI.Comm
+) -> str:
+    """Write the data of a measurement of one noise realization, to its ``data.path``.
+
+    Args:
+        study: the study options, with measurements
+        measurement: the measurement, with this rank's entries of its data
+        realization: number of the noise realization
+        comm: communicator of the run; rank 0 writes
+
+    Returns:
+        the path written
+    """
+    assert study.measurements is not None
+    path = data_path(study.measurements[measurement.name], realization)
+    write_data(path, measurement.operator, measurement.times, measurement.values, comm)
+    return path
+
+
+def _write_checksums(output: Path, written: list[str], comm: MPI.Comm) -> None:
+    """Write ``data.sha256``: the hash and path of each file written, as ``sha256sum`` does.
+
+    Args:
+        output: output directory of the synthesis
+        written: the paths of the data files written
+        comm: communicator of the run; rank 0, which wrote the files, writes
+    """
+    if comm.rank == 0:
+        lines = [f"{sha256(path)}  {path}\n" for path in written]
+        (output / "data.sha256").write_text("".join(lines))
 
 
 def _realization(
@@ -243,9 +288,8 @@ def _realization(
     realization: int,
     operators: Mapping[str, ObservationOperator],
     times: Mapping[str, NDArray_f64],
-    noise_free: Mapping[str, NDArray_f64],
-    stddevs: Mapping[str, float],
-    seeds: Mapping[str, int],
+    true_data: Mapping[str, NDArray_f64],
+    noise: Mapping[str, tuple[float, int | None]],
 ) -> list[Measurement]:
     """Return the measurements of one noise realization.
 
@@ -254,9 +298,8 @@ def _realization(
         realization: number of the noise realization
         operators: the observation operators of the measurements
         times: the times of each measurement
-        noise_free: this rank's entries of each measurement's noise-free data
-        stddevs: standard deviations of the noise added to each measurement's data
-        seeds: noise seeds of the measurements with noise
+        true_data: this rank's entries of each measurement's true data
+        noise: standard deviation and seed of the noise added to each measurement's data
 
     Returns:
         the measurements, in the order of the study, with this rank's entries of their data
@@ -267,9 +310,7 @@ def _realization(
             name,
             operators[name],
             times[name],
-            _add_noise(
-                noise_free[name], operators[name], stddevs[name], seeds.get(name), realization
-            ),
+            _add_noise(true_data[name], operators[name], *noise[name], realization),
             options.noise.stddev,
         )
         for name, options in study.measurements.items()
@@ -391,7 +432,7 @@ def _add_noise(
     seed: int | None,
     realization: int,
 ) -> NDArray_f64:
-    """Return a measurement's data of one noise realization: the noise-free data plus noise.
+    """Return a measurement's data of one noise realization: the true data plus noise.
 
     The noise at the k-th time of realization r is drawn from
     ``numpy.random.default_rng([seed, k, r])``, which is ``default_rng([seed, k])`` for r = 0:
@@ -399,7 +440,7 @@ def _add_noise(
     deviation 0).
 
     Args:
-        values: this rank's entries of the noise-free data, one row per time
+        values: this rank's entries of the true data, one row per time
         operator: the observation operator of the measurement
         stddev: standard deviation of the added noise
         seed: noise seed of the measurement, ``None`` for no noise
@@ -438,41 +479,32 @@ def _times(name: str, options: MeasurementOptions) -> NDArray_f64:
     return measurement_times(options.times)
 
 
-def _added_stddev(name: str, options: MeasurementOptions, synthesis: SynthesisOptions) -> float:
-    """Return the standard deviation of the noise synthesis adds to a measurement's data.
+def _noise(study: StudyOptions) -> dict[str, tuple[float, int | None]]:
+    """Return the noise synthesis adds to each measurement's data: its standard deviation and
+    seed.
+
+    The standard deviation comes from ``synthesis.noise`` if it lists the measurement, else
+    from the measurement's ``noise.stddev``. A measurement with noise needs a seed.
 
     Args:
-        name: name of the measurement
-        options: its options
-        synthesis: the synthesis options
+        study: the study options, with measurements
 
     Returns:
-        the standard deviation from ``synthesis.noise`` if it lists the measurement, else the
-        measurement's ``noise.stddev``
-    """
-    if name in synthesis.noise:
-        return synthesis.noise[name].stddev
-
-    return options.noise.stddev
-
-
-def _seed(name: str, options: MeasurementOptions) -> int:
-    """Return the noise seed of a measurement, which synthesis requires.
-
-    Args:
-        name: name of the measurement
-        options: its options
-
-    Returns:
-        the noise seed
+        measurement name -> standard deviation and seed (None without noise)
 
     Raises:
-        StudyFileError: if the measurement has no noise seed
+        StudyFileError: if a measurement with noise has no noise seed
     """
-    if options.noise.seed is None:
-        raise StudyFileError(f"measurements.{name}: synthesis needs a noise 'seed'")
+    assert study.measurements is not None
+    noise = {}
+    for name, options in study.measurements.items():
+        synthesis = study.synthesis.noise.get(name)
+        stddev = options.noise.stddev if synthesis is None else synthesis.stddev
+        if stddev > 0 and options.noise.seed is None:
+            raise StudyFileError(f"measurements.{name}: synthesis needs a noise 'seed'")
+        noise[name] = (stddev, options.noise.seed if stddev > 0 else None)
 
-    return options.noise.seed
+    return noise
 
 
 def _tol(t: float) -> float:
