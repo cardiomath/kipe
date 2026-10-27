@@ -35,18 +35,17 @@ class ObservationOperator:
 
     @property
     def size(self) -> int:
-        """Number of entries of the predicted data, over all ranks.
-
-        The models act entry by entry, so the predicted data have the sampler's entries.
+        """Number of entries of the predicted data, over all ranks, as the model lays them out
+        (:meth:`~kipe.measurements.models.MeasurementModel.layout`).
         """
-        return self.sampler.size
+        return self.model.layout(self.sampler)[0]
 
     @property
     def global_indices(self) -> NDArray_i64:
-        """Positions of this rank's entries in the measurement's data, see
-        :attr:`kipe.sampling.SpatialSampler.global_indices`.
+        """Positions of this rank's entries in the measurement's data, as the model lays them
+        out (:meth:`~kipe.measurements.models.MeasurementModel.layout`).
         """
-        return self.sampler.global_indices
+        return self.model.layout(self.sampler)[1]
 
     def __call__(self, state: State) -> NDArray_f64:
         r"""Return the predicted data :math:`\hat{z} = \mathcal{H}(\chi)` of a model state.
