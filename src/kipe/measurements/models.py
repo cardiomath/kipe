@@ -4,15 +4,17 @@ A :class:`MeasurementModel` predicts the measured data from the sampled state,
 :math:`\hat{z} = M(y)`, and compares them with the measured data, giving the innovation
 :math:`\Gamma(z, \hat{z})`. Models act on arrays only, so they are the same for every backend.
 
-To add a model: subclass :class:`MeasurementModel`, implement both methods, add its options
-to :mod:`kipe.options` and a ``case`` to :func:`build_model`.
+To add a model: subclass :class:`MeasurementModel`, implement both methods (and
+:meth:`~MeasurementModel.layout` if the model combines entries), add its options to
+:mod:`kipe.options` and a ``case`` to :func:`build_model`.
 """
 
 from abc import ABC, abstractmethod
 from typing import assert_never
 
-from kipe._types import NDArray_f64
+from kipe._types import NDArray_f64, NDArray_i64
 from kipe.options import DifferenceModelOptions
+from kipe.sampling import SpatialSampler
 
 
 class MeasurementModel(ABC):
@@ -31,7 +33,8 @@ class MeasurementModel(ABC):
                 :meth:`kipe.sampling.SpatialSampler.sample`
 
         Returns:
-            predicted data :math:`\hat{z}`, in the measurement space
+            this rank's entries of the predicted data :math:`\hat{z}`, at the positions
+            :meth:`layout` gives
         """
 
     @abstractmethod
@@ -45,6 +48,25 @@ class MeasurementModel(ABC):
         Returns:
             innovation, before weighting with the measurement noise
         """
+
+    def layout(self, sampler: SpatialSampler) -> tuple[int, NDArray_i64]:
+        """Return the size of the predicted data, and the positions of this rank's entries.
+
+        By default those of the sampler: a model that acts entry by entry, like
+        :class:`DifferenceModel`, predicts one value per sampled entry, on the rank that holds
+        it. A model that combines entries has its own, e.g., a plane fitted to sampled
+        points: three values, held by the rank that holds all of the points. As for the
+        sampler, each entry is held by exactly one rank, and the positions do not depend on
+        the number of ranks.
+
+        Args:
+            sampler: the measurement's spatial sampler
+
+        Returns:
+            - the number of entries of the predicted data, over all ranks
+            - the positions of this rank's entries, in the order :meth:`predict` returns them
+        """
+        return sampler.size, sampler.global_indices
 
 
 class DifferenceModel(MeasurementModel):

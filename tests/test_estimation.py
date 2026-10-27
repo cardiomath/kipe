@@ -13,10 +13,10 @@ from ruamel.yaml import YAML
 
 from kipe._yaml import write_yaml
 from kipe.cli import main
-from kipe.estimation import Estimation
+from kipe.estimation import Estimation, estimate
 from kipe.examples.fitzhugh_nagumo import Solver
 from kipe.measurements.data import Measurement, read_numpy, write_numpy
-from kipe.measurements.models import DifferenceModel
+from kipe.measurements.models import DifferenceModel, MeasurementModel
 from kipe.measurements.operator import ObservationOperator
 from kipe.options import (
     EstimationOptions,
@@ -34,7 +34,8 @@ from kipe.options import (
     dump_study,
 )
 from kipe.parameters import build_parameterization
-from kipe.sampling import ArraySampler
+from kipe.sampling import ArraySampler, SpatialSampler
+from kipe.synthesis import synthesize
 
 TRUE = {"a": 0.2, "b": 0.2, "c": 3.0}  # nominal values of the solver: generate the data
 INITIAL = {"a": 0.3, "b": 0.3, "c": 2.0}  # deliberately wrong initial estimate
@@ -248,6 +249,48 @@ def test_estimation_from_python(tmp_path):
         output=tmp_path / "estimation",
     )
     assert estimation.run() == pytest.approx({"c": 3.0})
+
+
+class _SumModel(MeasurementModel):
+    """Measures the sum of the sampled entries: one value, on the rank that holds them all."""
+
+    def layout(self, sampler: SpatialSampler) -> tuple[int, np.ndarray]:
+        holds_all = len(sampler.global_indices) == sampler.size
+        return 1, np.arange(1 if holds_all else 0, dtype=np.int64)
+
+    def predict(self, y: np.ndarray) -> np.ndarray:
+        return np.array([y.sum()]) if y.size else np.empty(0)
+
+    def innovation(self, z_hat: np.ndarray, z: np.ndarray) -> np.ndarray:
+        return z - z_hat
+
+
+def test_model_with_its_own_layout(tmp_path, monkeypatch):
+    """A model that combines the sampled entries (here v and w into their sum) has data of its
+    own size: synthesis writes them, estimation reads them and compares them."""
+    monkeypatch.setattr("kipe.measurements.operator.build_model", lambda options: _SumModel())
+    options = _options(tmp_path, iterations=1)
+    study = replace(
+        options,
+        measurements={
+            "sum": MeasurementOptions(
+                fields=["v", "w"],
+                times=TIMES,
+                data=NumpyDataOptions(type="numpy", path=str(tmp_path / "sum.npz")),
+                noise=NoiseOptions(stddev=0.05, seed=0),
+            )
+        },
+    )
+
+    (measurement,) = synthesize(study)[0]
+    assert measurement.operator.sampler.size == 2  # v and w
+    assert measurement.operator.size == 1
+    times, values = read_numpy(tmp_path / "sum.npz")
+    assert values.shape == (len(times), 1)
+
+    estimated = estimate(study)
+    assert set(estimated) == {"a", "b", "c"}
+    assert _history(tmp_path)["parameters"].shape == (len(times) + 1, 3)
 
 
 def test_example_study(tmp_path, monkeypatch):
