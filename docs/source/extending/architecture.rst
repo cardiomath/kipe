@@ -129,7 +129,7 @@ returned by exactly one rank. The filter's reductions (sums over entries) are th
 
 **Data independent of the rank count.** Measurement data are stored in the order of the
 global indices, which the sampler defines independently of the partition (e.g.,
-:class:`~kipe.fenicsx.sampling.MeshSampler` uses the row of each vertex or cell in the mesh
+:class:`~kipe.fenicsx.sampling.mesh.MeshSampler` uses the row of each vertex or cell in the mesh
 file). Synthetic noise depends only on an entry's position. So data synthesized on 1 rank are
 the same as on 8, and either can be used with any number of ranks.
 
