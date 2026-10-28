@@ -1,5 +1,7 @@
 """The fenicsx.points sampler: values at points, the order of the data, errors."""
 
+from pathlib import Path
+
 import pytest
 
 pytest.importorskip("dolfinx")
@@ -10,17 +12,26 @@ import numpy as np
 from dolfinx import fem, mesh
 
 from kipe._types import NDArray_f64
+from kipe.estimation import estimate
 from kipe.fenicsx.examples.heat import Solver as Heat
 from kipe.fenicsx.sampling.points import PointSampler
 from kipe.measurements.operator import build_observation_operator
 from kipe.options import (
+    EstimationOptions,
+    ForwardSolverOptions,
     MeasurementOptions,
     NoiseOptions,
     NumpyDataOptions,
+    OutputOptions,
+    ParameterPrior,
+    ParametersOptions,
     PointSamplingOptions,
     StudyFileError,
+    StudyOptions,
+    TimeRange,
 )
 from kipe.sampling import SpatialSampler
+from kipe.synthesis import synthesize
 
 COMM = MPI.COMM_WORLD
 
@@ -104,3 +115,49 @@ def test_points_need_the_mesh_dimension():
     V = Heat(n=4).function_space("u")
     with pytest.raises(StudyFileError, match="each point needs 2 coordinates"):
         PointSampler("u", V, [[0.5, 0.5, 0.0]])
+
+
+def test_asynchronous_point_measurements(shared_tmp_path):
+    """Two points, each measured at its own times: on several ranks, at each step a rank holds
+    no entries of the measurement there. Each estimate is within three standard deviations of
+    the true value."""
+    true = {"kappa": 0.1, "a": 1.0}  # nominal values of the solver: generate the data
+
+    def point(name: str, x: list[float], times: TimeRange, seed: int) -> MeasurementOptions:
+        return MeasurementOptions(
+            fields=["u"],
+            times=times,
+            data=NumpyDataOptions(type="numpy", path=str(shared_tmp_path / f"{name}.npz")),
+            noise=NoiseOptions(stddev=1e-3, seed=seed),
+            spatial_sampling=PointSamplingOptions(type="fenicsx.points", points=[x]),
+        )
+
+    study = StudyOptions(
+        output=OutputOptions(path=str(shared_tmp_path / "results")),
+        forward_solver=ForwardSolverOptions(
+            factory="kipe.fenicsx.examples.heat:Solver", arguments={"n": 12, "dt": 0.01}
+        ),
+        parameters=ParametersOptions(
+            reparameterization="log",
+            priors={
+                "kappa": ParameterPrior(mean=0.12, relative_stddev=0.1),
+                "a": ParameterPrior(mean=0.8, relative_stddev=0.1),
+            },
+        ),
+        measurements={
+            "p": point("p", [0.25, 0.25], TimeRange(start=0.05, stop=0.5, step=0.1), 0),
+            "q": point("q", [0.75, 0.75], TimeRange(start=0.1, stop=0.5, step=0.1), 1),
+        },
+        estimation=EstimationOptions(iterations=3),
+    )
+    synthesize(study)
+    estimate(study)
+
+    COMM.barrier()  # rank 0 writes the history at the end
+    history = np.load(Path(study.output.path) / "estimation" / "history.npz")
+    assert len(history["time"]) == 3 * (1 + 10)  # each pass: the initial estimate, 5 + 5 times
+    last = history["iteration"] == history["iteration"][-1]
+    anchor = history["parameters"][last][0]  # the last pass is relative to its start
+    theta, P = history["theta"][-1], history["P_theta"][-1]
+    theta_true = np.log(np.array(list(true.values())) / anchor)  # log reparameterization
+    np.testing.assert_array_less(np.abs(theta - theta_true), 3 * np.sqrt(np.diag(P)))

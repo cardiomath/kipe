@@ -123,17 +123,21 @@ def test_one_step_equals_kalman_update_for_linear_observation(kind):
 
 
 @pytest.mark.parametrize("kind", KINDS)
-def test_several_steps_equal_sequential_kalman_filter(kind):
+@pytest.mark.parametrize(
+    "sizes", [(2, 2, 2, 2, 2), (2, 1, 3, 1, 2)], ids=["same sizes", "asynchronous"]
+)
+def test_several_steps_equal_sequential_kalman_filter(kind, sizes):
     """For z_k = H_k theta + noise, each of several ROUKF steps is the Kalman update.
 
     The posterior of one step is the prior of the next, for the ROUKF as for the Kalman
     filter. With fewer measured values per step than parameters, the information accumulates
-    over the steps and U^-1 becomes a full matrix. Parameters only, no state.
+    over the steps and U^-1 becomes a full matrix. The number of measured values may differ
+    from step to step, as with measurements at different times. Parameters only, no state.
     """
     rng = np.random.default_rng(3)
-    p, m, steps, noise = 3, 2, 5, 0.5  # parameters, measured values per step; noise stddev
-    H = [rng.normal(size=(m, p)) for _ in range(steps)]  # observation operator per step
-    z = [rng.normal(size=m) for _ in range(steps)]  # data per step
+    p, noise = 3, 0.5  # parameters; noise stddev
+    H = [rng.normal(size=(m, p)) for m in sizes]  # observation operator per step
+    z = [rng.normal(size=m) for m in sizes]  # data per step
     theta0 = rng.normal(size=p)
     stddev = np.array([0.5, 1.0, 2.0])
 
