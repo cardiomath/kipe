@@ -126,14 +126,12 @@ A finite element field, evaluated at given points, in their order:
       type: fenicsx.points
       points: [[0.25, 0.25], [0.5, 0.5], [0.75, 0.75]]
 
-Another sampler? :doc:`../extending/write_a_sampler` walks through this one, step by step.
-
-
 ``fenicsx.points_coordinates``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Coordinates of selection mesh vertices after applying the observed displacement field:
-``X + u(X)``. Select vertices belonging to tagged entities, such as two boundary surfaces:
+Returns the displaced coordinates ``X + u(X)`` of mesh vertices selected by facet tags.
+Use ``intersection`` (the default) for vertices shared by all listed tags, or ``union``
+for vertices belonging to any listed tag:
 
 .. code-block:: yaml
 
@@ -145,23 +143,13 @@ Coordinates of selection mesh vertices after applying the observed displacement 
       tags: [30, 10]
       operation: intersection
 
-``union`` selects vertices belonging to any listed tag; ``intersection`` (the default)
-selects vertices belonging to every listed tag. This is an intersection of vertex sets:
-different facets may share vertices without sharing a tag. Each tag must exist somewhere
-in the distributed mesh and the resulting selection must be nonempty.
+``mesh`` is the XDMF file containing the selection mesh and its facet tags. ``mesh_name``
+defaults to ``mesh`` and ``tags_name`` to ``Facet tags``. The mesh must use the solver's
+reference coordinate system and units, and the selected vertices must lie inside the solver's
+mesh. Each tag must exist and the selection must be nonempty.
 
-The sampler reads the selection mesh and its facet tags from the XDMF file once, at
-construction. ``mesh_name`` defaults to ``mesh`` and ``tags_name`` to ``Facet tags``.
-The solver only provides ``function_space(field)``; no access to its tags is required.
-The selection mesh must use the solver's reference coordinate system and units, and its
-selected vertices must lie in the solver's mesh. Their numbering and MPI partition may
-differ: the displacement is evaluated at their coordinates. The displacement must have one
-component per spatial dimension. Only topological vertices are sampled, even for higher-order
-geometry or displacement spaces; the displacement is evaluated at their reference positions.
-The reference mesh is not modified.
+The observed field must be a displacement vector. Coordinates are returned vertex by vertex
+as a flat array (``x0, y0, z0, x1, y1, z1, ...`` in 3D).
 
-Coordinates are flattened vertex by vertex (``x0, y0, z0, x1, y1, z1, ...`` in 3D),
-ordered by increasing original geometry input index. This order is independent of the MPI
-partition of the same input mesh. Tag selection and point searches happen at construction;
-selected reference points are replicated across ranks, as for ``fenicsx.points``.
-Each call returns only the entries assigned to the current rank.
+Another sampler? :doc:`../extending/write_a_sampler` walks through ``fenicsx.points``, step by
+step.
