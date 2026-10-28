@@ -36,23 +36,24 @@ prior of 10 %, i.e., :math:`\sigma_\theta = 0.1`, the log shows:
 
     sensitivity at the nominal parameters (step 0.01)
       parameter  nominal  prior σ_θ    CR σ_θ  CR 1σ range       with prior σ_θ
-      a              0.2        0.1   0.00366  [0.1993, 0.2007]         0.00365
-      b              0.2        0.1    0.0188  [0.1963, 0.2038]          0.0185
-      c                3        0.1  0.000452  [2.999, 3.001]          0.000451
+      a              0.2        0.1   0.00388  [0.1992, 0.2008]         0.00385
+      b              0.2        0.1    0.0226  [0.1955, 0.2046]           0.022
+      c                3        0.1  0.000487  [2.999, 3.001]          0.000484
+      (CR: from the data alone; with prior: the Bayesian bound, as the filter's σ_θ)
 
       Cramér-Rao correlations
                a      b      c
-        a   1.00  -0.42  -0.52
-        b  -0.42   1.00  -0.43
-        c  -0.52  -0.43   1.00
+        a   1.00  -0.50  -0.37
+        b  -0.50   1.00  -0.52
+        c  -0.37  -0.52   1.00
 
       singular values of the weighted sensitivities (header), and the magnitudes
       of their right singular vectors: the parameters of each combination
-           4.78e+03   300  52.9
-        a      0.11  0.99  0.08
-        b      0.02  0.08  1.00
+           4.63e+03   297  44.1
+        a      0.11  0.99  0.09
+        b      0.02  0.09  1.00
         c      0.99  0.11  0.01
-      condition number  90.4
+      condition number  105
 
 - **CR σ_θ** is the Cramér–Rao bound of the estimate's standard deviation from the data alone,
   and **CR 1σ range** the corresponding physical range. **With prior σ_θ** is the Bayesian bound,
