@@ -7,6 +7,7 @@ measurement's positions, so that they do not depend on the number of ranks.
 """
 
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -56,6 +57,60 @@ def measurement_times(times: list[float] | TimeRange) -> NDArray_f64:
         n = math.floor((times.stop - times.start) / times.step + 1e-9)
         return times.start + times.step * np.arange(n + 1, dtype=np.float64)
     return np.array(times, dtype=np.float64)
+
+
+def measurement_schedule(
+    times: Mapping[str, NDArray_f64],
+) -> list[tuple[float, list[tuple[str, int]]]]:
+    """Return the times of all measurements in order, each with the measurements at it.
+
+    Times of different measurements that are the same up to round-off
+    (:func:`time_tolerance`) are one time, the earliest of them. At each time, the
+    measurements are in the order of ``times``.
+
+    Args:
+        times: the times of each measurement, by name
+
+    Returns:
+        for each time, in increasing order: the time, and the measurements at it, each as its
+        name and the index of the time in its times
+
+    Raises:
+        StudyFileError: if a measurement has two times that are the same up to round-off
+    """
+    order = {name: i for i, name in enumerate(times)}
+    events = sorted(
+        (float(t), order[name], name, k) for name, ts in times.items() for k, t in enumerate(ts)
+    )
+
+    schedule: list[tuple[float, list[tuple[str, int]]]] = []
+    for t, _, name, k in events:
+        if schedule and t - schedule[-1][0] <= time_tolerance(schedule[-1][0]):
+            measured = schedule[-1][1]
+            if any(other == name for other, _ in measured):
+                raise StudyFileError(
+                    f"measurements.{name}: times {schedule[-1][0]} and {t} are the same up to "
+                    "round-off"
+                )
+            measured.append((name, k))
+        else:
+            schedule.append((t, [(name, k)]))
+
+    for _, measured in schedule:  # times within round-off of each other may be in any order
+        measured.sort(key=lambda event: order[event[0]])
+    return schedule
+
+
+def time_tolerance(t: float) -> float:
+    """Return the tolerance below which two times are the same, relative to their size.
+
+    Args:
+        t: time
+
+    Returns:
+        tolerance
+    """
+    return 1e-12 * max(1.0, abs(t))
 
 
 def read_numpy(path: str | Path) -> tuple[NDArray_f64, NDArray_f64]:

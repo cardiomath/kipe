@@ -24,7 +24,7 @@ ranks. Rank 0 writes the files.
 
 import logging
 import time
-from collections.abc import Iterator, Mapping
+from collections.abc import Mapping
 from pathlib import Path
 from typing import assert_never
 
@@ -37,11 +37,17 @@ from kipe._types import NDArray_f64
 from kipe.forward_solver import (
     ForwardSolver,
     Parameters,
-    State,
     SupportsCheckpoints,
     build_forward_solver,
 )
-from kipe.measurements.data import Measurement, measurement_times, read_data, write_data
+from kipe.measurements.data import (
+    Measurement,
+    measurement_schedule,
+    measurement_times,
+    read_data,
+    time_tolerance,
+    write_data,
+)
 from kipe.measurements.operator import ObservationOperator, build_observation_operator
 from kipe.options import (
     CheckpointsTruthOptions,
@@ -345,17 +351,19 @@ def observe_run(
     values: dict[str, list[NDArray_f64]] = {name: [] for name in times}
 
     t, state = solver.initial_state()
-    for t_k, name, _ in _events(times):
-        if t_k < t - _tol(t):
+    for t_k, measured in measurement_schedule(times):
+        if t_k < t - time_tolerance(t):
+            name = measured[0][0]
             raise StudyFileError(f"measurements.{name}: time {t_k} is before the start {t}")
-        elif t_k > t + _tol(t):
+        elif t_k > t + time_tolerance(t):
             state = solver.propagate(t, t_k, state, dict(parameters or {}))
             t = t_k
         else:
-            # same time (up to round-off): sample the current state, no solver call
+            # the start time (up to round-off): sample the initial state, no solver call
             pass
 
-        values[name].append(operators[name](state))
+        for name, _ in measured:
+            values[name].append(operators[name](state))
 
     return {name: np.array(v) for name, v in values.items()}
 
@@ -392,39 +400,22 @@ def observe_checkpoints(
 
     values: dict[str, list[NDArray_f64]] = {name: [] for name in times}
 
-    t: float | None = None
-    state: State = {}
-    for t_k, name, _ in _events(times):
-        if t is None or abs(t_k - t) > _tol(t):  # a new time: read its checkpoint
-            try:
-                state = solver.read_checkpoint(path, t_k)
-            except ValueError as err:
-                raise StudyFileError(f"measurements.{name}: {err}") from err
-            t = t_k
+    for t, measured in measurement_schedule(times):
+        try:
+            state = solver.read_checkpoint(path, t)
+        except ValueError as err:
+            raise StudyFileError(f"measurements.{measured[0][0]}: {err}") from err
 
-        missing = [f for f in operators[name].fields if f not in state]
-        if missing:
-            raise StudyFileError(
-                f"measurements.{name}: the checkpoint at t = {t_k:g} has no field "
-                f"{', '.join(missing)}"
-            )
-        values[name].append(operators[name](state))
+        for name, _ in measured:
+            missing = [f for f in operators[name].fields if f not in state]
+            if missing:
+                raise StudyFileError(
+                    f"measurements.{name}: the checkpoint at t = {t:g} has no field "
+                    f"{', '.join(missing)}"
+                )
+            values[name].append(operators[name](state))
 
     return {name: np.array(v) for name, v in values.items()}
-
-
-def _events(times: Mapping[str, NDArray_f64]) -> Iterator[tuple[float, str, int]]:
-    """Return the measurement events in the order they occur.
-
-    Args:
-        times: the times of each measurement
-
-    Returns:
-        the events (time, measurement name, index of the time in the measurement's times),
-        sorted by time
-    """
-    events = [(float(t), name, k) for name, ts in times.items() for k, t in enumerate(ts)]
-    return iter(sorted(events, key=lambda event: event[0]))
 
 
 def _add_noise(
@@ -507,15 +498,3 @@ def _noise(study: StudyOptions) -> dict[str, tuple[float, int | None]]:
         noise[name] = (stddev, options.noise.seed if stddev > 0 else None)
 
     return noise
-
-
-def _tol(t: float) -> float:
-    """Return the tolerance below which two times are the same.
-
-    Args:
-        t: time
-
-    Returns:
-        tolerance
-    """
-    return 1e-12 * max(1.0, abs(t))
