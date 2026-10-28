@@ -7,7 +7,12 @@ import numpy as np
 import pytest
 
 from kipe.examples.fitzhugh_nagumo import FieldSpec, Solver
-from kipe.measurements.data import measurement_times, read_numpy, write_numpy
+from kipe.measurements.data import (
+    measurement_schedule,
+    measurement_times,
+    read_numpy,
+    write_numpy,
+)
 from kipe.measurements.models import DifferenceModel, MeasurementModel, build_model
 from kipe.measurements.operator import build_observation_operator
 from kipe.options import (
@@ -89,6 +94,28 @@ def test_incomplete_sampler_cannot_be_instantiated():
 )
 def test_measurement_times(times, expected):
     np.testing.assert_allclose(measurement_times(times), expected)
+
+
+def test_measurement_schedule():
+    """All times in order, each with the measurements at it and the index of the time."""
+    times = {"v": np.array([0.5, 1.0, 1.5]), "w": np.array([1.0, 0.75])}
+    assert measurement_schedule(times) == [
+        (0.5, [("v", 0)]),
+        (0.75, [("w", 1)]),
+        (1.0, [("v", 1), ("w", 0)]),
+        (1.5, [("v", 2)]),
+    ]
+
+
+def test_measurement_schedule_merges_round_off():
+    """Times the same up to round-off are one, the earliest; measurements keep their order."""
+    times = {"v": np.array([0.1 + 0.2]), "w": np.array([0.3])}  # 0.30000000000000004
+    assert measurement_schedule(times) == [(0.3, [("v", 0), ("w", 0)])]
+
+
+def test_measurement_schedule_rejects_a_time_twice():
+    with pytest.raises(StudyFileError, match="same up to round-off"):
+        measurement_schedule({"v": np.array([0.3, 0.1 + 0.2])})
 
 
 def test_numpy_round_trip(tmp_path):

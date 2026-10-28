@@ -2,8 +2,10 @@
 
 :class:`Estimation` runs the reduced-order unscented Kalman filter (:mod:`kipe.roukf`) over a
 set of measurements: at each measurement time, the sigma points are propagated with the
-forward solver, compared with the data through the observation operators, and the estimate is
-corrected. Outer iterations repeat the pass, starting from the previous estimate.
+forward solver, compared with the data of the measurements at that time through their
+observation operators, and the estimate is corrected. The measurements may have different
+times; the filter steps through all of them in order. Outer iterations repeat the pass,
+starting from the previous estimate.
 :func:`estimate` builds all of this from a study file.
 
 The estimation history is written to ``<output.path>/estimation/``: ``history.csv`` (one row
@@ -42,7 +44,13 @@ from kipe.forward_solver import (
     State,
     build_forward_solver,
 )
-from kipe.measurements.data import Measurement, measurement_times, read_numpy
+from kipe.measurements.data import (
+    Measurement,
+    measurement_schedule,
+    measurement_times,
+    read_data,
+    time_tolerance,
+)
 from kipe.measurements.operator import build_observation_operator
 from kipe.options import (
     EstimationOptions,
@@ -65,7 +73,8 @@ class Estimation:
     Args:
         solver: the forward solver
         parameterization: the estimated parameters, with their initial estimate and uncertainty
-        measurements: the measurements; they must share their times
+        measurements: the measurements, with distinct names; each at its own times, those at
+            the same time (up to round-off) are assimilated together
         options: number of outer iterations and sigma-point stencil
         output: directory for the estimation history
         comm: communicator over which the model state is distributed
@@ -73,7 +82,8 @@ class Estimation:
             interrupted run of the same estimation, which this one continues
 
     Raises:
-        StudyFileError: if the measurements have different times
+        ValueError: if two measurements have the same name
+        StudyFileError: if a measurement has two times that are the same up to round-off
     """
 
     def __init__(
@@ -94,13 +104,21 @@ class Estimation:
         self._output = output
         self._comm = comm
 
-        self._times = _common_times(measurements)
+        self._measurements_by_name = {m.name: m for m in measurements}
+        if len(self._measurements_by_name) < len(measurements):
+            raise ValueError("the measurements must have distinct names")
+        self._schedule = measurement_schedule({m.name: m.times for m in measurements})
         self._layout = _StateLayout(solver.state_spec)
         self._stencil = roukf.sigma_point_stencil(
             options.sigma_points, len(parameterization.names)
         )
         self._history = History(output, parameterization.names, comm, completed_steps)
         self._completed_iterations = count_iterations(completed_steps)
+
+    @property
+    def times(self) -> list[float]:
+        """The assimilation times: the times of all measurements, in order."""
+        return [t for t, _ in self._schedule]
 
     def run(self) -> Parameters:
         """Run the outer iterations, each a pass of the filter over all measurements.
@@ -165,6 +183,7 @@ class Estimation:
         n_points = self._stencil.points.shape[1]
         logger.info("    %-14s%s (%d sigma points)", "stencil", self._sigma_points, n_points)
         logger.info("    %-14s%d", "iterations", self._iterations)
+        logger.info("    %-14s%d", "steps", len(self._schedule))
         logger.info("    %-14s%d", "MPI ranks", self._comm.size)
         logger.info("")
 
@@ -205,9 +224,9 @@ class Estimation:
             StudyFileError: if the first measurement time is not after the solver's start time
         """
         t, solver_state = self._solver.initial_state()
-        if self._times[0] <= t + 1e-12 * max(1.0, abs(t)):
+        if self.times[0] <= t + time_tolerance(t):
             raise StudyFileError(
-                f"measurement time {self._times[0]} is not after the solver's start time {t}"
+                f"measurement time {self.times[0]} is not after the solver's start time {t}"
             )
 
         filter_state = roukf.initial_state(
@@ -219,7 +238,7 @@ class Estimation:
         self._history.record(iteration, t, filter_state, parameterization)
         logger.info("%s", _table_header(parameterization.names))
 
-        for k, t_next in enumerate(self._times):
+        for k, t_next in enumerate(self.times):
             # 1. sampling
             x_sigma, theta_sigma = roukf.sample(filter_state, self._stencil)
 
@@ -257,14 +276,14 @@ class Estimation:
             x_sigma: the sigma-point states at ``t``, one per column, shape ``(n, r)``
             theta_sigma: the sigma-point parameters, one per column, shape ``(p, r)``
             parameterization: maps the parameters to physical values for the solver
-            k: index of the next measurement time
+            k: index of the next assimilation step
 
         Returns:
             - the propagated sigma-point states, one per column, shape ``(n, r)``
             - their innovations, weighted with the noise, shape ``(m, r)``
         """
         x_propagated = np.empty_like(x_sigma)
-        Gamma = np.empty((self._innovation_size(), x_sigma.shape[1]))
+        Gamma = np.empty((self._innovation_size(k), x_sigma.shape[1]))
 
         r = x_sigma.shape[1]
         for i in range(r):
@@ -293,19 +312,20 @@ class Estimation:
         return x_propagated, Gamma
 
     def _innovation(self, state: State, k: int) -> NDArray_f64:
-        """Return the innovations of all measurements at the k-th time, weighted with the noise.
+        """Return the innovations of the measurements of the k-th step, weighted with the noise.
 
         Args:
             state: the propagated state of one sigma point
-            k: index of the assimilation time
+            k: index of the assimilation step
 
         Returns:
             the innovations, concatenated in the order of the measurements
         """
         blocks = []
-        for measurement in self._measurements:
+        for name, row in self._schedule[k][1]:
+            measurement = self._measurements_by_name[name]
             z_hat = measurement.operator(state)
-            z = measurement.values[k]
+            z = measurement.values[row]
             innovation = measurement.operator.model.innovation(z_hat, z)
             blocks.append(innovation / measurement.stddev)
 
@@ -329,13 +349,17 @@ class Estimation:
 
         return float(np.sqrt(local[0] / local[1]))
 
-    def _innovation_size(self) -> int:
-        """Return the number of innovation entries of all measurements at one time.
+    def _innovation_size(self, k: int) -> int:
+        """Return the number of innovation entries of the measurements of the k-th step.
+
+        Args:
+            k: index of the assimilation step
 
         Returns:
-            the number of entries
+            the number of this rank's entries
         """
-        return sum(measurement.values.shape[1] for measurement in self._measurements)
+        measurements = self._measurements_by_name
+        return sum(measurements[name].values.shape[1] for name, _ in self._schedule[k][1])
 
 
 def estimate(
@@ -396,7 +420,7 @@ def estimate(
         solver, parameterization, measurements, study.estimation, output, comm, completed_steps
     )
 
-    run: dict[str, Any] = {"assimilation_times": _common_times(measurements).tolist()}
+    run: dict[str, Any] = {"assimilation_times": estimation.times}
     if study.synthesis.realizations > 1:
         run["realization"] = realization
     run["data"] = data
@@ -464,7 +488,8 @@ def _build_measurements(
 ) -> list[Measurement]:
     """Read the data of the study's measurements and build their observation operators.
 
-    Every rank reads the whole data and keeps the entries it holds (``global_indices``).
+    Every rank reads the whole data and keeps the entries it holds (``global_indices``), see
+    :func:`~kipe.measurements.data.read_data`.
 
     Args:
         study: the study options
@@ -486,68 +511,11 @@ def _build_measurements(
     measurements = []
     for name, options in study.measurements.items():
         operator = build_observation_operator(name, options, solver, comm)
-        times, values = read_numpy(data_path(options, realization))
-
-        if values.shape[1] != operator.size:
-            raise StudyFileError(
-                f"measurements.{name}: the data have {values.shape[1]} values per time, the "
-                f"measurement has {operator.size}"
-            )
-        values = values[:, operator.global_indices]
-
-        if options.times is not None:
-            indices = [_index_of(t, times, name) for t in measurement_times(options.times)]
-            times, values = times[indices], values[indices]
-
+        selected = None if options.times is None else measurement_times(options.times)
+        times, values = read_data(name, data_path(options, realization), operator, selected)
         measurements.append(Measurement(name, operator, times, values, options.noise.stddev))
 
     return measurements
-
-
-def _index_of(t: float, times: NDArray_f64, name: str) -> int:
-    """Return the index of time ``t`` in the data's times.
-
-    Args:
-        t: selected time
-        times: the times in the data
-        name: name of the measurement, for the error message
-
-    Returns:
-        the index
-
-    Raises:
-        StudyFileError: if ``t`` is not in the data
-    """
-    matches = np.flatnonzero(np.isclose(times, t, rtol=0, atol=1e-12 * max(1.0, abs(t))))
-    if len(matches) == 0:
-        raise StudyFileError(f"measurements.{name}: time {t} is not in the data")
-
-    return int(matches[0])
-
-
-def _common_times(measurements: list[Measurement]) -> NDArray_f64:
-    """Return the assimilation times, which all measurements must share.
-
-    Args:
-        measurements: the measurements
-
-    Returns:
-        the times
-
-    Raises:
-        StudyFileError: if the measurements have different times
-    """
-    times = measurements[0].times
-    for measurement in measurements[1:]:
-        if len(measurement.times) != len(times) or not np.allclose(
-            measurement.times, times, rtol=0, atol=1e-12 * max(1.0, np.abs(times).max())
-        ):
-            raise StudyFileError(
-                f"measurements {measurements[0].name} and {measurement.name} have different "
-                "times; for now, all measurements must share their times"
-            )
-
-    return times
 
 
 class _StateLayout:

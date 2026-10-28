@@ -390,8 +390,30 @@ class CheckpointsTruthOptions:
     the run)."""
 
 
+@dataclass(frozen=True, config=_CONFIG)
+class DataTruthOptions:
+    """Generate the data from given true data, read from files, with noise added.
+
+    E.g., the noise-free data of an earlier synthesis (in ``<output.path>/synthesis/
+    noise_free/``), for other noise levels, seeds or realizations without running the solver
+    again; or measured data, to test the estimation with more noise. A measurement's ``times``
+    select from the file's times; without ``times``, all of them are used. The forward solver is
+    built, for the layout of the measurements, but not run.
+    """
+
+    type: Literal["data"]
+    """Source of the true state."""
+
+    path: str
+    """Path to the true data of each measurement, an ``.npz`` file in the format of the data
+    files, with the placeholder ``{measurement}`` for the measurement's name, e.g.,
+    ``"results/synthesis/noise_free/{measurement}.npz"``. In quotes, since YAML reads braces as
+    a mapping. Without the placeholder, all measurements read the same file, so a study with
+    several measurements needs it."""
+
+
 type TruthOptions = Annotated[
-    RunTruthOptions | CheckpointsTruthOptions, Field(discriminator="type")
+    RunTruthOptions | CheckpointsTruthOptions | DataTruthOptions, Field(discriminator="type")
 ]
 
 
@@ -408,8 +430,9 @@ class SynthesisOptions:
     """Generation of synthetic measurement data."""
 
     truth: TruthOptions = field(default_factory=RunTruthOptions)
-    """Source of the true state the data are generated from: a run of the forward solver, or
-    its checkpoints."""
+    """Source of the true state the data are generated from: a run of the forward solver, its
+    checkpoints, or given data. From a run or checkpoints, synthesis also writes the noise-free
+    data, to ``<output.path>/synthesis/noise_free/<measurement>.npz``."""
 
     noise: Annotated[
         dict[str, SynthesisNoiseOptions],
@@ -501,12 +524,12 @@ class StudyOptions:
     """Sensitivity analysis with the Fisher information (``kipe sensitivity``)."""
 
     def __post_init__(self) -> None:
-        """Check the synthesis noise's measurement names and that measurements do not share a
-        noise seed.
+        """Check the synthesis noise's measurement names, that measurements do not share a
+        noise seed, and the placeholders of the data paths and of the true data's path.
 
         Raises:
-            ValueError: if the synthesis noise names a measurement the study does not have, or
-                two measurements have the same noise seed
+            ValueError: if the synthesis noise names a measurement the study does not have, two
+                measurements have the same noise seed, or a path's placeholders do not fit
         """
         unknown = sorted(self.synthesis.noise.keys() - (self.measurements or {}).keys())
         if unknown:
@@ -526,6 +549,9 @@ class StudyOptions:
 
         for name, measurement in (self.measurements or {}).items():
             _check_data_path(name, measurement.data.path, self.synthesis.realizations)
+
+        if isinstance(self.synthesis.truth, DataTruthOptions):
+            _check_truth_path(self.synthesis.truth.path, len(self.measurements or {}))
 
 
 def _check_data_path(name: str, path: str, realizations: int) -> None:
@@ -557,6 +583,45 @@ def _check_data_path(name: str, path: str, realizations: int) -> None:
         path.format(realization=0)
     except ValueError as err:  # e.g., {realization:x2}
         raise ValueError(f"{prefix}: {err}") from err
+
+
+def _check_truth_path(path: str, measurements: int) -> None:
+    """Check the placeholder of the path to the true data, ``synthesis.truth: {type: data}``.
+
+    Args:
+        path: the path
+        measurements: number of measurements of the study
+
+    Raises:
+        ValueError: if the path has a placeholder other than ``{measurement}``, or lacks it
+            although the study has several measurements
+    """
+    prefix = f"synthesis.truth.path: {path!r}"
+    try:
+        placeholders = {p for _, p, _, _ in string.Formatter().parse(path) if p is not None}
+    except ValueError as err:  # e.g., a single brace
+        raise ValueError(f"{prefix}: {err}") from err
+
+    if placeholders - {"measurement"}:
+        raise ValueError(f"{prefix}: the only placeholder is {{measurement}}")
+    if measurements > 1 and not placeholders:
+        raise ValueError(
+            f"{prefix} needs the placeholder {{measurement}}: with {measurements} "
+            "measurements, each needs its own file"
+        )
+
+
+def truth_path(truth: DataTruthOptions, measurement: str) -> str:
+    """Return the path to the true data of a measurement, ``synthesis.truth: {type: data}``.
+
+    Args:
+        truth: the truth options
+        measurement: name of the measurement
+
+    Returns:
+        ``truth.path``, with ``{measurement}`` replaced
+    """
+    return truth.path.format(measurement=measurement)
 
 
 def data_path(measurement: MeasurementOptions, realization: int = 0) -> str:

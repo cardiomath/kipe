@@ -40,6 +40,29 @@
       "title": "CheckpointsTruthOptions",
       "type": "object"
     },
+    "DataTruthOptions": {
+      "additionalProperties": false,
+      "description": "Generate the data from given true data, read from files, with noise added.\n\nE.g., the noise-free data of an earlier synthesis (in ``<output.path>/synthesis/\nnoise_free/``), for other noise levels, seeds or realizations without running the solver\nagain; or measured data, to test the estimation with more noise. A measurement's ``times``\nselect from the file's times; without ``times``, all of them are used. The forward solver is\nbuilt, for the layout of the measurements, but not run.",
+      "properties": {
+        "type": {
+          "const": "data",
+          "description": "Source of the true state.",
+          "title": "Type",
+          "type": "string"
+        },
+        "path": {
+          "description": "Path to the true data of each measurement, an ``.npz`` file in the format of the data\nfiles, with the placeholder ``{measurement}`` for the measurement's name, e.g.,\n``\"results/synthesis/noise_free/{measurement}.npz\"``. In quotes, since YAML reads braces as\na mapping. Without the placeholder, all measurements read the same file, so a study with\nseveral measurements needs it.",
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "path"
+      ],
+      "title": "DataTruthOptions",
+      "type": "object"
+    },
     "DifferenceModelOptions": {
       "additionalProperties": false,
       "description": "Measured data are the sampled fields; innovation = measured - predicted.",
@@ -565,7 +588,7 @@
       "properties": {
         "truth": {
           "$ref": "#/$defs/TruthOptions",
-          "description": "Source of the true state the data are generated from: a run of the forward solver, or\nits checkpoints."
+          "description": "Source of the true state the data are generated from: a run of the forward solver, its\ncheckpoints, or given data. From a run or checkpoints, synthesis also writes the noise-free\ndata, to ``<output.path>/synthesis/noise_free/<measurement>.npz``."
         },
         "noise": {
           "additionalProperties": {
@@ -620,6 +643,7 @@
       "discriminator": {
         "mapping": {
           "checkpoints": "#/$defs/CheckpointsTruthOptions",
+          "data": "#/$defs/DataTruthOptions",
           "run": "#/$defs/RunTruthOptions"
         },
         "propertyName": "type"
@@ -630,6 +654,9 @@
         },
         {
           "$ref": "#/$defs/CheckpointsTruthOptions"
+        },
+        {
+          "$ref": "#/$defs/DataTruthOptions"
         }
       ]
     }

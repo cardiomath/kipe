@@ -40,8 +40,13 @@ Times
 -----
 
 ``times`` is a list, e.g., ``[0.1, 0.2, 0.5]``, or a range, ``{start: 0.05, stop: 0.5, step:
-0.05}``. For now, all measurements of a study must have the same times. They must lie after the
-forward solver's start time, on its time grid if it has a fixed time step.
+0.05}``. They must lie after the forward solver's start time, on its time grid if it has a
+constant time step.
+
+Each measurement has its own times, e.g., a pressure every 0.01 s and an image every 0.05 s.
+The estimation steps through the times of all measurements in order; at each, it assimilates
+the measurements taken then, together. Times of different measurements that agree up to
+round-off are the same time.
 
 Data
 ----
