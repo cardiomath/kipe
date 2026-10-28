@@ -127,13 +127,16 @@ Another sampler? :doc:`../extending/write_a_sampler` walks through this one, ste
 ``fenicsx.points_coordinates``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Coordinates of model mesh vertices after applying the observed displacement field:
+Coordinates of selection mesh vertices after applying the observed displacement field:
 ``X + u(X)``. Select vertices belonging to tagged entities, such as two boundary surfaces:
 
 .. code-block:: yaml
 
     spatial_sampling:
       type: fenicsx.points_coordinates
+      mesh: data/solid.xdmf
+      mesh_name: mesh
+      tags_name: Facet tags
       tags: [30, 10]
       operation: intersection
 
@@ -142,9 +145,12 @@ selects vertices belonging to every listed tag. This is an intersection of verte
 different facets may share vertices without sharing a tag. Each tag must exist somewhere
 in the distributed mesh and the resulting selection must be nonempty.
 
-The solver provides ``function_space(field)`` and ``mesh_tags(field)`` returning a
-``dolfinx.mesh.MeshTags`` on that space's mesh
-(:class:`kipe.fenicsx.forward_solver.SupportsMeshTags`). The displacement must have one
+The sampler reads the selection mesh and its facet tags from the XDMF file once, at
+construction. ``mesh_name`` defaults to ``mesh`` and ``tags_name`` to ``Facet tags``.
+The solver only provides ``function_space(field)``; no access to its tags is required.
+The selection mesh must use the solver's reference coordinate system and units, and its
+selected vertices must lie in the solver's mesh. Their numbering and MPI partition may
+differ: the displacement is evaluated at their coordinates. The displacement must have one
 component per spatial dimension. Only topological vertices are sampled, even for higher-order
 geometry or displacement spaces; the displacement is evaluated at their reference positions.
 The reference mesh is not modified.

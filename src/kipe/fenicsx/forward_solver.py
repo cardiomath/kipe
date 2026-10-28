@@ -11,23 +11,6 @@ from typing import Protocol, runtime_checkable
 
 import basix.ufl
 from dolfinx import fem
-from dolfinx.mesh import MeshTags
-
-
-@runtime_checkable
-class SupportsMeshTags(Protocol):
-    """A solver that provides tags for selecting vertices of a state field's mesh."""
-
-    def mesh_tags(self, field: str) -> MeshTags:
-        """Return tags on the mesh of ``function_space(field)``.
-
-        Args:
-            field: name of the state field
-
-        Returns:
-            tags of mesh entities, e.g., facet tags defining boundary surfaces
-        """
-        ...
 
 
 @runtime_checkable

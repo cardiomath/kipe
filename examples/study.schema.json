@@ -388,7 +388,7 @@
     },
     "PointCoordinatesSamplingOptions": {
       "additionalProperties": false,
-      "description": "Return displaced mesh vertices selected by tags (FEniCSx backend).\n\nThe observed field is a displacement vector with one component per spatial dimension.\nThe solver provides its function space and ``mesh_tags(field)``. Selection operates on\nthe vertices belonging to each tag, ordered by their original geometry input indices.",
+      "description": "Return displaced mesh vertices selected by tags (FEniCSx backend).\n\nThe observed field is a displacement vector with one component per spatial dimension.\nThe solver provides its function space. Selection uses the mesh and facet tags read from\nan XDMF file, ordered by the vertices' original geometry input indices.",
       "properties": {
         "type": {
           "const": "fenicsx.points_coordinates",
@@ -405,6 +405,23 @@
           "title": "Tags",
           "type": "array"
         },
+        "mesh": {
+          "description": "XDMF file containing the selection mesh and its facet tags, in reference coordinates.",
+          "title": "Mesh",
+          "type": "string"
+        },
+        "mesh_name": {
+          "default": "mesh",
+          "description": "Name of the mesh in the XDMF file.",
+          "title": "Mesh Name",
+          "type": "string"
+        },
+        "tags_name": {
+          "default": "Facet tags",
+          "description": "Name of the facet tags in the XDMF file.",
+          "title": "Tags Name",
+          "type": "string"
+        },
         "operation": {
           "default": "intersection",
           "description": "Combine the vertex sets of the tags, rather than the tagged entities themselves.",
@@ -418,7 +435,8 @@
       },
       "required": [
         "type",
-        "tags"
+        "tags",
+        "mesh"
       ],
       "title": "PointCoordinatesSamplingOptions",
       "type": "object"

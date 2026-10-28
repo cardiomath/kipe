@@ -13,11 +13,10 @@ from typing import Literal
 from mpi4py import MPI
 
 import numpy as np
-from dolfinx import fem
-from dolfinx.mesh import MeshTags, entities_to_geometry
+from dolfinx import fem, io
+from dolfinx.mesh import entities_to_geometry
 
 from kipe._types import NDArray_f64
-from kipe.fenicsx.forward_solver import SupportsMeshTags
 from kipe.fenicsx.sampling.common import observed_function_space
 from kipe.fenicsx.sampling.points import PointSampler
 from kipe.forward_solver import ForwardSolver
@@ -34,10 +33,12 @@ class PointCoordinatesSampler(PointSampler):
     Args:
         field: name of the displacement field
         source: displacement function space on the reference mesh
-        mesh_tags: tags on that same mesh, e.g., facet tags
+        mesh: XDMF file containing the selection mesh and its facet tags
         tags: nonempty list of tag IDs
         operation: union or intersection of the tags' vertex sets; intersection by default
         comm: communicator of the mesh and run
+        mesh_name: name of the mesh in the XDMF file
+        tags_name: name of the facet tags in the XDMF file
 
     Raises:
         StudyFileError: if the field is not a displacement vector, a tag is absent globally,
@@ -48,13 +49,14 @@ class PointCoordinatesSampler(PointSampler):
         self,
         field: str,
         source: fem.FunctionSpace,
-        mesh_tags: MeshTags,
+        mesh: str,
         tags: list[int],
         operation: Literal["union", "intersection"] = "intersection",
         comm: MPI.Comm = MPI.COMM_WORLD,
+        mesh_name: str = "mesh",
+        tags_name: str = "Facet tags",
     ) -> None:
-        mesh = source.mesh
-        gdim = mesh.geometry.dim
+        gdim = source.mesh.geometry.dim
         if source.value_shape != (gdim,):
             raise StudyFileError(
                 f"fenicsx.points_coordinates needs a displacement vector with {gdim} components"
@@ -63,12 +65,29 @@ class PointCoordinatesSampler(PointSampler):
             raise StudyFileError(
                 "fenicsx.points_coordinates needs tags and operation union or intersection"
             )
+        try:
+            with io.XDMFFile(comm, mesh, "r") as file:
+                selection_mesh = file.read_mesh(name=mesh_name)
+                tdim = selection_mesh.topology.dim
+                selection_mesh.topology.create_connectivity(tdim - 1, tdim)
+                mesh_tags = file.read_meshtags(selection_mesh, name=tags_name)
+        except (RuntimeError, OSError) as err:
+            raise StudyFileError(
+                f"fenicsx.points_coordinates: cannot read mesh {mesh_name!r} and facet tags "
+                f"{tags_name!r} from {mesh}: {err}"
+            ) from err
+        if selection_mesh.geometry.dim != gdim:
+            raise StudyFileError(
+                "fenicsx.points_coordinates: selection mesh and displacement must have "
+                "the same geometric dimension"
+            )
         dim = mesh_tags.dim
-        if not 0 <= dim <= mesh.topology.dim:
-            raise StudyFileError("fenicsx.points_coordinates: invalid tag dimension")
+        if dim != tdim - 1:
+            raise StudyFileError("fenicsx.points_coordinates needs facet tags")
+        selection_mesh.topology.create_connectivity(0, tdim)
         if dim:
-            mesh.topology.create_connectivity(dim, 0)
-            connectivity = mesh.topology.connectivity(dim, 0)
+            selection_mesh.topology.create_connectivity(dim, 0)
+            connectivity = selection_mesh.topology.connectivity(dim, 0)
 
         vertex_sets = []
         coordinates: dict[int, list[float]] = {}
@@ -80,12 +99,12 @@ class PointCoordinatesSampler(PointSampler):
                 else entities
             )
             geometry_nodes = (
-                entities_to_geometry(mesh, 0, vertices.astype(np.int32), False).ravel()
+                entities_to_geometry(selection_mesh, 0, vertices.astype(np.int32), False).ravel()
                 if len(vertices)
                 else np.empty(0, dtype=np.int32)
             )
-            ids = mesh.geometry.input_global_indices[geometry_nodes]
-            x = mesh.geometry.x[geometry_nodes, :gdim]
+            ids = selection_mesh.geometry.input_global_indices[geometry_nodes]
+            x = selection_mesh.geometry.x[geometry_nodes, :gdim]
             parts = comm.allgather((ids, x))
             global_ids = np.unique(np.concatenate([part[0] for part in parts]))
             if not len(global_ids):
@@ -128,7 +147,7 @@ def build_point_coordinates_sampler(
     Args:
         options: spatial sampling options
         fields: names of the observed fields; exactly one displacement field
-        solver: solver providing ``function_space(field)`` and ``mesh_tags(field)``
+        solver: solver providing ``function_space(field)``
         comm: communicator of the run
 
     Returns:
@@ -139,8 +158,13 @@ def build_point_coordinates_sampler(
     """
     kind = "fenicsx.points_coordinates"
     field, source = observed_function_space(kind, fields, solver)
-    if not isinstance(solver, SupportsMeshTags):
-        raise StudyFileError(f"{kind} needs a mesh_tags method on the forward solver")
     return PointCoordinatesSampler(
-        field, source, solver.mesh_tags(field), options.tags, options.operation, comm
+        field,
+        source,
+        options.mesh,
+        options.tags,
+        options.operation,
+        comm,
+        options.mesh_name,
+        options.tags_name,
     )

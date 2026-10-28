@@ -200,10 +200,13 @@ def test_estimation_directory_of_a_missing_realization():
 
 
 def test_point_coordinates_sampling_options():
-    sampling = {"type": "fenicsx.points_coordinates", "tags": [30, 10]}
+    sampling = {"type": "fenicsx.points_coordinates", "tags": [30, 10], "mesh": "mesh.xdmf"}
     options = _study({"u": MEASUREMENT | {"spatial_sampling": sampling}})
     assert options.measurements["u"].spatial_sampling == PointCoordinatesSamplingOptions(
-        type="fenicsx.points_coordinates", tags=[30, 10], operation="intersection"
+        type="fenicsx.points_coordinates",
+        tags=[30, 10],
+        mesh="mesh.xdmf",
+        operation="intersection",
     )
     for invalid in ({"tags": []}, {"operation": "difference"}):
         with pytest.raises(ValidationError):
