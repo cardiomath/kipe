@@ -97,7 +97,7 @@ class Solver:
         self._rhs = fem.form((self._u + dt * f) * v * ufl.dx)
 
         self._A = petsc.create_matrix(self._lhs)
-        self._b = petsc.create_vector(self._rhs)
+        self._b = petsc.assemble_vector(self._rhs)
         self._solver = PETSc.KSP().create(comm)
         self._solver.setOperators(self._A)
         self._solver.setType(PETSc.KSP.Type.PREONLY)
