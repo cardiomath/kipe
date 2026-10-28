@@ -67,7 +67,8 @@ def synthesize(study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD) -> list[lis
 
     Returns:
         the generated measurements of each noise realization, with this rank's entries of
-        their data: ``synthesize(study)[r][i]`` is measurement i of realization r
+        their data: ``synthesize(study)[r][i]`` is measurement i of realization r; their
+        files are written when it returns, on every rank
 
     Raises:
         StudyFileError: if a measurement lacks what synthesis needs, or observes a field the
@@ -103,6 +104,7 @@ def synthesize(study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD) -> list[lis
         _log_written(study, times)
         logger.info("%-11s%.3g s", "run time", time.perf_counter() - started)
 
+    comm.barrier()  # rank 0 has written the data, e.g., for an estimation that follows
     return realizations
 
 
