@@ -14,11 +14,11 @@ forward_solver:
   arguments: {dt: 0.05}  # nominal parameter values in solver: a = 0.2, b = 0.2, c = 3
 
 parameters:
-  reparameterization: log
+  reparameterization: multiplicative
   priors:
-    a: {mean: 0.3, relative_stddev: 0.1}
-    b: {mean: 0.3, relative_stddev: 0.1}
-    c: {mean: 2.0, relative_stddev: 0.1}
+    a: {mean: 0.2, relative_stddev: 0.1}
+    b: {mean: 0.2, relative_stddev: 0.1}
+    c: {mean: 3.0, relative_stddev: 0.1}
 
 measurements:
   v:
@@ -33,7 +33,7 @@ measurements:
     noise: {stddev: 0.05, seed: 1}
 
 synthesis:
-  realizations: 20
+  realizations: 50
 
 estimation:
-  iterations: 3
+  iterations: 6
