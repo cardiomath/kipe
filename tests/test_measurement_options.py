@@ -12,6 +12,7 @@ from kipe.options import (
     DifferenceModelOptions,
     MeasurementOptions,
     MeshSamplingOptions,
+    PointCoordinatesSamplingOptions,
     RunTruthOptions,
     StudyFileError,
     StudyOptions,
@@ -196,3 +197,14 @@ def test_estimation_directory_of_a_missing_realization():
     study = _study({"v": PER_REALIZATION}, synthesis={"realizations": 3})
     with pytest.raises(StudyFileError, match="realization 3: the study has realizations 0 to 2"):
         estimation_directory(study, 3)
+
+
+def test_point_coordinates_sampling_options():
+    sampling = {"type": "fenicsx.points_coordinates", "tags": [30, 10]}
+    options = _study({"u": MEASUREMENT | {"spatial_sampling": sampling}})
+    assert options.measurements["u"].spatial_sampling == PointCoordinatesSamplingOptions(
+        type="fenicsx.points_coordinates", tags=[30, 10], operation="intersection"
+    )
+    for invalid in ({"tags": []}, {"operation": "difference"}):
+        with pytest.raises(ValidationError):
+            _study({"u": MEASUREMENT | {"spatial_sampling": sampling | invalid}})

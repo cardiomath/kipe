@@ -122,3 +122,35 @@ A finite element field, evaluated at given points, in their order:
       points: [[0.25, 0.25], [0.5, 0.5], [0.75, 0.75]]
 
 Another sampler? :doc:`../extending/write_a_sampler` walks through this one, step by step.
+
+
+``fenicsx.points_coordinates``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Coordinates of model mesh vertices after applying the observed displacement field:
+``X + u(X)``. Select vertices belonging to tagged entities, such as two boundary surfaces:
+
+.. code-block:: yaml
+
+    spatial_sampling:
+      type: fenicsx.points_coordinates
+      tags: [30, 10]
+      operation: intersection
+
+``union`` selects vertices belonging to any listed tag; ``intersection`` (the default)
+selects vertices belonging to every listed tag. This is an intersection of vertex sets:
+different facets may share vertices without sharing a tag. Each tag must exist somewhere
+in the distributed mesh and the resulting selection must be nonempty.
+
+The solver provides ``function_space(field)`` and ``mesh_tags(field)`` returning a
+``dolfinx.mesh.MeshTags`` on that space's mesh
+(:class:`kipe.fenicsx.forward_solver.SupportsMeshTags`). The displacement must have one
+component per spatial dimension. Only topological vertices are sampled, even for higher-order
+geometry or displacement spaces; the displacement is evaluated at their reference positions.
+The reference mesh is not modified.
+
+Coordinates are flattened vertex by vertex (``x0, y0, z0, x1, y1, z1, ...`` in 3D),
+ordered by increasing original geometry input index. This order is independent of the MPI
+partition of the same input mesh. Tag selection and point searches happen at construction;
+selected reference points are replicated across ranks, as for ``fenicsx.points``.
+Each call returns only the entries assigned to the current rank.

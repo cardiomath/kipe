@@ -299,10 +299,32 @@ class PointSamplingOptions:
     0.8]]`` in 2D. Each point must lie in the solver's mesh."""
 
 
+@dataclass(frozen=True, config=_CONFIG)
+class PointCoordinatesSamplingOptions:
+    """Return displaced mesh vertices selected by tags (FEniCSx backend).
+
+    The observed field is a displacement vector with one component per spatial dimension.
+    The solver provides its function space and ``mesh_tags(field)``. Selection operates on
+    the vertices belonging to each tag, ordered by their original geometry input indices.
+    """
+
+    type: Literal["fenicsx.points_coordinates"]
+    """Kind of spatial sampling."""
+
+    tags: Annotated[list[int], Field(min_length=1)]
+    """Tag IDs whose vertices are selected."""
+
+    operation: Literal["union", "intersection"] = "intersection"
+    """Combine the vertex sets of the tags, rather than the tagged entities themselves."""
+
+
 # the choices of a measurement, from the core and the backends
 
 type SpatialSamplingOptions = Annotated[
-    ArraySamplingOptions | MeshSamplingOptions | PointSamplingOptions,
+    ArraySamplingOptions
+    | MeshSamplingOptions
+    | PointSamplingOptions
+    | PointCoordinatesSamplingOptions,
     Field(discriminator="type"),
 ]
 

@@ -29,6 +29,7 @@ from kipe.forward_solver import FieldSpec, ForwardSolver
 from kipe.options import (
     ArraySamplingOptions,
     MeshSamplingOptions,
+    PointCoordinatesSamplingOptions,
     PointSamplingOptions,
     StudyFileError,
 )
@@ -111,7 +112,10 @@ class ArraySampler(SpatialSampler):
 
 
 def build_sampler(
-    options: ArraySamplingOptions | MeshSamplingOptions | PointSamplingOptions,
+    options: ArraySamplingOptions
+    | MeshSamplingOptions
+    | PointSamplingOptions
+    | PointCoordinatesSamplingOptions,
     fields: list[str],
     solver: ForwardSolver,
     comm: MPI.Comm = MPI.COMM_WORLD,
@@ -146,5 +150,13 @@ def build_sampler(
             except ImportError as err:
                 raise StudyFileError(f"fenicsx.points needs dolfinx: {err}") from err
             return build_point_sampler(options, fields, solver, comm)
+        case PointCoordinatesSamplingOptions():
+            try:
+                from kipe.fenicsx.sampling.points_coordinates import (
+                    build_point_coordinates_sampler,
+                )
+            except ImportError as err:
+                raise StudyFileError(f"fenicsx.points_coordinates needs dolfinx: {err}") from err
+            return build_point_coordinates_sampler(options, fields, solver, comm)
         case _:
             assert_never(options)
