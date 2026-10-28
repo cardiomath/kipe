@@ -104,6 +104,11 @@ def measurement_schedule(
 def time_tolerance(t: float) -> float:
     """Return the tolerance below which two times are the same, relative to their size.
 
+    It absorbs the round-off of computed times, e.g., ``0.1 + 0.2`` and ``0.3``. Below
+    ``|t| = 1`` it is absolute, 1e-12: the times must be in a unit in which that is negligible,
+    e.g., seconds for a time step of milliseconds; for much shorter time scales, scale the
+    model's time.
+
     Args:
         t: time
 
@@ -199,7 +204,7 @@ def _index_of(t: float, times: NDArray_f64, name: str, path: str | Path) -> int:
     Raises:
         StudyFileError: if ``t`` is not in the data
     """
-    matches = np.flatnonzero(np.isclose(times, t, rtol=0, atol=1e-12 * max(1.0, abs(t))))
+    matches = np.flatnonzero(np.isclose(times, t, rtol=0, atol=time_tolerance(t)))
     if len(matches) == 0:
         raise StudyFileError(f"measurements.{name}: time {t} is not in the data ({path})")
 
