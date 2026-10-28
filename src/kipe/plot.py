@@ -4,10 +4,12 @@ analysis, ``kipe plot-sensitivity`` (:func:`plot_sensitivity`).
 The estimation history:
 
 One subplot per parameter: the estimate after each assimilation step with its physical 1σ
-range, over the steps of all outer iterations. The history is read from ``history.csv``, which
-the estimation writes as it runs, so a running estimation can be plotted too. If the run's
-plan is known from its provenance (:mod:`kipe.provenance`), the x axis spans the whole run
-from the start, with all outer iterations marked.
+range, over physical time. The outer iterations are side by side, each over its own time axis,
+from the initial state to the last assimilation time, so that steps at irregular times are
+where they belong. The history is read from ``history.csv``, which the estimation writes as it
+runs, so a running estimation can be plotted too. If the run's plan is known from its
+provenance (:mod:`kipe.provenance`), the x axis spans the whole run from the start, with all
+outer iterations.
 
 Draws with matplotlib (:func:`plot_histories`) or as text in the terminal with plotext
 (:func:`render_histories`), e.g., to follow an estimation on a cluster (:func:`watch_histories`).
@@ -23,7 +25,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 from ruamel.yaml import YAML, YAMLError
 
-from kipe._types import NDArray_f64
+from kipe._types import NDArray_bool, NDArray_f64
 from kipe.forward_solver import Parameters
 
 if TYPE_CHECKING:
@@ -54,6 +56,9 @@ class History:
     iteration: NDArray_f64
     """Index of the outer iteration of each step, shape ``(k,)``."""
 
+    time: NDArray_f64
+    """Time of each step, shape ``(k,)``; each outer iteration starts at the initial state's."""
+
     parameters: NDArray_f64
     """The estimate after each step, as physical values, shape ``(k, p)``."""
 
@@ -63,34 +68,35 @@ class History:
     upper: NDArray_f64
     """Upper end of the physical 1σ range, shape ``(k, p)``."""
 
-    steps_per_iteration: int | None = None
-    """Number of steps of each outer iteration, from the run's plan; None if unknown."""
+    end_time: float | None = None
+    """The last assimilation time of each outer iteration, from the run's plan; None if
+    unknown."""
 
     iterations: int | None = None
     """Number of outer iterations, from the run's plan; None if unknown."""
 
     @property
-    def steps(self) -> int:
-        """Number of steps of the whole run if its plan is known, else of the history so far."""
-        if self.steps_per_iteration is None or self.iterations is None:
-            return len(self.iteration)
-        return max(self.steps_per_iteration * self.iterations, len(self.iteration))
+    def start_time(self) -> float:
+        """Time of the initial state, at which each outer iteration starts."""
+        return float(self.time[0])
 
-    def iteration_starts(self) -> list[int]:
-        """Return the steps at which the outer iterations after the first start.
+    @property
+    def span(self) -> float:
+        """Time span of an outer iteration if the run's plan is known, else reached so far."""
+        end = float(self.time.max()) if self.end_time is None else self.end_time
+        return end - self.start_time
 
-        Returns:
-            all of them if the run's plan is known, else those reached so far
-        """
-        if self.steps_per_iteration is None or self.iterations is None:
-            return (np.flatnonzero(np.diff(self.iteration)) + 1).tolist()
-        return [k * self.steps_per_iteration for k in range(1, self.iterations)]
+    @property
+    def iteration_count(self) -> int:
+        """Number of outer iterations if the run's plan is known, else reached so far."""
+        reached = int(self.iteration.max()) + 1
+        return reached if self.iterations is None else max(self.iterations, reached)
 
 
 def read_history(path: str | Path) -> History:
     """Read an estimation history from ``history.csv``, and the run's plan next to it.
 
-    The plan, the number of steps per outer iteration and of iterations, comes from the
+    The plan, the last assimilation time and the number of outer iterations, comes from the
     provenance of the run: the assimilation times in ``run.yaml``, the iterations in
     ``study.yaml`` (the options the run started with).
 
@@ -118,34 +124,35 @@ def read_history(path: str | Path) -> History:
     names = [column for column in header[2:] if f"theta_{column}" in header]
     column = {name: i for i, name in enumerate(header)}
 
-    steps_per_iteration, iterations = _read_plan(Path(path).parent)
+    end_time, iterations = _read_plan(Path(path).parent)
 
     return History(
         names=names,
         iteration=data[:, column["iteration"]],
+        time=data[:, column["time"]],
         parameters=data[:, [column[name] for name in names]],
         lower=data[:, [column[f"lower_{name}"] for name in names]],
         upper=data[:, [column[f"upper_{name}"] for name in names]],
-        steps_per_iteration=steps_per_iteration,
+        end_time=end_time,
         iterations=iterations,
     )
 
 
-def _read_plan(directory: Path) -> tuple[int | None, int | None]:
-    """Read the number of steps per outer iteration and of iterations of a run.
+def _read_plan(directory: Path) -> tuple[float | None, int | None]:
+    """Read the last assimilation time and the number of outer iterations of a run.
 
     Args:
         directory: output directory of the estimation
 
     Returns:
-        the steps per iteration (the assimilation times and the initial state) and the
-        iterations; None, None if the run's provenance is missing, e.g., for older runs
+        the last assimilation time and the iterations; None, None if the run's provenance is
+        missing, e.g., for older runs
     """
     try:
         run = YAML(typ="safe").load(directory / "run.yaml")
         study = YAML(typ="safe").load(directory / "study.yaml")
-        return len(run["assimilation_times"]) + 1, int(study["estimation"]["iterations"])
-    except (OSError, YAMLError, KeyError, TypeError):
+        return float(run["assimilation_times"][-1]), int(study["estimation"]["iterations"])
+    except (OSError, YAMLError, KeyError, IndexError, TypeError):
         return None, None
 
 
@@ -166,29 +173,39 @@ def plot_histories(
         PlotError: if the histories estimate different parameters
     """
     names = _common_names(histories)
-    last = _last_step(histories)
+    timeline = _Timeline.of(histories)
     axes = figure.subplots(1, len(names), squeeze=False)[0]
     for j, (ax, name) in enumerate(zip(axes, names, strict=True)):
         for k, (label, history) in enumerate(histories.items()):
-            steps = np.arange(len(history.iteration))
             color = f"C{k}"
-            ax.fill_between(
-                steps, history.lower[:, j], history.upper[:, j], color=color, alpha=0.2, lw=0
-            )
-            ax.plot(steps, history.parameters[:, j], color=color, label=label)
+            for i, (x, rows) in enumerate(timeline.segments(history)):
+                ax.fill_between(
+                    x,
+                    history.lower[rows, j],
+                    history.upper[rows, j],
+                    color=color,
+                    alpha=0.2,
+                    lw=0,
+                )
+                ax.plot(
+                    x, history.parameters[rows, j], color=color, label=label if i == 0 else None
+                )
 
-        # starts of the outer iterations, after the first
-        first = next(iter(histories.values()))
-        for start in first.iteration_starts():
-            ax.axvline(start, color="0.7", lw=0.8)
+        for boundary in timeline.boundaries():  # between the outer iterations
+            ax.axvline(boundary, color="0.7", lw=0.8)
 
         if truth is not None and name in truth:
             ax.axhline(truth[name], color="k", ls="--", lw=1, label="truth")
 
         ax.set_title(_title(name, histories, truth))
-        ax.set_xlabel("assimilation step")
-        if last > 0:
-            ax.set_xlim(0, last)
+        ax.set_xlabel("time")
+        if timeline.span > 0:
+            ax.set_xlim(timeline.start, timeline.end)
+            ax.set_xticks(*timeline.ticks(bins=max(2, 6 // timeline.iterations)))
+            if timeline.iterations > 1:  # above the plot, so that they cover nothing
+                top = ax.secondary_xaxis("top")
+                top.set_xticks(*timeline.labels())
+                top.tick_params(length=0, labelsize="small", labelcolor="0.4")
 
     if len(histories) > 1 or truth is not None:
         axes[0].legend()
@@ -375,36 +392,45 @@ def render_histories(
         marker = plotext.marker("braille", pixel=plotext.pixel(foreground=rgb))
         subplot.draw(subplot.signal(x, y, marker=marker).lines(True))
 
-    last = _last_step(histories)
+    # plotext has no subplots in a 1 x 1 grid: then the figure itself is the plot
+    def panel(j: int) -> Any:
+        return figure.subplot(j + 1, 1) if len(names) > 1 else figure
+
+    timeline = _Timeline.of(histories)
     for j, name in enumerate(names):
-        subplot = figure.subplot(j + 1, 1)
-        first = next(iter(histories.values()))
+        subplot = panel(j)
         low = min(float(history.lower[:, j].min()) for history in histories.values())
         high = max(float(history.upper[:, j].max()) for history in histories.values())
 
         # where lines share a cell, the last one drawn colors all its dots: first the reference
         # lines (the truth below the 1σ ranges, which jump across it at each outer iteration),
         # the estimates on top
-        for start in first.iteration_starts():  # outer iterations
-            draw(subplot, [float(start)] * 2, [low, high], _GRAY)
+        for boundary in timeline.boundaries():  # between the outer iterations
+            draw(subplot, [boundary] * 2, [low, high], _GRAY)
 
         if truth is not None and name in truth:
-            draw(subplot, [0.0, float(last)], [truth[name]] * 2, _TRUTH)
+            draw(subplot, [timeline.start, timeline.end], [truth[name]] * 2, _TRUTH)
 
         for history in histories.values():
-            steps = np.arange(len(history.iteration)).tolist()
-            draw(subplot, steps, history.lower[:, j].tolist(), _GRAY)
-            draw(subplot, steps, history.upper[:, j].tolist(), _GRAY)
+            for x, rows in timeline.segments(history):
+                draw(subplot, x.tolist(), history.lower[rows, j].tolist(), _GRAY)
+                draw(subplot, x.tolist(), history.upper[rows, j].tolist(), _GRAY)
 
         for k, history in enumerate(histories.values()):
-            steps = np.arange(len(history.iteration)).tolist()
-            draw(subplot, steps, history.parameters[:, j].tolist(), _color(k))
+            for x, rows in timeline.segments(history):
+                draw(subplot, x.tolist(), history.parameters[rows, j].tolist(), _color(k))
 
         subplot.title(_title(name, histories, truth))
-        if last > 0:
-            subplot.ruler(0).lim(0, last)
+        if timeline.span > 0:
+            subplot.ruler(0).lim(timeline.start, timeline.end)
+            subplot.ruler(0).ticks(*timeline.ticks(bins=max(2, 8 // timeline.iterations)))
 
-    figure.subplot(len(names), 1).label("assimilation step", axis=0)
+    if timeline.span > 0 and timeline.iterations > 1:  # above the plot, once
+        top = panel(0).ruler(0, "upper")
+        top.lim(timeline.start, timeline.end)
+        top.ticks(*timeline.labels())
+
+    panel(len(names) - 1).label("time", axis=0)
 
     lines = [figure.build().string(colorless=not color)]
     if legend_rows:  # below the plot, so that it covers nothing
@@ -469,16 +495,115 @@ def _common_names(histories: Mapping[str, History]) -> list[str]:
     return names
 
 
-def _last_step(histories: Mapping[str, History]) -> int:
-    """Return the last step of the x axis: of the longest run, or history if not planned.
+@dataclass(frozen=True)
+class _Timeline:
+    """The x axis: the outer iterations side by side, each over the same span of time.
+
+    Iteration ``i`` covers ``[start + i span, start + (i + 1) span]``; a step at time ``t`` of
+    iteration ``i`` is at ``t + i span``.
+    """
+
+    start: float
+    """Time of the initial state."""
+
+    span: float
+    """Time span of each outer iteration."""
+
+    iterations: int
+    """Number of outer iterations on the axis."""
+
+    @classmethod
+    def of(cls, histories: Mapping[str, History]) -> "_Timeline":
+        """Return the timeline that covers all histories: the longest run, if planned.
+
+        Args:
+            histories: label -> history
+
+        Returns:
+            the timeline
+        """
+        start = min(history.start_time for history in histories.values())
+        end = max(history.start_time + history.span for history in histories.values())
+        iterations = max(history.iteration_count for history in histories.values())
+        return cls(start, end - start, iterations)
+
+    @property
+    def end(self) -> float:
+        """The end of the x axis."""
+        return self.start + self.iterations * self.span
+
+    def segments(self, history: History) -> list[tuple[NDArray_f64, NDArray_bool]]:
+        """Return the positions and rows of a history's steps, per outer iteration.
+
+        Each outer iteration is drawn as a line of its own, so that its first step does not
+        connect to the previous iteration's last.
+
+        Args:
+            history: the history
+
+        Returns:
+            for each outer iteration reached: the positions of its steps on the x axis, and
+            the mask of its rows in the history
+        """
+        segments = []
+        for i in np.unique(history.iteration):
+            rows = history.iteration == i
+            segments.append((history.time[rows] + i * self.span, rows))
+        return segments
+
+    def boundaries(self) -> list[float]:
+        """Return the boundaries between the outer iterations on the x axis."""
+        return [self.start + i * self.span for i in range(1, self.iterations)]
+
+    def ticks(self, bins: int) -> tuple[list[float], list[str]]:
+        """Return the ticks of the x axis: the time, restarting in each outer iteration.
+
+        Args:
+            bins: the number of intervals between the ticks of an iteration, at least
+
+        Returns:
+            the positions of the ticks and their labels
+        """
+        step = _nice_step(self.span / bins)
+        end = self.start + self.span
+        # the multiples of the step within an iteration, short of its end; integers, since
+        # ceil(-1e-9) = -0.0, labeled "-0"
+        first, stop = (int(np.ceil(t / step - 1e-9)) for t in (self.start, end))
+        times = step * np.arange(first, stop, dtype=float)
+
+        positions: list[float] = []
+        labels: list[str] = []
+        for i in range(self.iterations):  # the end of an iteration is the start of the next
+            for t in times:
+                positions.append(float(t + i * self.span))
+                labels.append(f"{t:.6g}")
+
+        # the end of the last iteration, unless too close to the tick before it
+        if not times.size or end - times[-1] >= step / 4:
+            positions.append(self.end)
+            labels.append(f"{end:.6g}")
+        return positions, labels
+
+    def labels(self) -> tuple[list[float], list[str]]:
+        """Return the labels of the outer iterations, at their centers on the x axis."""
+        positions = [self.start + (i + 0.5) * self.span for i in range(self.iterations)]
+        prefix = "iteration " if self.iterations <= 5 else ""  # more do not fit
+        return positions, [f"{prefix}{i + 1}" for i in range(self.iterations)]
+
+
+def _nice_step(step: float) -> float:
+    """Return the smallest step of 1, 2, or 5 times a power of 10 that is at least ``step``.
 
     Args:
-        histories: label -> history
+        step: the smallest step
 
     Returns:
-        the last step
+        the nice step
     """
-    return max(history.steps for history in histories.values()) - 1
+    magnitude = 10.0 ** np.floor(np.log10(step))
+    return float(
+        next(m * magnitude for m in (1, 2, 5, 10) if m * magnitude >= step * (1 - 1e-9))
+    )
 
 
 def _title(name: str, histories: Mapping[str, History], truth: Parameters | None) -> str:
