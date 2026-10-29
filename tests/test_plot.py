@@ -122,9 +122,9 @@ def test_plot_terminal(tmp_path, capsys):
     assert "a = " in out
     assert "c = " in out
     assert "truth 3" in out  # c of the FitzHugh-Nagumo solver
-    assert "outer iterations" in out
+    assert "starts of iterations" in out
     assert out.rstrip().splitlines()[-3:-1] == [f"━━ {study}", "━━ truth"]  # legend
-    assert "1σ range" in out.splitlines()[-1]  # key to the lines
+    assert "━━ 1σ range" in out.splitlines()[-1]  # key to the lines
     assert "\x1b[" not in out  # no colors when not printing to a terminal
 
 
@@ -219,9 +219,9 @@ def test_plot_terminal_all_iterations_by_default(tmp_path, capsys):
     everything = capsys.readouterr().out
     assert main(["plot-estimation", study, "--terminal", "--no-all"]) == 0
     current = capsys.readouterr().out
-    assert "outer iterations" in everything
+    assert "starts of iterations" in everything
     assert "step of iteration 2/2" in current
-    assert "outer iterations" not in current
+    assert "starts of iterations" not in current
 
     import pytest
 
@@ -231,5 +231,5 @@ def test_plot_terminal_all_iterations_by_default(tmp_path, capsys):
         watched = capsys.readouterr().out
         assert main(["plot-estimation", study, "--watch", "--all"]) == 0
         watched_all = capsys.readouterr().out
-    assert "outer iterations" not in watched
-    assert "outer iterations" in watched_all
+    assert "starts of iterations" not in watched
+    assert "starts of iterations" in watched_all

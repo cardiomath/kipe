@@ -448,16 +448,18 @@ def render_histories(
             figure.subplot(j // columns + 1, j % columns + 1).label(xlabel, axis=0)
 
     lines = [figure.build().string(colorless=not color)]
-    if len(legend) > 1:  # below the plot, so that it covers nothing
-        for label, (r, g, b) in legend:
-            lines.append(f"\x1b[38;2;{r};{g};{b}m━━\x1b[0m {label}" if color else f"━━ {label}")
 
-    gray = "\x1b[38;2;128;128;128m{}\x1b[0m" if color else "{}"
-    green = "\x1b[38;2;144;238;144m{}\x1b[0m" if color else "{}"
-    key = f"colored line: estimate   {gray.format('1σ range')}"
+    def entry(label: str, rgb: tuple[int, int, int]) -> str:
+        r, g, b = rgb
+        return f"\x1b[38;2;{r};{g};{b}m━━\x1b[0m {label}" if color else f"━━ {label}"
+
+    if len(legend) > 1:  # below the plot, so that it covers nothing
+        lines.extend(entry(label, rgb) for label, rgb in legend)
+
+    key = [entry("1σ range", _GRAY)]
     if all_iterations:
-        key += f", {green.format('starts of iterations')}"
-    lines.append(key)
+        key.append(entry("starts of iterations", _GREEN))
+    lines.append("   ".join(key))
 
     return "\n".join(lines)
 
