@@ -78,6 +78,43 @@
       "title": "DifferenceModelOptions",
       "type": "object"
     },
+    "DisplacedVertexSamplingOptions": {
+      "additionalProperties": false,
+      "description": "Return displaced mesh vertices selected by tags (FEniCSx backend).\n\nThe observed field is a displacement vector with one component per spatial dimension.\nThe solver provides its function space and ``facet_tags(field)`` on the same reference\nmesh. Vertices are ordered by their original geometry input indices.",
+      "properties": {
+        "type": {
+          "const": "fenicsx.displaced_vertices",
+          "description": "Kind of spatial sampling.",
+          "title": "Type",
+          "type": "string"
+        },
+        "tags": {
+          "description": "Facet tag IDs whose vertices are selected.",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 1,
+          "title": "Tags",
+          "type": "array"
+        },
+        "operation": {
+          "default": "intersection",
+          "description": "``union``: select vertices belonging to any listed tag;\n``intersection``: select vertices shared by all listed tags (the default).",
+          "enum": [
+            "union",
+            "intersection"
+          ],
+          "title": "Operation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "tags"
+      ],
+      "title": "DisplacedVertexSamplingOptions",
+      "type": "object"
+    },
     "EstimationOptions": {
       "additionalProperties": false,
       "description": "Parameter estimation with the reduced-order unscented Kalman filter (ROUKF).",
@@ -489,6 +526,7 @@
       "discriminator": {
         "mapping": {
           "array": "#/$defs/ArraySamplingOptions",
+          "fenicsx.displaced_vertices": "#/$defs/DisplacedVertexSamplingOptions",
           "fenicsx.mesh": "#/$defs/MeshSamplingOptions",
           "fenicsx.points": "#/$defs/PointSamplingOptions"
         },
@@ -503,6 +541,9 @@
         },
         {
           "$ref": "#/$defs/PointSamplingOptions"
+        },
+        {
+          "$ref": "#/$defs/DisplacedVertexSamplingOptions"
         }
       ]
     },

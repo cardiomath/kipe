@@ -28,6 +28,7 @@ from kipe._types import NDArray_f64, NDArray_i64
 from kipe.forward_solver import FieldSpec, ForwardSolver
 from kipe.options import (
     ArraySamplingOptions,
+    DisplacedVertexSamplingOptions,
     MeshSamplingOptions,
     PointSamplingOptions,
     StudyFileError,
@@ -111,7 +112,10 @@ class ArraySampler(SpatialSampler):
 
 
 def build_sampler(
-    options: ArraySamplingOptions | MeshSamplingOptions | PointSamplingOptions,
+    options: ArraySamplingOptions
+    | MeshSamplingOptions
+    | PointSamplingOptions
+    | DisplacedVertexSamplingOptions,
     fields: list[str],
     solver: ForwardSolver,
     comm: MPI.Comm = MPI.COMM_WORLD,
@@ -146,5 +150,13 @@ def build_sampler(
             except ImportError as err:
                 raise StudyFileError(f"fenicsx.points needs dolfinx: {err}") from err
             return build_point_sampler(options, fields, solver, comm)
+        case DisplacedVertexSamplingOptions():
+            try:
+                from kipe.fenicsx.sampling.displaced_vertices import (
+                    build_displaced_vertex_sampler,
+                )
+            except ImportError as err:
+                raise StudyFileError(f"fenicsx.displaced_vertices needs dolfinx: {err}") from err
+            return build_displaced_vertex_sampler(options, fields, solver, comm)
         case _:
             assert_never(options)

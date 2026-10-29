@@ -1,8 +1,9 @@
 """Common functionality for the FEniCSx spatial samplers."""
 
 from dolfinx import fem
+from dolfinx.mesh import MeshTags
 
-from kipe.fenicsx.forward_solver import SupportsFunctionSpaces
+from kipe.fenicsx.forward_solver import SupportsFacetTags, SupportsFunctionSpaces
 from kipe.forward_solver import ForwardSolver
 from kipe.options import StudyFileError
 
@@ -38,3 +39,22 @@ def observed_function_space(
         )
 
     return field, solver.function_space(field)
+
+
+def observed_facet_tags(kind: str, field: str, solver: ForwardSolver) -> MeshTags:
+    """Return the facet tags of an observed field's reference mesh.
+
+    Args:
+        kind: the sampler's ``type``, for error messages
+        field: name of the observed distributed field, checked by ``observed_function_space``
+        solver: the forward solver, which provides the field's facet tags
+
+    Returns:
+        facet tags on the field's reference mesh, with the same MPI partition
+
+    Raises:
+        StudyFileError: if the solver does not provide ``facet_tags(field)``
+    """
+    if not isinstance(solver, SupportsFacetTags):
+        raise StudyFileError(f"{kind} needs a facet_tags method on the forward solver")
+    return solver.facet_tags(field)

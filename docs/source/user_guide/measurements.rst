@@ -126,4 +126,26 @@ A finite element field, evaluated at given points, in their order:
       type: fenicsx.points
       points: [[0.25, 0.25], [0.5, 0.5], [0.75, 0.75]]
 
-Another sampler? :doc:`../extending/write_a_sampler` walks through this one, step by step.
+``fenicsx.displaced_vertices``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Returns the displaced coordinates ``X + u(X)`` of mesh vertices selected by facet tags.
+Use ``intersection`` (the default) for vertices shared by all listed tags, or ``union``
+for vertices belonging to any listed tag:
+
+.. code-block:: yaml
+
+    spatial_sampling:
+      type: fenicsx.displaced_vertices
+      tags: [30, 10]
+      operation: intersection
+
+The sampler uses the solver's reference mesh and facet tags, provided through
+``function_space(field)`` and ``facet_tags(field)``. Each tag must exist and the selection
+must be nonempty. Cell tags are not supported.
+
+The observed field must be a displacement vector. Coordinates are returned vertex by vertex
+as a flat array (``x0, y0, z0, x1, y1, z1, ...`` in 3D).
+
+Another sampler? :doc:`../extending/write_a_sampler` walks through ``fenicsx.points``, step by
+step.
