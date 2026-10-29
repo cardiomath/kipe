@@ -13,6 +13,7 @@ Draws with matplotlib (:func:`plot_histories`) or as text in the terminal with p
 (:func:`render_histories`), e.g., to follow an estimation on a cluster (:func:`watch_histories`).
 """
 
+import itertools
 import sys
 import time
 from collections.abc import Mapping, Sequence
@@ -36,6 +37,7 @@ if TYPE_CHECKING:
 # matplotlib's first colors, so that terminal and figure agree
 _COLORS = [(31, 119, 180), (255, 127, 14), (44, 160, 44), (214, 39, 40), (148, 103, 189)]
 _GRAY = (128, 128, 128)
+_GREEN = (144, 238, 144)  # starts of the outer iterations
 _TRUTH = (227, 119, 194)  # matplotlib's pink, not used for the estimates
 _ROWS_PER_PARAMETER = 12
 
@@ -329,18 +331,28 @@ def render_histories(
     truth: Parameters | None = None,
     height: int | None = None,
     color: bool = True,
+    columns: int = 1,
+    all_iterations: bool = False,
 ) -> str:
     """Render estimation histories as text for the terminal, one subplot per parameter.
 
     Like :func:`plot_histories`, with the 1σ range drawn as gray lines below and above the
     estimate. With a single history, each subplot title shows the latest estimate and range.
-    Several histories or a truth get a legend below the plot.
+    Several histories get a legend below the plot, and a last line explains the lines: the
+    gray 1σ range, with all iterations the green vertical lines at the starts of the outer
+    iterations, and with a truth its reference line.
+
+    By default, only the current (latest) outer iteration is drawn, which zooms in on where the
+    estimate converges; its x axis counts the steps of that iteration.
 
     Args:
         histories: label -> history; all must estimate the same parameters
         truth: true values, drawn as reference lines (e.g., in a twin experiment)
-        height: number of lines, legend included; if not given, 12 per parameter
+        height: number of lines, legend included; if not given, 12 per parameter; never less
+            than that, so that the plots keep their resolution in a small terminal
         color: whether to color the output with ANSI escape codes
+        columns: number of subplots per row; the parameters fill the grid row by row
+        all_iterations: whether to draw all outer iterations instead of the current one
 
     Returns:
         the rendered plot
@@ -352,21 +364,22 @@ def render_histories(
 
     names = _common_names(histories)
 
-    # as in plot_histories: a legend with several histories or a truth
+    # a legend with several histories; the truth is in the key to the lines
     legend = [(label, _color(k)) for k, label in enumerate(histories)]
-    if truth is not None and any(name in truth for name in names):
-        legend.append(("truth", _TRUTH))
-    legend_rows = len(legend) if len(legend) > 1 else 0
+    has_truth = truth is not None and any(name in truth for name in names)
+    columns = max(1, min(columns, len(names)))
+    grid_rows = -(-len(names) // columns)
+    legend_rows = (len(legend) if len(legend) > 1 else 0) + 1  # plus the key to the line styles
 
     plotext.terminal.limit(height=False)  # taller than the terminal is fine, it scrolls
     figure = plotext.figure
     figure.clear()
-    figure.subplots(len(names), 1)
+    figure.subplots(grid_rows, columns)
     figure.theme("simple")  # the terminal's own colors; after subplots(), to reach them too
-    if height is None:
-        figure.plot_size(None, _ROWS_PER_PARAMETER * len(names))
-    else:
-        figure.plot_size(None, height - legend_rows)
+    rows = _ROWS_PER_PARAMETER * grid_rows
+    if height is not None:
+        rows = max(rows, height - legend_rows)
+    figure.plot_size(None, rows)
 
     # all lines are signals: plotext's own reference lines paint a white background
     def draw(
@@ -375,9 +388,24 @@ def render_histories(
         marker = plotext.marker("braille", pixel=plotext.pixel(foreground=rgb))
         subplot.draw(subplot.signal(x, y, marker=marker).lines(True))
 
-    last = _last_step(histories)
+    segments = {label: _segments(history) for label, history in histories.items()}
+    if not all_iterations:  # the current iteration, counted from its first step
+        segments = {
+            label: [(list(range(len(steps))), sl) for steps, sl in parts[-1:]]
+            for label, parts in segments.items()
+        }
+    if all_iterations:
+        last = _last_step(histories)
+    else:
+        last = (
+            max(
+                history.steps_per_iteration or len(segments[label][0][0])
+                for label, history in histories.items()
+            )
+            - 1
+        )
     for j, name in enumerate(names):
-        subplot = figure.subplot(j + 1, 1)
+        subplot = figure.subplot(j // columns + 1, j % columns + 1)
         first = next(iter(histories.values()))
         low = min(float(history.lower[:, j].min()) for history in histories.values())
         high = max(float(history.upper[:, j].max()) for history in histories.values())
@@ -385,46 +413,76 @@ def render_histories(
         # where lines share a cell, the last one drawn colors all its dots: first the reference
         # lines (the truth below the 1σ ranges, which jump across it at each outer iteration),
         # the estimates on top
-        for start in first.iteration_starts():  # outer iterations
-            draw(subplot, [float(start)] * 2, [low, high], _GRAY)
+        for start in first.iteration_starts() if all_iterations else []:  # outer iterations
+            draw(subplot, [float(start)] * 2, [low, high], _GREEN)
 
         if truth is not None and name in truth:
             draw(subplot, [0.0, float(last)], [truth[name]] * 2, _TRUTH)
 
-        for history in histories.values():
-            steps = np.arange(len(history.iteration)).tolist()
-            draw(subplot, steps, history.lower[:, j].tolist(), _GRAY)
-            draw(subplot, steps, history.upper[:, j].tolist(), _GRAY)
+        # each outer iteration is drawn on its own: the estimate jumps back to the initial guess
+        # at its start, and a line across the jump would pile dots up vertically
+        for label, history in histories.items():
+            for steps, sl in segments[label]:
+                draw(subplot, steps, history.lower[sl, j].tolist(), _GRAY)
+                draw(subplot, steps, history.upper[sl, j].tolist(), _GRAY)
 
-        for k, history in enumerate(histories.values()):
-            steps = np.arange(len(history.iteration)).tolist()
-            draw(subplot, steps, history.parameters[:, j].tolist(), _color(k))
+        for k, (label, history) in enumerate(histories.items()):
+            for steps, sl in segments[label]:
+                draw(subplot, steps, history.parameters[sl, j].tolist(), _color(k))
 
         subplot.title(_title(name, histories, truth))
         if last > 0:
             subplot.ruler(0).lim(0, last)
 
-    figure.subplot(len(names), 1).label("assimilation step", axis=0)
+    for j in range(len(names), grid_rows * columns):  # unused cells of the last row: no frame
+        figure.subplot(j // columns + 1, j % columns + 1).axes(False)
+
+    xlabel = "assimilation step"
+    if not all_iterations:
+        current = next(iter(histories.values()))
+        reached = int(current.iteration[-1]) + 1
+        xlabel = f"step of iteration {reached}/{current.iterations or reached}"
+    for j in range(len(names)):  # the x axis label under the last plot of each column
+        if j + columns >= len(names):
+            figure.subplot(j // columns + 1, j % columns + 1).label(xlabel, axis=0)
 
     lines = [figure.build().string(colorless=not color)]
-    if legend_rows:  # below the plot, so that it covers nothing
-        for label, (r, g, b) in legend:
-            lines.append(f"\x1b[38;2;{r};{g};{b}m━━\x1b[0m {label}" if color else f"━━ {label}")
+
+    def entry(label: str, rgb: tuple[int, int, int]) -> str:
+        r, g, b = rgb
+        return f"\x1b[38;2;{r};{g};{b}m━━\x1b[0m {label}" if color else f"━━ {label}"
+
+    if len(legend) > 1:  # below the plot, so that it covers nothing
+        lines.extend(entry(label, rgb) for label, rgb in legend)
+
+    key = [entry("1σ range", _GRAY)]
+    if all_iterations:
+        key.append(entry("starts of iterations", _GREEN))
+    if has_truth:
+        key.append(entry("truth", _TRUTH))
+    lines.append("   ".join(key))
 
     return "\n".join(lines)
 
 
 def watch_histories(
-    paths: Mapping[str, Path], truth: Parameters | None = None, interval: float = 2.0
+    paths: Mapping[str, Path],
+    truth: Parameters | None = None,
+    interval: float = 2.0,
+    columns: int = 1,
+    all_iterations: bool = False,
 ) -> None:
     """Redraw estimation histories in the terminal as they grow, until Ctrl+C.
 
-    Fills the terminal; waits while a history does not exist yet or holds no steps.
+    Fills the terminal, but each plot keeps at least the height it has with ``--terminal``;
+    waits while a history does not exist yet or holds no steps.
 
     Args:
         paths: label -> path to ``history.csv``
         truth: true values, drawn as reference lines
         interval: seconds between redraws
+        columns: number of subplots per row
+        all_iterations: whether to draw all outer iterations instead of the current one
 
     Raises:
         PlotError: if the histories estimate different parameters
@@ -441,7 +499,14 @@ def watch_histories(
             except PlotError as err:
                 text = f"kipe: {err}; waiting ..."
             else:
-                text = render_histories(histories, truth, height=rows, color=color)
+                text = render_histories(
+                    histories,
+                    truth,
+                    height=rows,
+                    color=color,
+                    columns=columns,
+                    all_iterations=all_iterations,
+                )
 
             plotext.terminal.clean(-1)  # clear the screen without flickering
             print(text, flush=True)
@@ -467,6 +532,20 @@ def _common_names(histories: Mapping[str, History]) -> list[str]:
         raise PlotError("the histories estimate different parameters and cannot be compared")
 
     return names
+
+
+def _segments(history: History) -> list[tuple[list[int], slice]]:
+    """Split a history into its outer iterations.
+
+    Args:
+        history: the history
+
+    Returns:
+        for each outer iteration, its step numbers and the slice of its rows
+    """
+    changes = (np.flatnonzero(np.diff(history.iteration)) + 1).tolist()
+    bounds = [0, *changes, len(history.iteration)]
+    return [(np.arange(a, b).tolist(), slice(a, b)) for a, b in itertools.pairwise(bounds)]
 
 
 def _last_step(histories: Mapping[str, History]) -> int:
