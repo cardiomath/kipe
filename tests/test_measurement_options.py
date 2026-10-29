@@ -200,14 +200,19 @@ def test_estimation_directory_of_a_missing_realization():
 
 
 def test_displaced_vertex_sampling_options():
-    sampling = {"type": "fenicsx.displaced_vertices", "tags": [30, 10], "mesh": "mesh.xdmf"}
+    sampling = {"type": "fenicsx.displaced_vertices", "tags": [30, 10]}
     options = _study({"u": MEASUREMENT | {"spatial_sampling": sampling}})
     assert options.measurements["u"].spatial_sampling == DisplacedVertexSamplingOptions(
         type="fenicsx.displaced_vertices",
         tags=[30, 10],
-        mesh="mesh.xdmf",
         operation="intersection",
     )
-    for invalid in ({"tags": []}, {"operation": "difference"}):
+    for invalid in (
+        {"tags": []},
+        {"operation": "difference"},
+        {"mesh": "unused.xdmf"},
+        {"mesh_name": "mesh"},
+        {"tags_name": "Facet tags"},
+    ):
         with pytest.raises(ValidationError):
             _study({"u": MEASUREMENT | {"spatial_sampling": sampling | invalid}})

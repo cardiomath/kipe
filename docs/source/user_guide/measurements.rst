@@ -137,16 +137,12 @@ for vertices belonging to any listed tag:
 
     spatial_sampling:
       type: fenicsx.displaced_vertices
-      mesh: data/solid.xdmf
-      mesh_name: mesh
-      tags_name: Facet tags
       tags: [30, 10]
       operation: intersection
 
-``mesh`` is the XDMF file containing the selection mesh and its facet tags. ``mesh_name``
-defaults to ``mesh`` and ``tags_name`` to ``Facet tags``. The mesh must use the solver's
-reference coordinate system and units, and the selected vertices must lie inside the solver's
-mesh. Each tag must exist and the selection must be nonempty.
+The sampler uses the solver's reference mesh and facet tags, provided through
+``function_space(field)`` and ``facet_tags(field)``. Each tag must exist and the selection
+must be nonempty. Cell tags are not supported.
 
 The observed field must be a displacement vector. Coordinates are returned vertex by vertex
 as a flat array (``x0, y0, z0, x1, y1, z1, ...`` in 3D).

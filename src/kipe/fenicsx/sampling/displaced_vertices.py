@@ -16,11 +16,11 @@ from typing import Literal
 from mpi4py import MPI
 
 import numpy as np
-from dolfinx import fem, io
-from dolfinx.mesh import entities_to_geometry
+from dolfinx import fem
+from dolfinx.mesh import MeshTags, entities_to_geometry
 
 from kipe._types import NDArray_f64
-from kipe.fenicsx.sampling.common import observed_function_space
+from kipe.fenicsx.sampling.common import observed_facet_tags, observed_function_space
 from kipe.fenicsx.sampling.points import PointSampler
 from kipe.forward_solver import ForwardSolver
 from kipe.options import DisplacedVertexSamplingOptions, StudyFileError
@@ -36,11 +36,9 @@ class DisplacedVertexSampler(PointSampler):
     Args:
         field: name of the displacement field
         source: displacement function space on the reference mesh
-        mesh: XDMF file containing the selection mesh and its facet tags
+        facet_tags: facet tags on the source mesh, with the same MPI partition
         tags: nonempty list of tag IDs
         operation: union or intersection of the tags' vertex sets; intersection by default
-        mesh_name: name of the mesh in the XDMF file
-        tags_name: name of the facet tags in the XDMF file
         comm: communicator of the mesh and run
 
     Raises:
@@ -52,14 +50,13 @@ class DisplacedVertexSampler(PointSampler):
         self,
         field: str,
         source: fem.FunctionSpace,
-        mesh: str,
+        facet_tags: MeshTags,
         tags: list[int],
         operation: Literal["union", "intersection"] = "intersection",
-        mesh_name: str = "mesh",
-        tags_name: str = "Facet tags",
         comm: MPI.Comm = MPI.COMM_WORLD,
     ) -> None:
-        gdim = source.mesh.geometry.dim
+        mesh = source.mesh
+        gdim = mesh.geometry.dim
         if source.value_shape != (gdim,):
             raise StudyFileError(
                 f"fenicsx.displaced_vertices needs a displacement vector with {gdim} components"
@@ -68,46 +65,31 @@ class DisplacedVertexSampler(PointSampler):
             raise StudyFileError(
                 "fenicsx.displaced_vertices needs tags and operation union or intersection"
             )
-        try:
-            with io.XDMFFile(comm, mesh, "r") as file:
-                selection_mesh = file.read_mesh(name=mesh_name)
-                tdim = selection_mesh.topology.dim
-                selection_mesh.topology.create_connectivity(tdim - 1, tdim)
-                mesh_tags = file.read_meshtags(selection_mesh, name=tags_name)
-        except (RuntimeError, OSError) as err:
-            raise StudyFileError(
-                f"fenicsx.displaced_vertices: cannot read mesh {mesh_name!r} and facet tags "
-                f"{tags_name!r} from {mesh}: {err}"
-            ) from err
-        if selection_mesh.geometry.dim != gdim:
-            raise StudyFileError(
-                "fenicsx.displaced_vertices: selection mesh and displacement must have "
-                "the same geometric dimension"
-            )
-        dim = mesh_tags.dim
+        tdim = mesh.topology.dim
+        dim = facet_tags.dim
         if dim != tdim - 1:
             raise StudyFileError("fenicsx.displaced_vertices needs facet tags")
-        selection_mesh.topology.create_connectivity(0, tdim)
+        mesh.topology.create_connectivity(0, tdim)
         if dim:
-            selection_mesh.topology.create_connectivity(dim, 0)
-            connectivity = selection_mesh.topology.connectivity(dim, 0)
+            mesh.topology.create_connectivity(dim, 0)
+            connectivity = mesh.topology.connectivity(dim, 0)
 
         vertex_sets = []
         coordinates: dict[int, list[float]] = {}
         for tag in dict.fromkeys(tags):
-            entities = mesh_tags.find(tag)
+            entities = facet_tags.find(tag)
             vertices = (
                 np.unique(np.concatenate([connectivity.links(e) for e in entities]))
                 if dim and len(entities)
                 else entities
             )
             geometry_nodes = (
-                entities_to_geometry(selection_mesh, 0, vertices.astype(np.int32), False).ravel()
+                entities_to_geometry(mesh, 0, vertices.astype(np.int32), False).ravel()
                 if len(vertices)
                 else np.empty(0, dtype=np.int32)
             )
-            ids = selection_mesh.geometry.input_global_indices[geometry_nodes]
-            x = selection_mesh.geometry.x[geometry_nodes, :gdim]
+            ids = mesh.geometry.input_global_indices[geometry_nodes]
+            x = mesh.geometry.x[geometry_nodes, :gdim]
             parts = comm.allgather((ids, x))
             global_ids = np.unique(np.concatenate([part[0] for part in parts]))
             if not len(global_ids):
@@ -150,7 +132,7 @@ def build_displaced_vertex_sampler(
     Args:
         options: spatial sampling options
         fields: names of the observed fields; exactly one displacement field
-        solver: solver providing ``function_space(field)``
+        solver: solver providing ``function_space(field)`` and ``facet_tags(field)``
         comm: communicator of the run
 
     Returns:
@@ -161,13 +143,12 @@ def build_displaced_vertex_sampler(
     """
     kind = "fenicsx.displaced_vertices"
     field, source = observed_function_space(kind, fields, solver)
+    facet_tags = observed_facet_tags(kind, field, solver)
     return DisplacedVertexSampler(
         field,
         source,
-        options.mesh,
+        facet_tags,
         options.tags,
         options.operation,
-        options.mesh_name,
-        options.tags_name,
         comm,
     )

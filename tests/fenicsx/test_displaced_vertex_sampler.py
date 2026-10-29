@@ -32,13 +32,10 @@ def domain(shared_tmp_path):
         reference = serial.geometry.x[:, :2].copy()
         with io.XDMFFile(MPI.COMM_SELF, path, "w") as f:
             f.write_mesh(serial)
-            facet_tags = _tags(serial)
-            facet_tags.name = "Facet tags"
-            f.write_meshtags(facet_tags, serial.geometry)
     reference = COMM.bcast(reference, root=0)
     with io.XDMFFile(COMM, path, "r") as f:
         distributed = f.read_mesh()
-    return distributed, reference, str(path)
+    return distributed, reference
 
 
 def _tags(domain):
@@ -84,9 +81,9 @@ def _gathered(sampler, local):
 
 @pytest.mark.parametrize("operation", ["union", "intersection"])
 def test_displaced_coordinates_in_file_order(domain, operation):
-    distributed, reference, path = domain
+    distributed, reference = domain
     V = fem.functionspace(distributed, ("Lagrange", 2, (2,)))
-    sampler = DisplacedVertexSampler("u", V, path, [10, 20], operation)
+    sampler = DisplacedVertexSampler("u", V, _tags(distributed), [10, 20], operation)
     original_mesh = distributed.geometry.x.copy()
     owned = _owned(V, _displacement)
     original_field = owned.copy()
@@ -104,67 +101,23 @@ def test_displaced_coordinates_in_file_order(domain, operation):
 
 
 def test_duplicate_and_single_tags(domain):
-    distributed, reference, path = domain
+    distributed, reference = domain
     V = fem.functionspace(distributed, ("Lagrange", 1, (2,)))
-    sampler = DisplacedVertexSampler("u", V, path, [10, 10])
+    sampler = DisplacedVertexSampler("u", V, _tags(distributed), [10, 10])
     actual = _gathered(
         sampler, sampler.sample({"u": np.zeros(V.dofmap.index_map.size_local * 2)})
     )
     np.testing.assert_allclose(actual, reference[np.isclose(reference[:, 0], 0)])
 
 
-@pytest.mark.parametrize("names", [{"mesh_name": "missing"}, {"tags_name": "missing"}])
-def test_missing_xdmf_names(domain, names):
-    distributed, _, path = domain
+def test_cell_tags_are_rejected(domain):
+    distributed, _ = domain
     V = fem.functionspace(distributed, ("Lagrange", 1, (2,)))
-    with pytest.raises(StudyFileError, match="cannot read mesh"):
-        DisplacedVertexSampler("u", V, path, [10], **names)
-
-
-def test_missing_file(domain):
-    distributed, _, path = domain
-    V = fem.functionspace(distributed, ("Lagrange", 1, (2,)))
-    with pytest.raises(StudyFileError, match="cannot read mesh"):
-        DisplacedVertexSampler("u", V, path + ".missing", [10])
-
-
-def test_selection_outside_solver_mesh(domain):
-    _, _, path = domain
-    source_mesh = mesh.create_unit_square(COMM, 2, 2)
-    source_mesh.geometry.x[:, 0] += 2
-    V = fem.functionspace(source_mesh, ("Lagrange", 1, (2,)))
-    with pytest.raises(StudyFileError, match="points lie outside"):
-        DisplacedVertexSampler("u", V, path, [10])
-
-
-def test_selection_dimension_mismatch(domain):
-    _, _, path = domain
-    V = fem.functionspace(mesh.create_unit_cube(COMM, 2, 2, 2), ("Lagrange", 1, (3,)))
-    with pytest.raises(StudyFileError, match="same geometric dimension"):
-        DisplacedVertexSampler("u", V, path, [10])
-
-
-def test_custom_xdmf_names(shared_tmp_path):
-    path = shared_tmp_path / "custom.xdmf"
-    if COMM.rank == 0:
-        serial = mesh.create_unit_square(MPI.COMM_SELF, 4, 4)
-        serial.name = "Grid"
-        tags = _tags(serial)
-        tags.name = "boundaries"
-        with io.XDMFFile(MPI.COMM_SELF, path, "w") as f:
-            f.write_mesh(serial)
-            f.write_meshtags(
-                tags, serial.geometry, geometry_xpath="/Xdmf/Domain/Grid[@Name='Grid']/Geometry"
-            )
-    COMM.barrier()
-    V = fem.functionspace(mesh.create_unit_square(COMM, 3, 3), ("Lagrange", 1, (2,)))
-    sampler = DisplacedVertexSampler(
-        "u", V, str(path), [10, 20], mesh_name="Grid", tags_name="boundaries"
-    )
-    actual = _gathered(
-        sampler, sampler.sample({"u": np.zeros(V.dofmap.index_map.size_local * 2)})
-    )
-    np.testing.assert_allclose(actual, [[0, 0]])
+    tdim = distributed.topology.dim
+    cells = np.arange(distributed.topology.index_map(tdim).size_local, dtype=np.int32)
+    tags = mesh.meshtags(distributed, tdim, cells, np.full(len(cells), 10, dtype=np.int32))
+    with pytest.raises(StudyFileError, match="needs facet tags"):
+        DisplacedVertexSampler("u", V, tags, [10])
 
 
 @pytest.mark.parametrize(
@@ -177,22 +130,22 @@ def test_custom_xdmf_names(shared_tmp_path):
     ],
 )
 def test_invalid_selection(domain, tags, operation, message):
-    distributed, _, path = domain
+    distributed, _ = domain
     V = fem.functionspace(distributed, ("Lagrange", 1, (2,)))
     with pytest.raises(StudyFileError, match=message):
-        DisplacedVertexSampler("u", V, path, tags, operation)
+        DisplacedVertexSampler("u", V, _tags(distributed), tags, operation)
 
 
 @pytest.mark.parametrize("shape", [(), (3,)])
 def test_requires_displacement_vector(domain, shape):
-    distributed, _, path = domain
+    distributed, _ = domain
     V = fem.functionspace(distributed, ("Lagrange", 1, shape))
     with pytest.raises(StudyFileError, match="displacement vector with 2 components"):
-        DisplacedVertexSampler("u", V, path, [10])
+        DisplacedVertexSampler("u", V, _tags(distributed), [10])
 
 
-def test_builder_reads_tags_without_solver_method(domain):
-    distributed, reference, path = domain
+def test_builder_uses_solver_facet_tags(domain):
+    distributed, reference = domain
     V = fem.functionspace(distributed, ("Lagrange", 1, (2,)))
 
     class Spec:
@@ -204,14 +157,19 @@ def test_builder_reads_tags_without_solver_method(domain):
             self.state_spec = {"u": Spec()}
 
         def function_space(self, field):
+            assert field == "u"
             return V
+
+        def facet_tags(self, field):
+            assert field == "u"
+            return _tags(distributed)
 
     options = MeasurementOptions(
         fields=["u"],
         data=NumpyDataOptions(type="numpy", path="unused.npz"),
         noise=NoiseOptions(stddev=0.1),
         spatial_sampling=DisplacedVertexSamplingOptions(
-            type="fenicsx.displaced_vertices", tags=[10, 20], mesh=path
+            type="fenicsx.displaced_vertices", tags=[10, 20]
         ),
     )
     operator = build_observation_operator("coordinates", options, Solver())
@@ -219,21 +177,20 @@ def test_builder_reads_tags_without_solver_method(domain):
     expected = reference[np.isclose(reference[:, 0], 0) & np.isclose(reference[:, 1], 0)]
     np.testing.assert_allclose(actual, expected)
 
+    class WithoutFacetTags:
+        def __init__(self):
+            self.state_spec = {"u": Spec()}
 
-def test_three_dimensional_surface_intersection(shared_tmp_path):
-    path = shared_tmp_path / "cube.xdmf"
-    if COMM.rank == 0:
-        serial = mesh.create_unit_cube(MPI.COMM_SELF, 2, 2, 2)
-        tags = _tags(serial)
-        tags.name = "Facet tags"
-        with io.XDMFFile(MPI.COMM_SELF, path, "w") as f:
-            f.write_mesh(serial)
-            f.write_meshtags(tags, serial.geometry)
-    COMM.barrier()
-    # The source mesh has a different resolution and numbering from the selection mesh.
-    domain = mesh.create_unit_cube(COMM, 3, 3, 3)
+        function_space = Solver.function_space
+
+    with pytest.raises(StudyFileError, match="needs a facet_tags method"):
+        build_observation_operator("coordinates", options, WithoutFacetTags())
+
+
+def test_three_dimensional_surface_intersection():
+    domain = mesh.create_unit_cube(COMM, 2, 2, 2)
     V = fem.functionspace(domain, ("Lagrange", 1, (3,)))
-    sampler = DisplacedVertexSampler("u", V, str(path), [10, 20])
+    sampler = DisplacedVertexSampler("u", V, _tags(domain), [10, 20])
     translation = np.array([0.1, 0.2, 0.3])
     values = sampler.sample({
         "u": _owned(V, lambda x: np.tile(translation[:, None], (1, x.shape[1])))
