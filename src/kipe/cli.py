@@ -179,6 +179,20 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="SECONDS",
         help="time between redraws with --watch (default: %(default)s)",
     )
+    plot.add_argument(
+        "--plots-per-row",
+        type=int,
+        default=1,
+        metavar="N",
+        help="plots per row with --terminal or --watch, e.g., 3 for many parameters "
+        "(default: %(default)s)",
+    )
+    plot.add_argument(
+        "--all",
+        action=argparse.BooleanOptionalAction,
+        help="with --terminal or --watch, draw all outer iterations (--all) or only the last "
+        "one (--no-all); default: all with --terminal, the last one with --watch",
+    )
     plot.set_defaults(func=_plot)
 
     analysis = subparsers.add_parser(
@@ -479,14 +493,24 @@ def _plot(args: argparse.Namespace) -> None:
     if args.truth:
         truth = build_forward_solver(studies[0].forward_solver).nominal_parameters()
 
+    all_iterations = args.all if args.all is not None else not args.watch
+
     if args.watch:
-        watch_histories(paths, truth, args.interval)
+        watch_histories(paths, truth, args.interval, args.plots_per_row, all_iterations)
         return
 
     histories = {label: read_history(path) for label, path in paths.items()}
 
     if args.terminal:
-        print(render_histories(histories, truth, color=sys.stdout.isatty()))
+        print(
+            render_histories(
+                histories,
+                truth,
+                color=sys.stdout.isatty(),
+                columns=args.plots_per_row,
+                all_iterations=all_iterations,
+            )
+        )
         return
 
     import matplotlib.pyplot as plt
