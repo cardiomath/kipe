@@ -28,7 +28,7 @@ examples/**/results/
 
 # Docs build
 docs/build/
-_apidoc/
+docs/source/_apidoc/
 docs/source/_generated/
 docs/_build/
 
