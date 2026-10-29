@@ -493,7 +493,7 @@ def _plot(args: argparse.Namespace) -> None:
         truth = build_forward_solver(studies[0].forward_solver).nominal_parameters()
 
     if args.watch:
-        watch_histories(paths, truth, args.interval, args.cpr, args.all)
+        watch_histories(paths, truth, args.interval, args.plots_per_row, args.all)
         return
 
     histories = {label: read_history(path) for label, path in paths.items()}
@@ -504,7 +504,7 @@ def _plot(args: argparse.Namespace) -> None:
                 histories,
                 truth,
                 color=sys.stdout.isatty(),
-                columns=args.cpr,
+                columns=args.plots_per_row,
                 all_iterations=args.all,
             )
         )
