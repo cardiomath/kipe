@@ -189,8 +189,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     plot.add_argument(
         "--all",
-        action="store_true",
-        help="with --terminal or --watch, draw all outer iterations, not only the last one",
+        action=argparse.BooleanOptionalAction,
+        help="with --terminal or --watch, draw all outer iterations (--all) or only the last "
+        "one (--no-all); default: all with --terminal, the last one with --watch",
     )
     plot.set_defaults(func=_plot)
 
@@ -492,8 +493,10 @@ def _plot(args: argparse.Namespace) -> None:
     if args.truth:
         truth = build_forward_solver(studies[0].forward_solver).nominal_parameters()
 
+    all_iterations = args.all if args.all is not None else not args.watch
+
     if args.watch:
-        watch_histories(paths, truth, args.interval, args.plots_per_row, args.all)
+        watch_histories(paths, truth, args.interval, args.plots_per_row, all_iterations)
         return
 
     histories = {label: read_history(path) for label, path in paths.items()}
@@ -505,7 +508,7 @@ def _plot(args: argparse.Namespace) -> None:
                 truth,
                 color=sys.stdout.isatty(),
                 columns=args.plots_per_row,
-                all_iterations=args.all,
+                all_iterations=all_iterations,
             )
         )
         return

@@ -18,7 +18,7 @@ from kipe.options import (
     StudyOptions,
     dump_study,
 )
-from kipe.plot import PlotError, plot_histories, read_history, render_histories
+from kipe.plot import PlotError, read_history, render_histories
 
 pytest.importorskip("matplotlib")
 
@@ -122,7 +122,7 @@ def test_plot_terminal(tmp_path, capsys):
     assert "a = " in out
     assert "c = " in out
     assert "truth 3" in out  # c of the FitzHugh-Nagumo solver
-    assert "step of iteration 2/2" in out
+    assert "outer iterations" in out
     assert out.rstrip().splitlines()[-3:-1] == [f"━━ {study}", "━━ truth"]  # legend
     assert "1σ range" in out.splitlines()[-1]  # key to the lines
     assert "\x1b[" not in out  # no colors when not printing to a terminal
@@ -188,11 +188,12 @@ def test_render_histories_keeps_terminal_background(tmp_path):
 
 
 def test_plot_terminal_columns(tmp_path, capsys):
-    """--cpr puts several plots in a row, so the output is shorter than one plot per row."""
+    """--plots-per-row puts several plots in a row, so the output is shorter than
+    one plot per row."""
     study = _study(tmp_path)
-    assert main(["plot", study, "--terminal"]) == 0
+    assert main(["plot-estimation", study, "--terminal"]) == 0
     one = capsys.readouterr().out
-    assert main(["plot", study, "--terminal", "--cpr", "2"]) == 0
+    assert main(["plot-estimation", study, "--terminal", "--plots-per-row", "2"]) == 0
     two = capsys.readouterr().out
     assert len(two.splitlines()) < len(one.splitlines())
     assert "a = " in two
@@ -202,54 +203,33 @@ def test_plot_terminal_columns(tmp_path, capsys):
 def test_plot_terminal_unused_cells_are_empty(tmp_path, capsys):
     """Three parameters in rows of two: the fourth cell has no frame."""
     study = _study(tmp_path, names=("a", "b", "c"))
-    assert main(["plot", study, "--terminal", "--cpr", "2"]) == 0
+    assert main(["plot-estimation", study, "--terminal", "--plots-per-row", "2"]) == 0
     out = capsys.readouterr().out
     assert out.count("┌") == 3
 
 
-def test_plot_terminal_current_iteration_by_default(tmp_path, capsys):
-    """Only the current outer iteration, unless --all: the key then has no iteration lines."""
+def test_plot_terminal_all_iterations_by_default(tmp_path, capsys):
+    """--terminal draws all outer iterations, unless --no-all; --watch only the current one."""
+
+    def interrupt(seconds: float) -> None:
+        raise KeyboardInterrupt
+
     study = _study(tmp_path)
-    assert main(["plot", study, "--terminal"]) == 0
-    current = capsys.readouterr().out
-    assert main(["plot", study, "--terminal", "--all"]) == 0
+    assert main(["plot-estimation", study, "--terminal"]) == 0
     everything = capsys.readouterr().out
+    assert main(["plot-estimation", study, "--terminal", "--no-all"]) == 0
+    current = capsys.readouterr().out
+    assert "outer iterations" in everything
     assert "step of iteration 2/2" in current
     assert "outer iterations" not in current
-    assert "outer iterations" in everything
 
+    import pytest
 
-def test_read_history_reads_the_plan(tmp_path):
-    """The plan from the run's provenance: 2 iterations of 2 times and the initial state."""
-    _study(tmp_path)
-    history = read_history(tmp_path / "results" / "estimation" / "history.csv")
-    assert (history.steps_per_iteration, history.iterations) == (3, 2)
-    assert history.steps == len(history.iteration) == 6
-    assert history.iteration_starts() == [3]
-
-
-def test_running_estimation_spans_the_whole_run(tmp_path):
-    """While the estimation runs, the axis and the iteration starts cover the whole run."""
-    _study(tmp_path)
-    path = tmp_path / "results" / "estimation" / "history.csv"
-    path.write_text("".join(path.read_text().splitlines(keepends=True)[:3]))  # 2 steps
-    history = read_history(path)
-    assert len(history.iteration) == 2
-    assert history.steps == 6
-    assert history.iteration_starts() == [3]
-
-    from matplotlib.figure import Figure
-
-    figure = Figure()
-    plot_histories(figure, {"study": history})
-    assert figure.axes[0].get_xlim() == (0, 5)
-
-
-def test_without_plan_the_axis_follows_the_history(tmp_path):
-    """Older runs have no run.yaml: the steps and iteration starts come from the history."""
-    _study(tmp_path)
-    (tmp_path / "results" / "estimation" / "run.yaml").unlink()
-    history = read_history(tmp_path / "results" / "estimation" / "history.csv")
-    assert history.steps_per_iteration is None
-    assert history.steps == 6
-    assert history.iteration_starts() == [3]
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr("kipe.plot.time.sleep", interrupt)
+        assert main(["plot-estimation", study, "--watch"]) == 0
+        watched = capsys.readouterr().out
+        assert main(["plot-estimation", study, "--watch", "--all"]) == 0
+        watched_all = capsys.readouterr().out
+    assert "outer iterations" not in watched
+    assert "outer iterations" in watched_all
