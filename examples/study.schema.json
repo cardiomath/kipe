@@ -80,16 +80,16 @@
     },
     "DisplacedVertexSamplingOptions": {
       "additionalProperties": false,
-      "description": "Return displaced mesh vertices selected by tags (FEniCSx backend).\n\nThe observed field is a displacement vector with one component per spatial dimension.\nThe solver provides its function space. Selection uses the mesh and facet tags read from\nan XDMF file, ordered by the vertices' original geometry input indices.",
+      "description": "Return displaced mesh vertices selected by tags (FEniCSx backend).\n\nThe observed field is a displacement vector with one component per spatial dimension.\nThe solver provides its function space. Selection uses the mesh and facet tags read from\nan XDMF file, ordered by the vertices' original geometry input indices",
       "properties": {
         "type": {
           "const": "fenicsx.displaced_vertices",
-          "description": "Kind of spatial sampling.",
+          "description": "Kind of spatial sampling",
           "title": "Type",
           "type": "string"
         },
         "tags": {
-          "description": "Tag IDs whose vertices are selected.",
+          "description": "Tag IDs whose vertices are selected",
           "items": {
             "type": "integer"
           },
@@ -98,25 +98,25 @@
           "type": "array"
         },
         "mesh": {
-          "description": "XDMF file containing the selection mesh and its facet tags, in reference coordinates.",
+          "description": "XDMF file containing the selection mesh and its facet tags, in reference coordinates",
           "title": "Mesh",
           "type": "string"
         },
         "mesh_name": {
           "default": "mesh",
-          "description": "Name of the mesh in the XDMF file.",
+          "description": "Name of the mesh in the XDMF file",
           "title": "Mesh Name",
           "type": "string"
         },
         "tags_name": {
           "default": "Facet tags",
-          "description": "Name of the facet tags in the XDMF file.",
+          "description": "Name of the facet tags in the XDMF file",
           "title": "Tags Name",
           "type": "string"
         },
         "operation": {
           "default": "intersection",
-          "description": "Combine the vertex sets of the tags, rather than the tagged entities themselves.",
+          "description": "Combine the vertex sets of the tags, rather than the tagged entities themselves\n\n``union``: select vertices belonging to any listed tag\n``intersection``: select vertices shared by all listed tags (the default)",
           "enum": [
             "union",
             "intersection"

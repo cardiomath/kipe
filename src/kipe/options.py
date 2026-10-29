@@ -305,26 +305,31 @@ class DisplacedVertexSamplingOptions:
 
     The observed field is a displacement vector with one component per spatial dimension.
     The solver provides its function space. Selection uses the mesh and facet tags read from
-    an XDMF file, ordered by the vertices' original geometry input indices.
+    an XDMF file, ordered by the vertices' original geometry input indices
     """
 
     type: Literal["fenicsx.displaced_vertices"]
-    """Kind of spatial sampling."""
+    """Kind of spatial sampling"""
 
     tags: Annotated[list[int], Field(min_length=1)]
-    """Tag IDs whose vertices are selected."""
+    """Tag IDs whose vertices are selected"""
 
     mesh: str
-    """XDMF file containing the selection mesh and its facet tags, in reference coordinates."""
+    """XDMF file containing the selection mesh and its facet tags, in reference coordinates"""
 
     mesh_name: str = "mesh"
-    """Name of the mesh in the XDMF file."""
+    """Name of the mesh in the XDMF file"""
 
     tags_name: str = "Facet tags"
-    """Name of the facet tags in the XDMF file."""
+    """Name of the facet tags in the XDMF file"""
 
     operation: Literal["union", "intersection"] = "intersection"
-    """Combine the vertex sets of the tags, rather than the tagged entities themselves."""
+    """
+    Combine the vertex sets of the tags, rather than the tagged entities themselves
+
+    ``union``: select vertices belonging to any listed tag
+    ``intersection``: select vertices shared by all listed tags (the default)
+    """
 
 
 # the choices of a measurement, from the core and the backends
