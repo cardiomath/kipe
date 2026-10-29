@@ -1,4 +1,7 @@
-"""Plots of the estimation history: ``kipe plot``.
+"""Plots of the estimation history, ``kipe plot-estimation``, and of the sensitivity
+analysis, ``kipe plot-sensitivity`` (:func:`plot_sensitivity`).
+
+The estimation history:
 
 One subplot per parameter: the estimate after each assimilation step with its physical 1σ
 range, over the steps of all outer iterations. The history is read from ``history.csv``, which
@@ -25,7 +28,10 @@ from kipe._types import NDArray_f64
 from kipe.forward_solver import Parameters
 
 if TYPE_CHECKING:
+    from matplotlib.axes import Axes
     from matplotlib.figure import Figure
+
+    from kipe.sensitivity import Sensitivity
 
 
 # matplotlib's first colors, so that terminal and figure agree
@@ -188,6 +194,136 @@ def plot_histories(
 
     if len(histories) > 1 or truth is not None:
         axes[0].legend()
+
+
+def plot_sensitivity(figure: "Figure", sensitivity: "Sensitivity") -> None:
+    r"""Plot the result of a sensitivity analysis into a figure, in three panels.
+
+    The singular values :math:`s_i` of the noise-weighted sensitivities over their index, with
+    the condition number, and the noise floor :math:`s = 1` if it is within their range: below
+    it, a unit change of :math:`\theta` along a singular vector changes the predicted data by
+    less than the noise;
+    the right singular vectors :math:`\bs{v}_i`, one row each, from the best to the worst
+    determined combination of the parameters, each with its largest entry positive (the sign
+    of a whole vector is arbitrary, the signs of its entries relative to each other are not);
+    and the Cramér-Rao correlations, unless the Fisher information is singular.
+
+    The heatmaps order the parameters by identifiability: first the one that dominates
+    :math:`\bs{v}_1`, then the one of the others that dominates :math:`\bs{v}_2`, and so on.
+    Where each combination is mainly one parameter, the diagonal of the singular vectors is
+    dominant, and the order is the ranking from the best to the worst determined parameter.
+
+    Args:
+        figure: the figure to draw into
+        sensitivity: the result, e.g., from :func:`kipe.sensitivity.read_sensitivity`
+    """
+    values, vectors, correlations = figure.subplots(1, 3)
+    index = np.arange(1, len(sensitivity.names) + 1)
+
+    values.semilogy(index, sensitivity.singular_values, "o-")
+    values.grid(which="major", color="0.85")
+    values.grid(which="minor", axis="y", color="0.93")
+    low, high = values.get_ylim()
+    if low <= 1.0 <= high:  # only where it does not stretch the axis
+        values.axhline(1.0, color="k", ls=":", lw=1, label="noise floor, $s = 1$")
+        values.legend(fontsize="small")
+    values.set_xticks(index)
+    values.set_xlim(0.5, len(index) + 0.5)
+    values.set_xlabel("$i$")
+    values.set_ylabel("singular value $s_i$")
+    values.set_title(f"singular values, κ = {sensitivity.condition_number:.3g}")
+
+    vectors_by_row = _largest_positive(sensitivity.right_singular_vectors.T)  # row i: v_i
+    order = _by_identifiability(vectors_by_row)
+    names = [sensitivity.names[j] for j in order]
+
+    _matrix(
+        vectors,
+        vectors_by_row[:, order],
+        (-1.0, 1.0),
+        "RdBu_r",
+        names,
+        [f"$v_{i}$" for i in index],
+    )
+    vectors.set_xlabel("parameters, by identifiability")
+    vectors.set_title("right singular vectors")
+
+    if np.all(np.isfinite(sensitivity.covariance)):
+        correlation = sensitivity.correlation[np.ix_(order, order)]
+        _matrix(correlations, correlation, (-1.0, 1.0), "RdBu_r", names, names)
+        correlations.set_xlabel("parameters, by identifiability")
+        correlations.set_title("Cramér-Rao correlations")
+    else:
+        correlations.axis("off")
+        correlations.text(
+            0.5,
+            0.5,
+            "the Fisher information is singular:\nno Cramér-Rao correlations",
+            ha="center",
+            va="center",
+        )
+
+
+def _by_identifiability(vectors: NDArray_f64) -> list[int]:
+    """Return the parameters in the order of the singular vectors they dominate.
+
+    Greedy, from the best determined vector to the worst: each takes the parameter of its
+    largest magnitude among those not taken yet.
+
+    Args:
+        vectors: the right singular vectors, one per row, from the best determined
+
+    Returns:
+        the indices of the parameters, in this order
+    """
+    order: list[int] = []
+    for vector in np.abs(vectors):
+        remaining = [j for j in range(len(vector)) if j not in order]
+        order.append(max(remaining, key=lambda j: vector[j]))
+    return order
+
+
+def _largest_positive(vectors: NDArray_f64) -> NDArray_f64:
+    """Return vectors with their signs flipped so that the largest entry of each is positive.
+
+    Args:
+        vectors: the vectors, one per row
+
+    Returns:
+        the vectors, each multiplied by the sign of its entry of the largest magnitude
+    """
+    largest = vectors[np.arange(len(vectors)), np.argmax(np.abs(vectors), axis=1)]
+    return vectors * np.where(largest < 0, -1.0, 1.0)[:, np.newaxis]
+
+
+def _matrix(
+    ax: "Axes",
+    matrix: NDArray_f64,
+    limits: tuple[float, float],
+    cmap: str,
+    columns: list[str],
+    rows: list[str],
+) -> None:
+    """Draw a matrix as a heatmap, with its values in the cells.
+
+    Args:
+        ax: the axes to draw into
+        matrix: the matrix, shape ``(len(rows), len(columns))``
+        limits: the values at the ends of the color map
+        cmap: name of the color map
+        columns: labels of the columns
+        rows: labels of the rows
+    """
+    image = ax.imshow(matrix, cmap=cmap, vmin=limits[0], vmax=limits[1])
+    # in an inset at the right edge, so that it has the height of the heatmap
+    colorbar = ax.figure.colorbar(image, cax=ax.inset_axes((1.05, 0.0, 0.05, 1.0)))
+    colorbar.set_ticks(np.linspace(*limits, 5).tolist())
+    ax.set_xticks(range(len(columns)), columns)
+    ax.set_yticks(range(len(rows)), rows)
+    end = max(abs(limits[0]), abs(limits[1]))
+    for (i, j), value in np.ndenumerate(matrix):
+        color = "white" if abs(value) > 0.6 * end else "black"  # on the dark colors
+        ax.text(j, i, f"{value:.2f}", ha="center", va="center", fontsize="small", color=color)
 
 
 def render_histories(

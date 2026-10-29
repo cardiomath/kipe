@@ -1,4 +1,4 @@
-"""``kipe plot``: reading the estimation history and plotting it."""
+"""``kipe plot-estimation``: reading the estimation history and plotting it."""
 
 from pathlib import Path
 
@@ -75,7 +75,7 @@ def test_read_history_matches_npz(tmp_path):
 def test_plot_saves_figure(tmp_path):
     study = _study(tmp_path)
     figure = tmp_path / "history.png"
-    assert main(["plot", study, "--truth", "--save", str(figure)]) == 0
+    assert main(["plot-estimation", study, "--truth", "--save", str(figure)]) == 0
     assert figure.stat().st_size > 0
 
 
@@ -83,20 +83,20 @@ def test_plot_compares_studies(tmp_path):
     first = _study(tmp_path / "first")
     second = _study(tmp_path / "second")
     figure = tmp_path / "compare.png"
-    assert main(["plot", first, second, "--save", str(figure)]) == 0
+    assert main(["plot-estimation", first, second, "--save", str(figure)]) == 0
     assert figure.exists()
 
 
 def test_plot_without_history(tmp_path, capsys):
     path = _study_without_estimation(tmp_path)
-    assert main(["plot", str(path), "--save", str(tmp_path / "x.png")]) == 1
+    assert main(["plot-estimation", str(path), "--save", str(tmp_path / "x.png")]) == 1
     assert "no estimation history" in capsys.readouterr().err
 
 
 def test_plot_rejects_different_parameters(tmp_path, capsys):
     first = _study(tmp_path / "first", names=("a", "c"))
     second = _study(tmp_path / "second", names=("a",))
-    assert main(["plot", first, second, "--save", str(tmp_path / "x.png")]) == 1
+    assert main(["plot-estimation", first, second, "--save", str(tmp_path / "x.png")]) == 1
     assert "estimate different parameters" in capsys.readouterr().err
 
 
@@ -117,7 +117,7 @@ def test_read_history_skips_partial_row(tmp_path):
 
 def test_plot_terminal(tmp_path, capsys):
     study = _study(tmp_path)
-    assert main(["plot", study, "--terminal", "--truth"]) == 0
+    assert main(["plot-estimation", study, "--terminal", "--truth"]) == 0
     out = capsys.readouterr().out
     assert "a = " in out
     assert "c = " in out
@@ -131,7 +131,7 @@ def test_plot_terminal(tmp_path, capsys):
 def test_plot_terminal_compares_studies(tmp_path, capsys):
     first = _study(tmp_path / "first")
     second = _study(tmp_path / "second")
-    assert main(["plot", first, second, "--terminal"]) == 0
+    assert main(["plot-estimation", first, second, "--terminal"]) == 0
     out = capsys.readouterr().out
     assert first in out  # legend
     assert second in out
@@ -146,7 +146,7 @@ def test_plot_watch(tmp_path, capsys, monkeypatch):
     study = _study(tmp_path)
     # after the run: this patches time.sleep everywhere, e.g., in subprocess.run with a timeout
     monkeypatch.setattr("kipe.plot.time.sleep", interrupt)
-    assert main(["plot", study, "--watch"]) == 0
+    assert main(["plot-estimation", study, "--watch"]) == 0
     assert "a = " in capsys.readouterr().out
 
 
@@ -156,14 +156,14 @@ def test_plot_watch_waits_for_history(tmp_path, capsys, monkeypatch):
 
     monkeypatch.setattr("kipe.plot.time.sleep", interrupt)
     path = _study_without_estimation(tmp_path)
-    assert main(["plot", str(path), "--watch"]) == 0
+    assert main(["plot-estimation", str(path), "--watch"]) == 0
     assert "no estimation history" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("option", ["--terminal", "--watch"])
 def test_plot_terminal_excludes_save(tmp_path, capsys, option):
-    with pytest.raises(SystemExit):
-        main(["plot", "study.yaml", option, "--save", str(tmp_path / "x.png")])
+    figure = str(tmp_path / "x.png")
+    assert main(["plot-estimation", "study.yaml", option, "--save", figure]) == 1
     assert "--save writes a matplotlib figure" in capsys.readouterr().err
 
 
@@ -174,7 +174,7 @@ def test_plot_watch_with_terminal(tmp_path, capsys, monkeypatch):
     study = _study(tmp_path)
     # after the run: this patches time.sleep everywhere, e.g., in subprocess.run with a timeout
     monkeypatch.setattr("kipe.plot.time.sleep", interrupt)
-    assert main(["plot", study, "--terminal", "--watch"]) == 0
+    assert main(["plot-estimation", study, "--terminal", "--watch"]) == 0
     assert "a = " in capsys.readouterr().out
 
 

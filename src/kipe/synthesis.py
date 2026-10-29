@@ -1,14 +1,17 @@
 """Generation of synthetic measurement data from a forward run: ``kipe synthesis``.
 
-The true state at the measurement times comes from the forward solver (``synthesis.truth``):
-it runs with its nominal parameters through all measurement times (``run``), or reads the
-states from the checkpoints of an earlier run (``checkpoints``). At each time, the observation
-operator gives the predicted data and noise is added: the measurement's
-``noise.stddev``, or ``synthesis.noise`` where given (e.g., none, for noise-free data). The
-resulting measurements are written to their ``data`` files, and returned. With several noise
-realizations (``synthesis.realizations``), the true state is computed once, and each
-realization gets its own noise and data files. The provenance of the run is written to
-``<output.path>/synthesis/`` (:mod:`kipe.provenance`).
+The true data at the measurement times come from the source of the truth
+(``synthesis.truth``): the forward solver runs with its nominal parameters through all
+measurement times (``run``), or reads the states from the checkpoints of an earlier run
+(``checkpoints``), and the observation operators give the true data; or they are read from
+files (``data``), e.g., the noise-free data of an earlier synthesis. Noise is then added: the
+measurement's ``noise.stddev``, or ``synthesis.noise`` where given (e.g., none, for
+noise-free data). The resulting measurements are written to their ``data`` files, and
+returned. With several noise realizations (``synthesis.realizations``), the true data are
+computed once, and each realization gets its own noise and data files. From a run or
+checkpoints, the noise-free data are written too, to ``<output.path>/synthesis/noise_free/``.
+The provenance of the run is written to ``<output.path>/synthesis/``
+(:mod:`kipe.provenance`).
 
 The noise-free data come from :func:`observe_run` or :func:`observe_checkpoints`. They are
 public: the sensitivity analysis (:mod:`kipe.sensitivity`) uses :func:`observe_run` for its
@@ -21,7 +24,7 @@ ranks. Rank 0 writes the files.
 
 import logging
 import time
-from collections.abc import Iterator, Mapping
+from collections.abc import Mapping
 from pathlib import Path
 from typing import assert_never
 
@@ -34,26 +37,27 @@ from kipe._types import NDArray_f64
 from kipe.forward_solver import (
     ForwardSolver,
     Parameters,
-    State,
     SupportsCheckpoints,
     build_forward_solver,
 )
-from kipe.measurements import (
+from kipe.measurements.data import (
     Measurement,
-    ObservationOperator,
-    build_observation_operator,
+    measurement_schedule,
     measurement_times,
+    read_data,
+    time_tolerance,
     write_data,
 )
+from kipe.measurements.operator import ObservationOperator, build_observation_operator
 from kipe.options import (
     CheckpointsTruthOptions,
+    DataTruthOptions,
     MeasurementOptions,
     RunTruthOptions,
     StudyFileError,
     StudyOptions,
-    SynthesisOptions,
-    TruthOptions,
     data_path,
+    truth_path,
 )
 from kipe.provenance import recorded_run, sha256
 
@@ -69,7 +73,8 @@ def synthesize(study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD) -> list[lis
 
     Returns:
         the generated measurements of each noise realization, with this rank's entries of
-        their data: ``synthesize(study)[r][i]`` is measurement i of realization r
+        their data: ``synthesize(study)[r][i]`` is measurement i of realization r; their
+        files are written when it returns, on every rank
 
     Raises:
         StudyFileError: if a measurement lacks what synthesis needs, or observes a field the
@@ -85,53 +90,42 @@ def synthesize(study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD) -> list[lis
         for name, options in study.measurements.items()
     }
 
-    stddevs = {
-        name: _added_stddev(name, options, study.synthesis)
-        for name, options in study.measurements.items()
-    }
-
     output = Path(study.output.path) / "synthesis"
-    with recorded_run(output, study, comm=comm):
-        _log_plan(study, stddevs)
-        times = {name: _times(name, o) for name, o in study.measurements.items()}
-        seeds = {
-            name: _seed(name, o) for name, o in study.measurements.items() if stddevs[name] > 0
-        }
-        noise_free = _noise_free(study.synthesis.truth, solver, times, operators)
+    with recorded_run(output, study, _run_info(study), comm):
+        noise = _noise(study)
+        _log_plan(study, noise)
+        times, true_data = _truth(study, solver, operators)
+
+        written = []
+        if not isinstance(study.synthesis.truth, DataTruthOptions):  # need not be noise-free
+            written += _write_noise_free(output, operators, times, true_data, comm)
 
         realizations = []
-        written = []
         for r in range(study.synthesis.realizations):
-            measurements = _realization(study, r, operators, times, noise_free, stddevs, seeds)
-            for measurement in measurements:
-                path = data_path(study.measurements[measurement.name], r)
-                write_data(
-                    path, measurement.operator, measurement.times, measurement.values, comm
-                )
-                written.append(path)
+            measurements = _realization(study, r, operators, times, true_data, noise)
+            written += [_write(study, measurement, r, comm) for measurement in measurements]
             realizations.append(measurements)
 
-        if comm.rank == 0:  # rank 0 wrote the files
-            lines = [f"{sha256(path)}  {path}\n" for path in written]
-            (output / "data.sha256").write_text("".join(lines))
+        _write_checksums(output, written, comm)
         _log_written(study, times)
         logger.info("%-11s%.3g s", "run time", time.perf_counter() - started)
 
+    comm.barrier()  # rank 0 has written the data, e.g., for an estimation that follows
     return realizations
 
 
-def _log_plan(study: StudyOptions, stddevs: Mapping[str, float]) -> None:
+def _log_plan(study: StudyOptions, noise: Mapping[str, tuple[float, int | None]]) -> None:
     """Log what synthesis does: the solver, the truth, the realizations and the measurements.
 
     Args:
         study: the study options, with measurements
-        stddevs: standard deviations of the noise added to each measurement's data
+        noise: standard deviation and seed of the noise added to each measurement's data
     """
     assert study.measurements is not None
     logger.info("synthesis")
     logger.info("  %-16s%s", "forward solver", study.forward_solver.factory)
     truth = study.synthesis.truth
-    if isinstance(truth, CheckpointsTruthOptions):
+    if isinstance(truth, CheckpointsTruthOptions | DataTruthOptions):
         logger.info("  %-16s%s at %s", "truth", truth.type, truth.path)
     else:
         logger.info("  %-16s%s", "truth", truth.type)
@@ -141,9 +135,10 @@ def _log_plan(study: StudyOptions, stddevs: Mapping[str, float]) -> None:
 
     rows = [("measurement", "fields", "σ", "seed")]
     for name, options in study.measurements.items():
+        stddev, _ = noise[name]
         seed = "" if options.noise.seed is None else str(options.noise.seed)
-        sigma = f"{stddevs[name]:g}"
-        if stddevs[name] != options.noise.stddev:
+        sigma = f"{stddev:g}"
+        if stddev != options.noise.stddev:
             sigma += f" (assumes {options.noise.stddev:g})"
         rows.append((name, ", ".join(options.fields), sigma, seed))
     for line in format_table(rows, "<<>>"):
@@ -164,32 +159,136 @@ def _log_written(study: StudyOptions, times: Mapping[str, NDArray_f64]) -> None:
         logger.info(
             "wrote %s: %s%d times to %s", name, each, len(times[name]), options.data.path
         )
+    if not isinstance(study.synthesis.truth, DataTruthOptions):
+        output = Path(study.output.path) / "synthesis" / "noise_free"
+        logger.info("wrote the noise-free data to %s", output)
 
 
-def _noise_free(
-    truth: TruthOptions,
+def _truth(
+    study: StudyOptions,
     solver: ForwardSolver,
-    times: Mapping[str, NDArray_f64],
     operators: Mapping[str, ObservationOperator],
-) -> dict[str, NDArray_f64]:
-    """Return the noise-free data of the measurements, from the source of the truth.
+) -> tuple[dict[str, NDArray_f64], dict[str, NDArray_f64]]:
+    """Return the times and the true data of the measurements, from the source of the truth.
 
     Args:
-        truth: the source of the true state, ``synthesis.truth``
+        study: the study options, with measurements
         solver: the forward solver
-        times: the times of each measurement
         operators: the observation operators of the measurements
 
     Returns:
-        this rank's entries of each measurement's noise-free data, one row per time
+        - the times of each measurement
+        - this rank's entries of each measurement's true data, one row per time
+
+    Raises:
+        StudyFileError: if a measurement lacks what its source of the truth needs, e.g., its
+            times for a run, or its true data do not fit it
     """
+    assert study.measurements is not None
+    truth = study.synthesis.truth
+    if isinstance(truth, DataTruthOptions):
+        times, values = {}, {}
+        for name, options in study.measurements.items():
+            selected = None if options.times is None else measurement_times(options.times)
+            path = truth_path(truth, name)
+            times[name], values[name] = read_data(name, path, operators[name], selected)
+        return times, values
+
+    times = {name: _times(name, options) for name, options in study.measurements.items()}
     match truth:
         case RunTruthOptions():
-            return observe_run(solver, times, operators)
+            return times, observe_run(solver, times, operators)
         case CheckpointsTruthOptions(path=path):
-            return observe_checkpoints(solver, path, times, operators)
+            return times, observe_checkpoints(solver, path, times, operators)
         case _:
             assert_never(truth)
+
+
+def _run_info(study: StudyOptions) -> dict[str, dict[str, dict[str, str]]]:
+    """Return what ``run.yaml`` records beyond the study: the files of given true data.
+
+    Args:
+        study: the study options
+
+    Returns:
+        with the truth source ``data``: ``{"truth": measurement name -> path and SHA-256 hash
+        of its true data}``; otherwise nothing
+
+    Raises:
+        StudyFileError: if a file of the true data cannot be read
+    """
+    truth = study.synthesis.truth
+    if not isinstance(truth, DataTruthOptions):
+        return {}
+
+    files = {}
+    for name in study.measurements or {}:
+        path = truth_path(truth, name)
+        try:
+            files[name] = {"path": path, "sha256": sha256(path)}
+        except OSError as err:
+            raise StudyFileError(f"cannot read the true data {path}: {err}") from err
+    return {"truth": files}
+
+
+def _write_noise_free(
+    output: Path,
+    operators: Mapping[str, ObservationOperator],
+    times: Mapping[str, NDArray_f64],
+    true_data: Mapping[str, NDArray_f64],
+    comm: MPI.Comm,
+) -> list[str]:
+    """Write the noise-free data of the measurements, to ``noise_free/`` in the output.
+
+    Args:
+        output: output directory of the synthesis
+        operators: the observation operators of the measurements
+        times: the times of each measurement
+        true_data: this rank's entries of each measurement's true data
+        comm: communicator of the run; rank 0 writes
+
+    Returns:
+        the paths written
+    """
+    written = []
+    for name, operator in operators.items():
+        path = str(output / "noise_free" / f"{name}.npz")
+        write_data(path, operator, times[name], true_data[name], comm)
+        written.append(path)
+    return written
+
+
+def _write(
+    study: StudyOptions, measurement: Measurement, realization: int, comm: MPI.Comm
+) -> str:
+    """Write the data of a measurement of one noise realization, to its ``data.path``.
+
+    Args:
+        study: the study options, with measurements
+        measurement: the measurement, with this rank's entries of its data
+        realization: number of the noise realization
+        comm: communicator of the run; rank 0 writes
+
+    Returns:
+        the path written
+    """
+    assert study.measurements is not None
+    path = data_path(study.measurements[measurement.name], realization)
+    write_data(path, measurement.operator, measurement.times, measurement.values, comm)
+    return path
+
+
+def _write_checksums(output: Path, written: list[str], comm: MPI.Comm) -> None:
+    """Write ``data.sha256``: the hash and path of each file written, as ``sha256sum`` does.
+
+    Args:
+        output: output directory of the synthesis
+        written: the paths of the data files written
+        comm: communicator of the run; rank 0, which wrote the files, writes
+    """
+    if comm.rank == 0:
+        lines = [f"{sha256(path)}  {path}\n" for path in written]
+        (output / "data.sha256").write_text("".join(lines))
 
 
 def _realization(
@@ -197,9 +296,8 @@ def _realization(
     realization: int,
     operators: Mapping[str, ObservationOperator],
     times: Mapping[str, NDArray_f64],
-    noise_free: Mapping[str, NDArray_f64],
-    stddevs: Mapping[str, float],
-    seeds: Mapping[str, int],
+    true_data: Mapping[str, NDArray_f64],
+    noise: Mapping[str, tuple[float, int | None]],
 ) -> list[Measurement]:
     """Return the measurements of one noise realization.
 
@@ -208,9 +306,8 @@ def _realization(
         realization: number of the noise realization
         operators: the observation operators of the measurements
         times: the times of each measurement
-        noise_free: this rank's entries of each measurement's noise-free data
-        stddevs: standard deviations of the noise added to each measurement's data
-        seeds: noise seeds of the measurements with noise
+        true_data: this rank's entries of each measurement's true data
+        noise: standard deviation and seed of the noise added to each measurement's data
 
     Returns:
         the measurements, in the order of the study, with this rank's entries of their data
@@ -221,9 +318,7 @@ def _realization(
             name,
             operators[name],
             times[name],
-            _add_noise(
-                noise_free[name], operators[name], stddevs[name], seeds.get(name), realization
-            ),
+            _add_noise(true_data[name], operators[name], *noise[name], realization),
             options.noise.stddev,
         )
         for name, options in study.measurements.items()
@@ -256,17 +351,19 @@ def observe_run(
     values: dict[str, list[NDArray_f64]] = {name: [] for name in times}
 
     t, state = solver.initial_state()
-    for t_k, name, _ in _events(times):
-        if t_k < t - _tol(t):
+    for t_k, measured in measurement_schedule(times):
+        if t_k < t - time_tolerance(t):
+            name = measured[0][0]
             raise StudyFileError(f"measurements.{name}: time {t_k} is before the start {t}")
-        elif t_k > t + _tol(t):
+        elif t_k > t + time_tolerance(t):
             state = solver.propagate(t, t_k, state, dict(parameters or {}))
             t = t_k
         else:
-            # same time (up to round-off): sample the current state, no solver call
+            # the start time (up to round-off): sample the initial state, no solver call
             pass
 
-        values[name].append(operators[name](state))
+        for name, _ in measured:
+            values[name].append(operators[name](state))
 
     return {name: np.array(v) for name, v in values.items()}
 
@@ -303,39 +400,22 @@ def observe_checkpoints(
 
     values: dict[str, list[NDArray_f64]] = {name: [] for name in times}
 
-    t: float | None = None
-    state: State = {}
-    for t_k, name, _ in _events(times):
-        if t is None or abs(t_k - t) > _tol(t):  # a new time: read its checkpoint
-            try:
-                state = solver.read_checkpoint(path, t_k)
-            except ValueError as err:
-                raise StudyFileError(f"measurements.{name}: {err}") from err
-            t = t_k
+    for t, measured in measurement_schedule(times):
+        try:
+            state = solver.read_checkpoint(path, t)
+        except ValueError as err:
+            raise StudyFileError(f"measurements.{measured[0][0]}: {err}") from err
 
-        missing = [f for f in operators[name].fields if f not in state]
-        if missing:
-            raise StudyFileError(
-                f"measurements.{name}: the checkpoint at t = {t_k:g} has no field "
-                f"{', '.join(missing)}"
-            )
-        values[name].append(operators[name](state))
+        for name, _ in measured:
+            missing = [f for f in operators[name].fields if f not in state]
+            if missing:
+                raise StudyFileError(
+                    f"measurements.{name}: the checkpoint at t = {t:g} has no field "
+                    f"{', '.join(missing)}"
+                )
+            values[name].append(operators[name](state))
 
     return {name: np.array(v) for name, v in values.items()}
-
-
-def _events(times: Mapping[str, NDArray_f64]) -> Iterator[tuple[float, str, int]]:
-    """Return the measurement events in the order they occur.
-
-    Args:
-        times: the times of each measurement
-
-    Returns:
-        the events (time, measurement name, index of the time in the measurement's times),
-        sorted by time
-    """
-    events = [(float(t), name, k) for name, ts in times.items() for k, t in enumerate(ts)]
-    return iter(sorted(events, key=lambda event: event[0]))
 
 
 def _add_noise(
@@ -345,7 +425,7 @@ def _add_noise(
     seed: int | None,
     realization: int,
 ) -> NDArray_f64:
-    """Return a measurement's data of one noise realization: the noise-free data plus noise.
+    """Return a measurement's data of one noise realization: the true data plus noise.
 
     The noise at the k-th time of realization r is drawn from
     ``numpy.random.default_rng([seed, k, r])``, which is ``default_rng([seed, k])`` for r = 0:
@@ -353,7 +433,7 @@ def _add_noise(
     deviation 0).
 
     Args:
-        values: this rank's entries of the noise-free data, one row per time
+        values: this rank's entries of the true data, one row per time
         operator: the observation operator of the measurement
         stddev: standard deviation of the added noise
         seed: noise seed of the measurement, ``None`` for no noise
@@ -392,50 +472,29 @@ def _times(name: str, options: MeasurementOptions) -> NDArray_f64:
     return measurement_times(options.times)
 
 
-def _added_stddev(name: str, options: MeasurementOptions, synthesis: SynthesisOptions) -> float:
-    """Return the standard deviation of the noise synthesis adds to a measurement's data.
+def _noise(study: StudyOptions) -> dict[str, tuple[float, int | None]]:
+    """Return the noise synthesis adds to each measurement's data: its standard deviation and
+    seed.
+
+    The standard deviation comes from ``synthesis.noise`` if it lists the measurement, else
+    from the measurement's ``noise.stddev``. A measurement with noise needs a seed.
 
     Args:
-        name: name of the measurement
-        options: its options
-        synthesis: the synthesis options
+        study: the study options, with measurements
 
     Returns:
-        the standard deviation from ``synthesis.noise`` if it lists the measurement, else the
-        measurement's ``noise.stddev``
-    """
-    if name in synthesis.noise:
-        return synthesis.noise[name].stddev
-
-    return options.noise.stddev
-
-
-def _seed(name: str, options: MeasurementOptions) -> int:
-    """Return the noise seed of a measurement, which synthesis requires.
-
-    Args:
-        name: name of the measurement
-        options: its options
-
-    Returns:
-        the noise seed
+        measurement name -> standard deviation and seed (None without noise)
 
     Raises:
-        StudyFileError: if the measurement has no noise seed
+        StudyFileError: if a measurement with noise has no noise seed
     """
-    if options.noise.seed is None:
-        raise StudyFileError(f"measurements.{name}: synthesis needs a noise 'seed'")
+    assert study.measurements is not None
+    noise = {}
+    for name, options in study.measurements.items():
+        synthesis = study.synthesis.noise.get(name)
+        stddev = options.noise.stddev if synthesis is None else synthesis.stddev
+        if stddev > 0 and options.noise.seed is None:
+            raise StudyFileError(f"measurements.{name}: synthesis needs a noise 'seed'")
+        noise[name] = (stddev, options.noise.seed if stddev > 0 else None)
 
-    return options.noise.seed
-
-
-def _tol(t: float) -> float:
-    """Return the tolerance below which two times are the same.
-
-    Args:
-        t: time
-
-    Returns:
-        tolerance
-    """
-    return 1e-12 * max(1.0, abs(t))
+    return noise

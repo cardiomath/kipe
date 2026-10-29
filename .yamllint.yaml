@@ -1,13 +1,12 @@
----
 # yamllint: https://yamllint.readthedocs.io/en/stable/rules.html
 extends: default
+
 rules:
   line-length:
     max: 97  # as for ruff
   document-start: disable  # no "---" at the top of each file
+  comments-indentation: enable
   truthy:
     check-keys: false  # GitHub Actions' "on:" key
-  comments:
-    level: warning
-    require-starting-space: true
-    min-spaces-from-content: 2
+  empty-lines:
+    max: 1

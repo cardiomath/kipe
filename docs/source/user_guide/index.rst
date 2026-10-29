@@ -6,6 +6,7 @@ User guide
 
    getting_started
    anatomy
+   forward_solver
    measurements
    synthetic_data
    estimation

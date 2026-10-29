@@ -17,7 +17,7 @@ import numpy as np
 from dolfinx import fem, geometry
 
 from kipe._types import NDArray_f64
-from kipe.fenicsx.sampling import observed_function_space
+from kipe.fenicsx.sampling.common import observed_function_space
 from kipe.forward_solver import ForwardSolver
 from kipe.options import PointSamplingOptions, StudyFileError
 from kipe.sampling import SpatialSampler

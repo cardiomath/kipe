@@ -10,6 +10,7 @@ from pathlib import Path
 
 from mpi4py import MPI
 
+import shtab
 from pydantic import ValidationError
 
 import kipe
@@ -28,11 +29,31 @@ from kipe.parameters import build_parameterization
 from kipe.plot import (
     PlotError,
     plot_histories,
+    plot_sensitivity,
     read_history,
     render_histories,
     watch_histories,
 )
 from kipe.synthesis import synthesize
+
+# epilog of kipe completion, shown by --help and in the command line reference
+_COMPLETION_INSTALL = """\
+Examples, to install the script for the current user:
+
+  # bash, with the bash-completion package
+  mkdir -p ~/.local/share/bash-completion/completions
+  kipe completion bash > ~/.local/share/bash-completion/completions/kipe
+
+  # zsh, with fpath=(~/.zfunc $fpath) in ~/.zshrc, before compinit
+  mkdir -p ~/.zfunc
+  kipe completion zsh > ~/.zfunc/_kipe
+
+  # fish
+  kipe completion fish > ~/.config/fish/completions/kipe.fish
+
+The script is static, generated from kipe's parser: Tab does not start kipe.
+It takes effect in new shells. After an update of kipe, generating it again
+completes the new commands and options."""
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -44,6 +65,27 @@ def main(argv: Sequence[str] | None = None) -> int:
     Returns:
         exit code
     """
+    parser = build_parser()
+    args = parser.parse_args(argv)
+
+    errors = MPI.COMM_WORLD.Dup()  # for reporting errors, apart from the run's communication
+    try:
+        args.func(args)
+    except (StudyFileError, ForwardSolverError, PlotError) as err:  # user errors: no traceback
+        _report_error(err, errors)
+        return 1
+    finally:
+        errors.Free()
+
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Return the parser of the command line interface, with its subcommands.
+
+    Returns:
+        the parser
+    """
     parser = argparse.ArgumentParser(prog="kipe", description=__doc__)
     parser.add_argument("--version", action="version", version=f"kipe {kipe.__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -52,14 +94,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         "list-parameters",
         help="list the estimable parameters of the forward solver and their nominal values",
     )
-    list_parameters.add_argument("study", type=Path, help="study file (YAML)")
+    _files(list_parameters.add_argument("study", type=Path, help="study file (YAML)"))
     list_parameters.set_defaults(func=_list_parameters)
 
     list_fields = subparsers.add_parser(
         "list-fields",
         help="list the state fields of the forward solver, which measurements can observe",
     )
-    list_fields.add_argument("study", type=Path, help="study file (YAML)")
+    _files(list_fields.add_argument("study", type=Path, help="study file (YAML)"))
     list_fields.set_defaults(func=_list_fields)
 
     synthesis = subparsers.add_parser(
@@ -67,7 +109,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         aliases=["synthesize"],
         help="generate synthetic measurement data from a forward run",
     )
-    synthesis.add_argument("study", type=Path, help="study file (YAML)")
+    _files(synthesis.add_argument("study", type=Path, help="study file (YAML)"))
     _add_log_level_argument(synthesis)
     synthesis.set_defaults(func=_synthesis)
 
@@ -76,7 +118,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         aliases=["estimate"],
         help="estimate the parameters from the measurement data",
     )
-    estimation.add_argument("study", type=Path, help="study file (YAML)")
+    _files(estimation.add_argument("study", type=Path, help="study file (YAML)"))
     estimation.add_argument(
         "--realization",
         type=int,
@@ -94,15 +136,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     estimation.set_defaults(func=_estimation)
 
     plot = subparsers.add_parser(
-        "plot",
+        "plot-estimation",
         help="plot the estimation history: the estimates with their 1σ range",
     )
-    plot.add_argument(
-        "studies",
-        type=Path,
-        nargs="+",
-        metavar="study",
-        help="study file(s) (YAML); several are plotted into the same figure",
+    _files(
+        plot.add_argument(
+            "studies",
+            type=Path,
+            nargs="+",
+            metavar="study",
+            help="study file(s) (YAML); several are plotted into the same figure",
+        )
     )
     plot.add_argument(
         "--truth",
@@ -115,7 +159,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         metavar="R",
         help="plot the estimation of noise realization R, for studies with several",
     )
-    plot.add_argument("--save", type=Path, metavar="FILE", help="save the figure, don't show it")
+    _files(
+        plot.add_argument(
+            "--save", type=Path, metavar="FILE", help="save the figure, don't show it"
+        )
+    )
     plot.add_argument(
         "--terminal", action="store_true", help="draw the plot as text in the terminal"
     )
@@ -151,7 +199,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="sensitivity analysis: the Fisher information of the measurements at the nominal "
         "parameters, from two forward runs per parameter",
     )
-    analysis.add_argument("study", type=Path, help="study file (YAML)")
+    _files(analysis.add_argument("study", type=Path, help="study file (YAML)"))
     which = analysis.add_mutually_exclusive_group()
     which.add_argument(
         "--run",
@@ -166,28 +214,44 @@ def main(argv: Sequence[str] | None = None) -> int:
     _add_log_level_argument(analysis)
     analysis.set_defaults(func=_sensitivity)
 
+    plot_analysis = subparsers.add_parser(
+        "plot-sensitivity",
+        help="plot the result of the sensitivity analysis: the singular values, the right "
+        "singular vectors and the Cramér-Rao correlations",
+    )
+    _files(plot_analysis.add_argument("study", type=Path, help="study file (YAML)"))
+    _files(
+        plot_analysis.add_argument(
+            "--save", type=Path, metavar="FILE", help="save the figure, don't show it"
+        )
+    )
+    plot_analysis.set_defaults(func=_plot_sensitivity)
+
     schema = subparsers.add_parser(
         "schema",
         help="print the JSON schema of the study file, e.g., for an editor",
     )
     schema.set_defaults(func=_schema)
 
-    args = parser.parse_args(argv)
-    if args.command == "plot" and args.cpr < 1:
-        plot.error("--cpr must be at least 1")
-    if args.command == "plot" and args.save and (args.terminal or args.watch):
-        plot.error("--save writes a matplotlib figure, not with --terminal or --watch")
+    completion = subparsers.add_parser(
+        "completion",
+        help="print the completion script of kipe for a shell, to install once",
+        epilog=_COMPLETION_INSTALL,
+        formatter_class=argparse.RawDescriptionHelpFormatter,  # keeps the epilog's lines
+    )
+    completion.add_argument("shell", choices=shtab.SUPPORTED_SHELLS, help="the shell")
+    completion.set_defaults(func=_completion)
 
-    errors = MPI.COMM_WORLD.Dup()  # for reporting errors, apart from the run's communication
-    try:
-        args.func(args)
-    except (StudyFileError, ForwardSolverError, PlotError) as err:  # user errors: no traceback
-        _report_error(err, errors)
-        return 1
-    finally:
-        errors.Free()
+    return parser
 
-    return 0
+
+def _files(action: argparse.Action) -> None:
+    """Let the shell complete an argument with file names (``kipe completion``).
+
+    Args:
+        action: the argument
+    """
+    action.complete = shtab.FILE  # type: ignore[attr-defined]
 
 
 _ERROR_WAIT = 10.0  # seconds the ranks wait for each other after an error
@@ -406,7 +470,12 @@ def _plot(args: argparse.Namespace) -> None:
     Args:
         args: parsed command line arguments: the study files and the plot options
 
+    Raises:
+        PlotError: if --save is combined with --terminal or --watch
     """
+    if args.save and (args.terminal or args.watch):
+        raise PlotError("--save writes a matplotlib figure, not with --terminal or --watch")
+
     studies = [_load_study(path) for path in args.studies]
     for path, study in zip(args.studies, studies, strict=True):
         if args.realization is None and study.synthesis.realizations > 1:
@@ -451,6 +520,43 @@ def _plot(args: argparse.Namespace) -> None:
         figure.savefig(args.save, dpi=150)
     else:
         plt.show()
+
+
+def _plot_sensitivity(args: argparse.Namespace) -> None:
+    """Plot the result of the sensitivity analysis of a study.
+
+    Args:
+        args: parsed command line arguments: the study file and the plot options
+
+    Raises:
+        PlotError: if the study has no result of a sensitivity analysis
+    """
+    study = _load_study(args.study)
+    path = Path(study.output.path) / "sensitivity" / "sensitivity.npz"
+    if not path.exists():
+        raise PlotError(f"{path} does not exist: run kipe sensitivity {args.study} first")
+    result = sensitivity.read_sensitivity(path)
+
+    import matplotlib.pyplot as plt
+    from matplotlib.figure import Figure
+
+    figure = Figure(layout="constrained") if args.save else plt.figure(layout="constrained")
+    p = len(result.names)
+    figure.set_size_inches(4 + 2 * (1.5 + 0.6 * p), max(3.5, 1.5 + 0.5 * p))
+    plot_sensitivity(figure, result)
+    if args.save:
+        figure.savefig(args.save, dpi=150)
+    else:
+        plt.show()
+
+
+def _completion(args: argparse.Namespace) -> None:
+    """Print the completion script of kipe for a shell.
+
+    Args:
+        args: parsed command line arguments, with the shell
+    """
+    print(shtab.complete(build_parser(), shell=args.shell))
 
 
 def _schema(args: argparse.Namespace) -> None:

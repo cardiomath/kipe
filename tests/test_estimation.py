@@ -13,15 +13,11 @@ from ruamel.yaml import YAML
 
 from kipe._yaml import write_yaml
 from kipe.cli import main
-from kipe.estimation import Estimation
+from kipe.estimation import Estimation, estimate
 from kipe.examples.fitzhugh_nagumo import Solver
-from kipe.measurements import (
-    DifferenceModel,
-    Measurement,
-    ObservationOperator,
-    read_numpy,
-    write_numpy,
-)
+from kipe.measurements.data import Measurement, read_numpy, write_numpy
+from kipe.measurements.models import DifferenceModel, MeasurementModel
+from kipe.measurements.operator import ObservationOperator
 from kipe.options import (
     EstimationOptions,
     ForwardSolverOptions,
@@ -38,7 +34,8 @@ from kipe.options import (
     dump_study,
 )
 from kipe.parameters import build_parameterization
-from kipe.sampling import ArraySampler
+from kipe.sampling import ArraySampler, SpatialSampler
+from kipe.synthesis import synthesize
 
 TRUE = {"a": 0.2, "b": 0.2, "c": 3.0}  # nominal values of the solver: generate the data
 INITIAL = {"a": 0.3, "b": 0.3, "c": 2.0}  # deliberately wrong initial estimate
@@ -211,16 +208,79 @@ def test_estimation_needs_parameters(tmp_path, capsys):
     assert "needs a parameters section" in capsys.readouterr().err
 
 
-def test_measurements_must_share_times(tmp_path, capsys):
-    write_numpy(tmp_path / "v.npz", np.array([0.5, 1.0]), np.zeros((2, 1)))
-    write_numpy(tmp_path / "w.npz", np.array([0.5]), np.zeros((1, 1)))
-    options = _options(tmp_path, times=[0.5, 1.0])
+def _asynchronous(
+    tmp_path: Path, v: TimeRange | list[float], w: TimeRange | list[float], **kwargs
+) -> StudyOptions:
+    """Return the options of :func:`_options`, with v and w measured at different times."""
+    options = _options(tmp_path, times=v, **kwargs)
     assert options.measurements is not None
-    w = replace(options.measurements["w"], times=[0.5])
-    study = tmp_path / "study.yaml"
-    dump_study(replace(options, measurements={**options.measurements, "w": w}), study)
-    assert main(["estimation", str(study)]) == 1
-    assert "have different times" in capsys.readouterr().err
+    measurements = {**options.measurements, "w": replace(options.measurements["w"], times=w)}
+    return replace(options, measurements=measurements)
+
+
+def test_asynchronous_measurements(tmp_path):
+    """Measurements at different times: the filter steps through all times in order, each step
+    with the measurements at it."""
+    write_numpy(tmp_path / "v.npz", np.array([0.5, 1.0]), np.zeros((2, 1)))
+    write_numpy(tmp_path / "w.npz", np.array([0.75, 1.0]), np.zeros((2, 1)))
+    estimate(_asynchronous(tmp_path, v=[0.5, 1.0], w=[0.75, 1.0]))
+
+    np.testing.assert_allclose(_history(tmp_path)["time"], [0.0, 0.5, 0.75, 1.0])
+    run = YAML(typ="safe").load(tmp_path / "results" / "estimation" / "run.yaml")
+    assert run["assimilation_times"] == [0.5, 0.75, 1.0]
+
+
+def test_twin_experiment_with_asynchronous_measurements(tmp_path):
+    """v and w at interleaved times: each estimate is within three standard deviations of the
+    true value."""
+    v = TimeRange(start=0.5, stop=20.0, step=1.0)
+    w = TimeRange(start=1.0, stop=20.0, step=1.0)
+    options = _asynchronous(tmp_path, v=v, w=w)
+    synthesize(options)
+    estimate(options)
+
+    history = _history(tmp_path)
+    assert len(history["time"]) == 1 + 40  # the initial estimate and every time of v and w
+    names = list(history["names"])
+    theta, P = history["theta"][-1], history["P_theta"][-1]
+    theta_true = np.log([TRUE[name] / INITIAL[name] for name in names])  # log reparameterization
+    np.testing.assert_array_less(np.abs(theta - theta_true), 3 * np.sqrt(np.diag(P)))
+
+
+def test_measurement_split_by_times_gives_the_same_estimation(tmp_path):
+    """w split into two measurements at alternate times: the same steps with the same data, so
+    the same innovations in the same order (v, then the part of w), and the same history, bit
+    for bit."""
+    options = _options(tmp_path, iterations=2, times=TimeRange(start=0.5, stop=5.0, step=0.5))
+    assert options.measurements is not None
+    synthesize(options)
+    estimate(options)
+
+    # the data of one synthesis: synthesizing the parts would draw other noise
+    times, values = read_numpy(tmp_path / "w.npz")
+    parts = {}
+    w = options.measurements["w"]
+    for seed, (name, rows) in enumerate([
+        ("w_a", slice(0, None, 2)),
+        ("w_b", slice(1, None, 2)),
+    ]):
+        path = tmp_path / f"{name}.npz"
+        write_numpy(path, times[rows], values[rows])
+        data = NumpyDataOptions(type="numpy", path=str(path))
+        noise = replace(w.noise, seed=10 + seed)  # distinct, as required; unused here
+        parts[name] = replace(w, times=None, data=data, noise=noise)  # all times in its data
+    split = replace(
+        options,
+        output=OutputOptions(path=str(tmp_path / "split")),
+        measurements={"v": options.measurements["v"], **parts},
+    )
+    estimate(split)
+
+    history = _history(tmp_path)
+    split_history = np.load(tmp_path / "split" / "estimation" / "history.npz")
+    assert len(history["time"]) == 2 * (1 + 10)
+    for key in history.files:
+        np.testing.assert_array_equal(split_history[key], history[key], err_msg=key)
 
 
 def test_estimation_from_python(tmp_path):
@@ -252,6 +312,48 @@ def test_estimation_from_python(tmp_path):
         output=tmp_path / "estimation",
     )
     assert estimation.run() == pytest.approx({"c": 3.0})
+
+
+class _SumModel(MeasurementModel):
+    """Measures the sum of the sampled entries: one value, on the rank that holds them all."""
+
+    def layout(self, sampler: SpatialSampler) -> tuple[int, np.ndarray]:
+        holds_all = len(sampler.global_indices) == sampler.size
+        return 1, np.arange(1 if holds_all else 0, dtype=np.int64)
+
+    def predict(self, y: np.ndarray) -> np.ndarray:
+        return np.array([y.sum()]) if y.size else np.empty(0)
+
+    def innovation(self, z_hat: np.ndarray, z: np.ndarray) -> np.ndarray:
+        return z - z_hat
+
+
+def test_model_with_its_own_layout(tmp_path, monkeypatch):
+    """A model that combines the sampled entries (here v and w into their sum) has data of its
+    own size: synthesis writes them, estimation reads them and compares them."""
+    monkeypatch.setattr("kipe.measurements.operator.build_model", lambda options: _SumModel())
+    options = _options(tmp_path, iterations=1)
+    study = replace(
+        options,
+        measurements={
+            "sum": MeasurementOptions(
+                fields=["v", "w"],
+                times=TIMES,
+                data=NumpyDataOptions(type="numpy", path=str(tmp_path / "sum.npz")),
+                noise=NoiseOptions(stddev=0.05, seed=0),
+            )
+        },
+    )
+
+    (measurement,) = synthesize(study)[0]
+    assert measurement.operator.sampler.size == 2  # v and w
+    assert measurement.operator.size == 1
+    times, values = read_numpy(tmp_path / "sum.npz")
+    assert values.shape == (len(times), 1)
+
+    estimated = estimate(study)
+    assert set(estimated) == {"a", "b", "c"}
+    assert _history(tmp_path)["parameters"].shape == (len(times) + 1, 3)
 
 
 def test_example_study(tmp_path, monkeypatch):
@@ -378,9 +480,9 @@ def test_realizations(tmp_path, capsys):
     assert main(["estimation", study, "--realization", "3"]) == 1
     assert "realization 3: the study has realizations 0 to 2" in capsys.readouterr().err
 
-    assert main(["plot", study, "--terminal"]) == 1
+    assert main(["plot-estimation", study, "--terminal"]) == 1
     assert "choose one with --realization" in capsys.readouterr().err
-    assert main(["plot", study, "--terminal", "--realization", "2"]) == 0
+    assert main(["plot-estimation", study, "--terminal", "--realization", "2"]) == 0
 
 
 SHORT = [0.5, 1.0, 1.5, 2.0]  # 4 steps of 4 sigma points (simplex, 3 parameters)

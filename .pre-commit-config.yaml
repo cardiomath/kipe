@@ -1,4 +1,3 @@
----
 # Install: pip install ".[dev]"
 #          pre-commit install --hook-type pre-commit --hook-type commit-msg
 repos:
@@ -29,11 +28,18 @@ repos:
           - pytest
           - pydantic
           - ruamel.yaml
+  - repo: https://github.com/lyz-code/yamlfix
+    rev: 1.19.1
+    hooks:
+      - id: yamlfix
+        args: [-c, pyproject.toml]
+        files: ^.*\.ya?ml$
   - repo: https://github.com/adrienverge/yamllint
     rev: v1.38.0
     hooks:
       - id: yamllint
         args: [--strict]  # warnings fail too, e.g., one space before a comment
+        files: ^.*\.ya?ml$
   - repo: https://github.com/DavidAnson/markdownlint-cli2
     rev: v0.23.3
     hooks:
@@ -55,7 +61,7 @@ repos:
         name: sphinx docs build
         stages: [manual]
         entry: >-
-          bash -c 'rm -fr docs/build docs/_apidoc docs/source/{_apidoc,_generated};
+          bash -c 'rm -fr docs/build docs/source/{_apidoc,_generated};
           python -m sphinx -q -W --keep-going -c docs -b html docs/source
           docs/build/html
           && python -m webbrowser -t "file://$(pwd)/docs/build/html/index.html"'

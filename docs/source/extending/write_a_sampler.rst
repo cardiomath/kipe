@@ -4,7 +4,7 @@ Write a spatial sampler
 A spatial sampler brings the model's fields to where a measurement is taken: it interpolates
 them onto a measurement mesh, evaluates them at points, integrates them over a surface, and so
 on. This page walks through a small, complete one, ``fenicsx.points``, which evaluates a field
-at given points (:mod:`kipe.fenicsx.points`). A new sampler follows the same steps. Read
+at given points (:mod:`kipe.fenicsx.sampling.points`). A new sampler follows the same steps. Read
 :doc:`../user_guide/measurements` and :doc:`architecture` first: they explain what a sampler is
 for and how kipe uses it.
 
@@ -63,7 +63,7 @@ It joins the choices of ``spatial_sampling``, the union that pydantic selects fr
 The class gets everything it needs as arguments, not as options, so that it can be tested
 without a study file:
 
-.. literalinclude:: ../../../src/kipe/fenicsx/points.py
+.. literalinclude:: ../../../src/kipe/fenicsx/sampling/points.py
    :pyobject: PointSampler
 
 The constructor:
@@ -87,9 +87,9 @@ The constructor:
 
 A build function turns the options into the sampler. It takes what it needs from the solver:
 here, the observed field and its function space, from
-:func:`~kipe.fenicsx.sampling.observed_function_space`, which every FEniCSx sampler can use:
+:func:`~kipe.fenicsx.sampling.common.observed_function_space`, which every FEniCSx sampler can use:
 
-.. literalinclude:: ../../../src/kipe/fenicsx/points.py
+.. literalinclude:: ../../../src/kipe/fenicsx/sampling/points.py
    :pyobject: build_point_sampler
 
 kipe calls it from :func:`kipe.sampling.build_sampler`, which has one ``case`` per kind of

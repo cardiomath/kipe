@@ -29,7 +29,8 @@ Run ``kipe estimation study.yaml`` to estimate parameters from the data specifie
 
 With multiple noise realizations, estimation processes each realization in
 turn and writes its results to a separate directory. To run a single realization — for example, as a
-task in a cluster job array — use ``kipe estimation study.yaml --realization R`` (:doc:`parallel`).
+task in a cluster job array — use ``kipe estimation study.yaml --realization R``
+(:option:`kipe estimation --realization`, :doc:`parallel`).
 
 Results
 -------
@@ -69,3 +70,33 @@ The next run of the same command overwrites its files. To keep previous results,
 ``output.path`` before rerunning. Synthesis also overwrites files at the measurements'
 ``data.path`` values; changing ``output.path`` does not relocate them. Change those paths or
 archive the existing measurement files before rerunning synthesis.
+
+.. _resuming-an-estimation:
+
+Resuming an estimation
+----------------------
+
+An interrupted estimation, e.g., by the time limit of a cluster job, continues with
+:option:`--resume <kipe estimation --resume>`:
+
+.. code-block:: bash
+
+    kipe estimation study.yaml --resume
+
+It continues after the last completed outer iteration, as recorded in ``history.npz``; an
+interrupted pass is repeated from its start. The result is the same as without the
+interruption. Without completed iterations, the estimation starts from the beginning; if it is
+complete, nothing runs. A complete estimation can also be continued with more outer iterations:
+with a larger ``estimation.iterations``, ``--resume`` runs the additional ones.
+
+Before it continues, kipe checks that the estimation is the one of the earlier run:
+
+- **The study:** ``forward_solver``, ``parameters``, ``measurements`` and
+  ``estimation.sigma_points`` are those in the earlier run's ``study.yaml``. Only
+  ``estimation.iterations`` may differ.
+- **The data:** each data file has the SHA-256 hash recorded in the earlier run's
+  ``run.yaml``, i.e., its content is unchanged.
+
+Otherwise, kipe stops with an error that names what has changed. The log continues in the same
+``kipe.log``. With several noise realizations, each one resumes on its own, and those that are
+complete are skipped.

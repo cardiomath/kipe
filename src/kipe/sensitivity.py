@@ -54,7 +54,9 @@ themselves are noise-free.
   their units.
 
 The runs are independent: :func:`run` computes one of them, e.g., as a task of a job array,
-:func:`assemble` combines them. Output, in ``<output.path>/sensitivity/``:
+:func:`assemble` combines them, and :func:`read_sensitivity` reads the result back, e.g., for
+``kipe plot-sensitivity`` (:func:`kipe.plot.plot_sensitivity`). Output, in
+``<output.path>/sensitivity/``:
 
 - ``runs/<i>/``: the predicted data of run :math:`i`, one file per measurement in the format
   of the data files, with the run's log and provenance;
@@ -79,12 +81,8 @@ from ruamel.yaml import YAML
 from kipe._formatting import format_table
 from kipe._types import NDArray_f64
 from kipe.forward_solver import build_forward_solver
-from kipe.measurements import (
-    build_observation_operator,
-    measurement_times,
-    read_numpy,
-    write_data,
-)
+from kipe.measurements.data import measurement_times, read_numpy, write_data
+from kipe.measurements.operator import build_observation_operator
 from kipe.options import StudyFileError, StudyOptions
 from kipe.parameters import Parameterization, build_parameterization
 from kipe.provenance import recorded_run
@@ -477,6 +475,32 @@ def _write(path: Path, sensitivity: Sensitivity, step: float) -> None:
     arrays |= {f"J_{name}": J for name, J in sensitivity.jacobians.items()}
     arrays |= {f"fim_{name}": fim for name, fim in sensitivity.fims.items()}
     np.savez(path, **arrays)
+
+
+def read_sensitivity(path: str | Path) -> Sensitivity:
+    """Read the result of a sensitivity analysis from its ``sensitivity.npz``.
+
+    Args:
+        path: path to the file, ``<output.path>/sensitivity/sensitivity.npz``
+
+    Returns:
+        the result
+    """
+    with np.load(path) as data:
+        measurements = [str(name) for name in data["measurements"]]
+        return Sensitivity(
+            names=[str(name) for name in data["names"]],
+            theta=data["theta"],
+            stddev_theta=data["stddev_theta"],
+            jacobians={name: data[f"J_{name}"] for name in measurements},
+            fims={name: data[f"fim_{name}"] for name in measurements},
+            fim=data["fim"],
+            singular_values=data["singular_values"],
+            right_singular_vectors=data["right_singular_vectors"],
+            condition_number=float(data["condition_number"]),
+            covariance=data["covariance"],
+            posterior_covariance=data["posterior_covariance"],
+        )
 
 
 def _log(sensitivity: Sensitivity, parameterization: Parameterization, step: float) -> None:

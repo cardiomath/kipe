@@ -56,7 +56,7 @@ git clone https://github.com/cardiomath/kipe
 cd kipe/examples/fitzhugh_nagumo
 kipe synthesis study.yaml
 kipe estimation study.yaml
-kipe plot study.yaml --truth  # --terminal without a display
+kipe plot-estimation study.yaml --truth  # --terminal without a display
 ```
 
 ## Documentation

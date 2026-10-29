@@ -20,7 +20,8 @@ different rank counts. Checkpoints written by the forward solver may depend on t
 use the same count when reading those checkpoints.
 
 For multiple noise realizations, ``kipe estimation study.yaml`` estimates each realization in
-turn. To run realizations as separate cluster tasks, select each one with ``--realization``:
+turn. To run realizations as separate cluster tasks, select each one with
+:option:`--realization <kipe estimation --realization>`:
 
 .. code-block:: bash
 

@@ -12,7 +12,7 @@ import pytest
 from kipe import sensitivity
 from kipe.cli import main
 from kipe.estimation import estimate
-from kipe.measurements import write_numpy
+from kipe.measurements.data import write_numpy
 from kipe.options import (
     EstimationOptions,
     ForwardSolverOptions,
@@ -186,6 +186,83 @@ def test_runs_of_another_step(tmp_path, linear):
     _analyze(study)
     with pytest.raises(StudyFileError, match="runs 0, 1, 2, 3 have other parameters"):
         sensitivity.assemble(replace(study, sensitivity=SensitivityOptions(step=0.2)))
+
+
+def test_read_sensitivity(tmp_path, linear):
+    """The result, read back from sensitivity.npz."""
+    result = _analyze(_study(tmp_path))
+    read = sensitivity.read_sensitivity(tmp_path / "results" / "sensitivity" / "sensitivity.npz")
+
+    assert read.names == result.names
+    assert list(read.jacobians) == list(result.jacobians) == ["y"]
+    assert read.condition_number == result.condition_number
+    for field in ("theta", "fim", "singular_values", "right_singular_vectors", "covariance"):
+        np.testing.assert_array_equal(getattr(read, field), getattr(result, field))
+    np.testing.assert_array_equal(read.jacobians["y"], result.jacobians["y"])
+    np.testing.assert_array_equal(read.fims["y"], result.fims["y"])
+
+
+def test_plot_sensitivity(tmp_path, linear):
+    pytest.importorskip("matplotlib")
+    path = tmp_path / "study.yaml"
+    study = _study(tmp_path)
+    dump_study(study, path)
+    _analyze(study)
+
+    figure = tmp_path / "sensitivity.png"
+    assert main(["plot-sensitivity", str(path), "--save", str(figure)]) == 0
+    assert figure.stat().st_size > 0
+
+
+def test_plot_sensitivity_without_result(tmp_path, linear, capsys):
+    path = tmp_path / "study.yaml"
+    dump_study(_study(tmp_path), path)
+    assert main(["plot-sensitivity", str(path), "--save", str(tmp_path / "x.png")]) == 1
+    assert "run kipe sensitivity" in capsys.readouterr().err
+
+
+def test_plot_sensitivity_vectors(tmp_path, linear):
+    """The singular vectors, one per row, each with its largest entry positive; the parameters
+    ordered by the vectors they dominate, so that the diagonal is dominant."""
+    pytest.importorskip("matplotlib")
+    from matplotlib.figure import Figure
+
+    from kipe.plot import plot_sensitivity
+
+    # v_1 mainly c, v_2 mainly a (with b), v_3 mainly b; the second with the wrong sign
+    V = np.array([[0.1, 0.0, 0.995], [-0.8, -0.6, 0.0], [0.59, -0.8, -0.1]]).T
+    result = replace(
+        _analyze(_study(tmp_path)),
+        names=["a", "b", "c"],
+        singular_values=np.array([100.0, 10.0, 1.0]),
+        right_singular_vectors=V,
+        covariance=np.eye(3),
+    )
+    figure = Figure()
+    plot_sensitivity(figure, result)
+
+    vectors, correlations = figure.axes[1], figure.axes[2]
+    assert [label.get_text() for label in vectors.get_xticklabels()] == ["c", "a", "b"]
+    assert [label.get_text() for label in correlations.get_yticklabels()] == ["c", "a", "b"]
+
+    drawn = np.asarray(vectors.images[0].get_array())
+    np.testing.assert_allclose(drawn, [[0.995, 0.1, 0.0], [0.0, 0.8, 0.6], [0.1, -0.59, 0.8]])
+
+
+def test_plot_sensitivity_singular(tmp_path, linear):
+    """A singular Fisher information has no Cramér-Rao correlations: the panel says so."""
+    pytest.importorskip("matplotlib")
+    from matplotlib.figure import Figure
+
+    from kipe.plot import plot_sensitivity
+
+    result = _analyze(_study(tmp_path))
+    singular = replace(result, covariance=np.full_like(result.covariance, np.inf))
+
+    figure = Figure()
+    plot_sensitivity(figure, singular)
+    texts = [text.get_text() for text in figure.axes[2].texts]  # the third panel
+    assert any("singular" in text for text in texts)
 
 
 def test_no_such_run(tmp_path, linear, capsys):

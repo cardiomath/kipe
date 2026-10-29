@@ -91,7 +91,7 @@ class ForwardSolver(Protocol):
         The nominal values are those the solver was configured with (e.g., by its input file
         or constructor). kipe uses the names to validate the parameters selected in a study,
         and the values as the truth: synthesis runs the solver with them, the sensitivity
-        analysis evaluates there, and ``kipe plot --truth`` draws them.
+        analysis evaluates there, and ``kipe plot-estimation --truth`` draws them.
 
         Returns:
             parameter name -> nominal physical value dict (a new dict that the caller may modify)
@@ -102,8 +102,12 @@ class ForwardSolver(Protocol):
         """Advance the state from ``t0`` to exactly ``t1``.
 
         The solver may take any number of internal steps, but must land exactly on ``t1``.
-        Adaptive solvers rebuild their integrator from ``state`` on every call rather than
-        keeping step-size history across calls.
+        kipe calls this method for every sigma point at every measurement time, so calls may
+        arrive with different states and parameters. The result must depend only on the arguments
+        of this call, not on previous calls. Put everything needed to continue a step, including
+        multistep history or boundary-model state, in ``state``; the filter may pass a corrected
+        state that the solver has not computed itself. Adaptive solvers rebuild their integrator
+        from ``state`` on every call rather than keeping step-size history across calls.
 
         Args:
             t0: time of ``state``

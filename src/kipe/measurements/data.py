@@ -1,0 +1,257 @@
+"""Measurements and their data at the measurement times, and how the data are stored.
+
+A :class:`Measurement` holds the data of one measurement at all its times, with its
+observation operator (:mod:`kipe.measurements.operator`) and its noise. The data are stored in
+the ``numpy`` format (:func:`read_numpy`, :func:`write_numpy`), in the order of the
+measurement's positions, so that they do not depend on the number of ranks.
+"""
+
+import math
+from collections.abc import Mapping
+from dataclasses import dataclass
+from pathlib import Path
+
+from mpi4py import MPI
+
+import numpy as np
+
+from kipe._types import NDArray_f64
+from kipe.measurements.operator import ObservationOperator
+from kipe.options import StudyFileError, TimeRange
+
+
+@dataclass(frozen=True)
+class Measurement:
+    """A measurement: its data at all measurement times, and its observation operator.
+
+    Synthesis produces measurements, estimation consumes them.
+    """
+
+    name: str
+    """Name of the measurement, for logs and error messages."""
+
+    operator: ObservationOperator
+    r"""The observation operator :math:`\mathcal{H}`, from a model state to predicted data."""
+
+    times: NDArray_f64
+    """The measurement times, shape ``(n,)``."""
+
+    values: NDArray_f64
+    """This rank's entries of the measured data at each of the n times, at the positions
+    ``operator.global_indices``, shape ``(n, number of this rank's entries)``."""
+
+    stddev: float
+    """Standard deviation of the measurement noise, in the unit of the data."""
+
+
+def measurement_times(times: list[float] | TimeRange) -> NDArray_f64:
+    """Return the measurement times as an array.
+
+    Args:
+        times: the ``times`` of a measurement, a list or a range
+
+    Returns:
+        the times; for a range, from ``start`` up to and including ``stop`` (up to round-off)
+    """
+    if isinstance(times, TimeRange):
+        n = math.floor((times.stop - times.start) / times.step + 1e-9)
+        return times.start + times.step * np.arange(n + 1, dtype=np.float64)
+    return np.array(times, dtype=np.float64)
+
+
+def measurement_schedule(
+    times: Mapping[str, NDArray_f64],
+) -> list[tuple[float, list[tuple[str, int]]]]:
+    """Return the times of all measurements in order, each with the measurements at it.
+
+    Times of different measurements that are the same up to round-off
+    (:func:`time_tolerance`) are one time, the earliest of them. At each time, the
+    measurements are in the order of ``times``.
+
+    Args:
+        times: the times of each measurement, by name
+
+    Returns:
+        for each time, in increasing order: the time, and the measurements at it, each as its
+        name and the index of the time in its times
+
+    Raises:
+        StudyFileError: if a measurement has two times that are the same up to round-off
+    """
+    order = {name: i for i, name in enumerate(times)}
+    events = sorted(
+        (float(t), order[name], name, k) for name, ts in times.items() for k, t in enumerate(ts)
+    )
+
+    schedule: list[tuple[float, list[tuple[str, int]]]] = []
+    for t, _, name, k in events:
+        if schedule and t - schedule[-1][0] <= time_tolerance(schedule[-1][0]):
+            measured = schedule[-1][1]
+            if any(other == name for other, _ in measured):
+                raise StudyFileError(
+                    f"measurements.{name}: times {schedule[-1][0]} and {t} are the same up to "
+                    "round-off"
+                )
+            measured.append((name, k))
+        else:
+            schedule.append((t, [(name, k)]))
+
+    for _, measured in schedule:  # times within round-off of each other may be in any order
+        measured.sort(key=lambda event: order[event[0]])
+    return schedule
+
+
+def time_tolerance(t: float) -> float:
+    """Return the tolerance below which two times are the same, relative to their size.
+
+    It absorbs the round-off of computed times, e.g., ``0.1 + 0.2`` and ``0.3``. Below
+    ``|t| = 1`` it is absolute, 1e-12: the times must be in a unit in which that is negligible,
+    e.g., seconds for a time step of milliseconds; for much shorter time scales, scale the
+    model's time.
+
+    Args:
+        t: time
+
+    Returns:
+        tolerance
+    """
+    return 1e-12 * max(1.0, abs(t))
+
+
+def read_numpy(path: str | Path) -> tuple[NDArray_f64, NDArray_f64]:
+    """Read measurement data from a ``.npz`` file with the arrays ``times`` and ``values``.
+
+    Args:
+        path: path to the ``.npz`` file
+
+    Returns:
+        - times, shape ``(n,)``
+        - values, shape ``(n, m)``: m values at each of the n times
+
+    Raises:
+        StudyFileError: if the file cannot be read or does not hold the expected arrays
+    """
+    try:
+        with np.load(path) as data:
+            missing = sorted({"times", "values"} - set(data.files))
+            if missing:
+                missing_names = ", ".join(missing)
+                raise StudyFileError(f"measurement data {path} has no array {missing_names}")
+            times, values = data["times"], data["values"]
+    except OSError as err:
+        raise StudyFileError(f"cannot read measurement data {path}: {err}") from err
+
+    if times.ndim != 1 or values.ndim != 2 or len(times) != len(values):
+        raise StudyFileError(
+            f"measurement data {path}: expected times (n,) and values (n, m), got "
+            f"{times.shape} and {values.shape}"
+        )
+    return times.astype(np.float64), values.astype(np.float64)
+
+
+def read_data(
+    name: str,
+    path: str | Path,
+    operator: ObservationOperator,
+    selected: NDArray_f64 | None = None,
+) -> tuple[NDArray_f64, NDArray_f64]:
+    """Read a measurement's data, keep this rank's entries, and select the times.
+
+    Every rank reads the whole file and keeps the entries it holds
+    (``operator.global_indices``).
+
+    Args:
+        name: name of the measurement, for error messages
+        path: path to the ``.npz`` file
+        operator: the measurement's observation operator, which lays out the data
+        selected: the times to keep, e.g., the measurement's ``times``; all if None
+
+    Returns:
+        - the times
+        - this rank's entries of the values at these times, one row per time
+
+    Raises:
+        StudyFileError: if the file cannot be read, does not have the measurement's number of
+            entries per time, or lacks a selected time
+    """
+    times, values = read_numpy(path)
+    if values.shape[1] != operator.size:
+        raise StudyFileError(
+            f"measurements.{name}: the data ({path}) have {values.shape[1]} values per time, "
+            f"the measurement has {operator.size}"
+        )
+    values = values[:, operator.global_indices]
+
+    if selected is not None:
+        indices = [_index_of(t, times, name, path) for t in selected]
+        times, values = times[indices], values[indices]
+
+    return times, values
+
+
+def _index_of(t: float, times: NDArray_f64, name: str, path: str | Path) -> int:
+    """Return the index of time ``t`` in the data's times.
+
+    Args:
+        t: selected time
+        times: the times in the data
+        name: name of the measurement, for the error message
+        path: path to the data, for the error message
+
+    Returns:
+        the index
+
+    Raises:
+        StudyFileError: if ``t`` is not in the data
+    """
+    matches = np.flatnonzero(np.isclose(times, t, rtol=0, atol=time_tolerance(t)))
+    if len(matches) == 0:
+        raise StudyFileError(f"measurements.{name}: time {t} is not in the data ({path})")
+
+    return int(matches[0])
+
+
+def write_numpy(path: str | Path, times: NDArray_f64, values: NDArray_f64) -> None:
+    """Write measurement data to a ``.npz`` file, creating its directory if needed.
+
+    Args:
+        path: path to the ``.npz`` file
+        times: the n measurement times, shape ``(n,)``
+        values: m values at each of the n times, shape ``(n, m)``
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez(path, times=times, values=values)
+
+
+def write_data(
+    path: str | Path,
+    operator: ObservationOperator,
+    times: NDArray_f64,
+    values: NDArray_f64,
+    comm: MPI.Comm,
+) -> None:
+    """Write a measurement's data, gathered from all ranks, on rank 0 (:func:`write_numpy`).
+
+    In the format of the data files: what synthesis writes, and the predicted data of the runs
+    of the sensitivity analysis.
+
+    Args:
+        path: path to the ``.npz`` file
+        operator: the measurement's observation operator, which says where each rank's
+            entries go (``global_indices``)
+        times: the measurement times
+        values: this rank's entries of the data, one row per time
+        comm: communicator over which the entries are distributed
+    """
+    parts = comm.gather((operator.global_indices, values), root=0)
+    if comm.rank != 0:
+        return
+
+    assert parts is not None
+    data = np.empty((len(times), operator.size))
+
+    for global_indices, local_values in parts:
+        data[:, global_indices] = local_values
+
+    write_numpy(path, times, data)

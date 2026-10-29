@@ -1,17 +1,22 @@
 """``kipe synthesis``: synthetic data from a forward run."""
 
 import hashlib
+import re
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 import pytest
+from pydantic import ValidationError
+from ruamel.yaml import YAML
 
 from kipe.cli import main
 from kipe.examples import fitzhugh_nagumo
 from kipe.examples.fitzhugh_nagumo import Solver
-from kipe.measurements import read_numpy
+from kipe.measurements.data import read_numpy
 from kipe.options import (
     CheckpointsTruthOptions,
+    DataTruthOptions,
     ForwardSolverOptions,
     MeasurementOptions,
     NoiseOptions,
@@ -185,7 +190,7 @@ def test_synthesis_errors(tmp_path, capsys, measurement, message):
 
 def _options(
     tmp_path: Path,
-    truth: RunTruthOptions | CheckpointsTruthOptions,
+    truth: RunTruthOptions | CheckpointsTruthOptions | DataTruthOptions,
     folder: str,
     solver: str = "Checkpointed",
     realizations: int = 1,
@@ -315,13 +320,109 @@ def test_realizations(tmp_path, monkeypatch):
 
 
 def test_synthesis_writes_checksums_of_the_data(tmp_path):
-    """In the format of sha256sum, all realizations."""
+    """In the format of sha256sum: the noise-free data, and the data of all realizations."""
     realizations = synthesize(_options(tmp_path, RunTruthOptions(), "multi", "Solver", 2))
 
     lines = (tmp_path / "multi" / "synthesis" / "data.sha256").read_text().splitlines()
-    paths = [
+    noise_free = tmp_path / "multi" / "synthesis" / "noise_free"
+    paths = [noise_free / "v.npz", noise_free / "w.npz"] + [
         tmp_path / "multi" / f"r{r}" / f"{measurement.name}.npz"
         for r, measurements in enumerate(realizations)
         for measurement in measurements
     ]
     assert lines == [f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p}" for p in paths]
+
+
+# --- noise-free data, and truth from data ------------------------------------------------------
+
+NOISE_FREE = "{folder}/synthesis/noise_free/{{measurement}}.npz"
+
+
+def _from_data(tmp_path: Path, folder: str, run: str = "run", **kwargs) -> StudyOptions:
+    """The study of :func:`_options`, with the true data from the noise-free data of ``run``."""
+    path = str(tmp_path / NOISE_FREE.format(folder=run))
+    return _options(tmp_path, DataTruthOptions(type="data", path=path), folder, **kwargs)
+
+
+def test_synthesis_writes_the_noise_free_data(tmp_path):
+    """From a run, to <output.path>/synthesis/noise_free/, the measurements' true data."""
+    synthesize(_options(tmp_path, RunTruthOptions(), "run", solver="Solver"))
+
+    for name, times in [("v", [0.0, 0.5, 1.0]), ("w", [0.25, 0.5, 0.75, 1.0])]:
+        path = tmp_path / NOISE_FREE.format(folder="run").format(measurement=name)
+        read_times, values = read_numpy(path)
+        np.testing.assert_allclose(read_times, times)
+        np.testing.assert_allclose(values, _exact(times, name), rtol=1e-14)
+
+
+def test_synthesis_from_data(tmp_path, monkeypatch):
+    """The noise-free data of a run, with the same noise, give the same data, without running
+    the solver; the true data's files are recorded, and no noise-free data written."""
+    [run] = synthesize(_options(tmp_path, RunTruthOptions(), "run", solver="Solver"))
+
+    def no_run(*args):
+        raise AssertionError("the solver ran")
+
+    monkeypatch.setattr(Solver, "propagate", no_run)
+    [from_data] = synthesize(_from_data(tmp_path, "data", solver="Solver"))
+
+    for a, b in zip(from_data, run, strict=True):
+        np.testing.assert_array_equal(a.times, b.times)
+        np.testing.assert_allclose(a.values, b.values, rtol=1e-14)
+    assert not (tmp_path / "data" / "synthesis" / "noise_free").exists()
+
+    recorded = YAML(typ="safe").load(tmp_path / "data" / "synthesis" / "run.yaml")["truth"]
+    path = tmp_path / NOISE_FREE.format(folder="run").format(measurement="v")
+    assert recorded["v"] == {
+        "path": str(path),
+        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+    }
+
+
+def test_synthesis_from_data_selects_times(tmp_path):
+    """A measurement's times select from the true data; without times, all of them."""
+    synthesize(_options(tmp_path, RunTruthOptions(), "run", solver="Solver"))
+    options = _from_data(tmp_path, "data", solver="Solver")
+    assert options.measurements is not None
+    measurements = options.measurements | {
+        "v": replace(options.measurements["v"], times=[0.5]),
+        "w": replace(options.measurements["w"], times=None),
+    }
+    [(v, w)] = synthesize(replace(options, measurements=measurements))
+
+    np.testing.assert_array_equal(v.times, [0.5])
+    np.testing.assert_array_equal(w.times, [0.25, 0.5, 0.75, 1.0])
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        ({"times": [0.3]}, "measurements.v: time 0.3 is not in the data"),
+        ({"fields": ["v", "w"]}, "measurements.v: the data .* have 1 values per time, the "
+         "measurement has 2"),
+    ],
+)  # fmt: skip
+def test_synthesis_from_data_errors(tmp_path, change, message):
+    synthesize(_options(tmp_path, RunTruthOptions(), "run", solver="Solver"))
+    options = _from_data(tmp_path, "data", solver="Solver")
+    assert options.measurements is not None
+    measurements = options.measurements | {"v": replace(options.measurements["v"], **change)}
+    with pytest.raises(StudyFileError, match=message):
+        synthesize(replace(options, measurements=measurements))
+
+
+def test_synthesis_from_missing_data(tmp_path):
+    with pytest.raises(StudyFileError, match="cannot read the true data"):
+        synthesize(_from_data(tmp_path, "data", run="nothing", solver="Solver"))
+
+
+@pytest.mark.parametrize(
+    ("path", "message"),
+    [
+        ("truth.npz", "needs the placeholder {measurement}: with 2 measurements"),
+        ("{name}.npz", "the only placeholder is {measurement}"),
+    ],
+)
+def test_truth_path_placeholder(tmp_path, path, message):
+    with pytest.raises(ValidationError, match=re.escape(message)):
+        _options(tmp_path, DataTruthOptions(type="data", path=path), "data")
