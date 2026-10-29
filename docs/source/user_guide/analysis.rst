@@ -52,7 +52,6 @@ bounds. Its figures show:
 
 - **the estimates over the realizations**, with their mean, spread and the truth;
 - **the consistency**: the empirical standard deviation against the filter's and the bounds.
-  A filter standard deviation clearly below the empirical one means an overconfident filter;
 - **the correlations**: empirical, of the filter and of the bounds. A filter can have the
   right spreads but miss correlations;
 - **the pairs**: for each pair of parameters, the estimates and the 2σ ellipses of the
