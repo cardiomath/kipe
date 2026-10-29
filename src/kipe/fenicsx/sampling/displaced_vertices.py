@@ -1,5 +1,8 @@
 """Displaced coordinates of tagged mesh vertices: ``fenicsx.displaced_vertices``.
 
+Selects vertices using the union or intersection of the given tag vertex sets and adds the
+sampled displacement to their reference coordinates, returning X + u(X).
+
 Selection and ordering are fixed at construction. Tags are combined globally before
 intersecting their vertex sets, including when different ranks hold the adjacent surfaces.
 The original geometry input indices define a partition-independent order. Like PointSampler,
