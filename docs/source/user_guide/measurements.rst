@@ -126,8 +126,8 @@ A finite element field, evaluated at given points, in their order:
       type: fenicsx.points
       points: [[0.25, 0.25], [0.5, 0.5], [0.75, 0.75]]
 
-``fenicsx.points_coordinates``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+``fenicsx.displaced_vertices``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Returns the displaced coordinates ``X + u(X)`` of mesh vertices selected by facet tags.
 Use ``intersection`` (the default) for vertices shared by all listed tags, or ``union``
@@ -136,7 +136,7 @@ for vertices belonging to any listed tag:
 .. code-block:: yaml
 
     spatial_sampling:
-      type: fenicsx.points_coordinates
+      type: fenicsx.displaced_vertices
       mesh: data/solid.xdmf
       mesh_name: mesh
       tags_name: Facet tags

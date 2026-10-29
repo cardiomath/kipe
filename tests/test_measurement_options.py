@@ -10,9 +10,9 @@ from kipe.options import (
     ArraySamplingOptions,
     CheckpointsTruthOptions,
     DifferenceModelOptions,
+    DisplacedVertexSamplingOptions,
     MeasurementOptions,
     MeshSamplingOptions,
-    PointCoordinatesSamplingOptions,
     RunTruthOptions,
     StudyFileError,
     StudyOptions,
@@ -199,11 +199,11 @@ def test_estimation_directory_of_a_missing_realization():
         estimation_directory(study, 3)
 
 
-def test_point_coordinates_sampling_options():
-    sampling = {"type": "fenicsx.points_coordinates", "tags": [30, 10], "mesh": "mesh.xdmf"}
+def test_displaced_vertex_sampling_options():
+    sampling = {"type": "fenicsx.displaced_vertices", "tags": [30, 10], "mesh": "mesh.xdmf"}
     options = _study({"u": MEASUREMENT | {"spatial_sampling": sampling}})
-    assert options.measurements["u"].spatial_sampling == PointCoordinatesSamplingOptions(
-        type="fenicsx.points_coordinates",
+    assert options.measurements["u"].spatial_sampling == DisplacedVertexSamplingOptions(
+        type="fenicsx.displaced_vertices",
         tags=[30, 10],
         mesh="mesh.xdmf",
         operation="intersection",

@@ -78,6 +78,61 @@
       "title": "DifferenceModelOptions",
       "type": "object"
     },
+    "DisplacedVertexSamplingOptions": {
+      "additionalProperties": false,
+      "description": "Return displaced mesh vertices selected by tags (FEniCSx backend).\n\nThe observed field is a displacement vector with one component per spatial dimension.\nThe solver provides its function space. Selection uses the mesh and facet tags read from\nan XDMF file, ordered by the vertices' original geometry input indices.",
+      "properties": {
+        "type": {
+          "const": "fenicsx.displaced_vertices",
+          "description": "Kind of spatial sampling.",
+          "title": "Type",
+          "type": "string"
+        },
+        "tags": {
+          "description": "Tag IDs whose vertices are selected.",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 1,
+          "title": "Tags",
+          "type": "array"
+        },
+        "mesh": {
+          "description": "XDMF file containing the selection mesh and its facet tags, in reference coordinates.",
+          "title": "Mesh",
+          "type": "string"
+        },
+        "mesh_name": {
+          "default": "mesh",
+          "description": "Name of the mesh in the XDMF file.",
+          "title": "Mesh Name",
+          "type": "string"
+        },
+        "tags_name": {
+          "default": "Facet tags",
+          "description": "Name of the facet tags in the XDMF file.",
+          "title": "Tags Name",
+          "type": "string"
+        },
+        "operation": {
+          "default": "intersection",
+          "description": "Combine the vertex sets of the tags, rather than the tagged entities themselves.",
+          "enum": [
+            "union",
+            "intersection"
+          ],
+          "title": "Operation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "tags",
+        "mesh"
+      ],
+      "title": "DisplacedVertexSamplingOptions",
+      "type": "object"
+    },
     "EstimationOptions": {
       "additionalProperties": false,
       "description": "Parameter estimation with the reduced-order unscented Kalman filter (ROUKF).",
@@ -409,61 +464,6 @@
       "title": "ParametersOptions",
       "type": "object"
     },
-    "PointCoordinatesSamplingOptions": {
-      "additionalProperties": false,
-      "description": "Return displaced mesh vertices selected by tags (FEniCSx backend).\n\nThe observed field is a displacement vector with one component per spatial dimension.\nThe solver provides its function space. Selection uses the mesh and facet tags read from\nan XDMF file, ordered by the vertices' original geometry input indices.",
-      "properties": {
-        "type": {
-          "const": "fenicsx.points_coordinates",
-          "description": "Kind of spatial sampling.",
-          "title": "Type",
-          "type": "string"
-        },
-        "tags": {
-          "description": "Tag IDs whose vertices are selected.",
-          "items": {
-            "type": "integer"
-          },
-          "minItems": 1,
-          "title": "Tags",
-          "type": "array"
-        },
-        "mesh": {
-          "description": "XDMF file containing the selection mesh and its facet tags, in reference coordinates.",
-          "title": "Mesh",
-          "type": "string"
-        },
-        "mesh_name": {
-          "default": "mesh",
-          "description": "Name of the mesh in the XDMF file.",
-          "title": "Mesh Name",
-          "type": "string"
-        },
-        "tags_name": {
-          "default": "Facet tags",
-          "description": "Name of the facet tags in the XDMF file.",
-          "title": "Tags Name",
-          "type": "string"
-        },
-        "operation": {
-          "default": "intersection",
-          "description": "Combine the vertex sets of the tags, rather than the tagged entities themselves.",
-          "enum": [
-            "union",
-            "intersection"
-          ],
-          "title": "Operation",
-          "type": "string"
-        }
-      },
-      "required": [
-        "type",
-        "tags",
-        "mesh"
-      ],
-      "title": "PointCoordinatesSamplingOptions",
-      "type": "object"
-    },
     "PointSamplingOptions": {
       "additionalProperties": false,
       "description": "Evaluate the observed field at given points (FEniCSx backend).\n\nThe field must be a distributed field whose function space the forward solver provides\n(:class:`kipe.fenicsx.forward_solver.SupportsFunctionSpaces`). The data are in the order of\n``points``; for a vector field, the components of each point one after another.",
@@ -544,9 +544,9 @@
       "discriminator": {
         "mapping": {
           "array": "#/$defs/ArraySamplingOptions",
+          "fenicsx.displaced_vertices": "#/$defs/DisplacedVertexSamplingOptions",
           "fenicsx.mesh": "#/$defs/MeshSamplingOptions",
-          "fenicsx.points": "#/$defs/PointSamplingOptions",
-          "fenicsx.points_coordinates": "#/$defs/PointCoordinatesSamplingOptions"
+          "fenicsx.points": "#/$defs/PointSamplingOptions"
         },
         "propertyName": "type"
       },
@@ -561,7 +561,7 @@
           "$ref": "#/$defs/PointSamplingOptions"
         },
         {
-          "$ref": "#/$defs/PointCoordinatesSamplingOptions"
+          "$ref": "#/$defs/DisplacedVertexSamplingOptions"
         }
       ]
     },

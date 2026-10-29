@@ -1,4 +1,4 @@
-"""Displaced coordinates of tagged mesh vertices: ``fenicsx.points_coordinates``.
+"""Displaced coordinates of tagged mesh vertices: ``fenicsx.displaced_vertices``.
 
 Selection and ordering are fixed at construction. Tags are combined globally before
 intersecting their vertex sets, including when different ranks hold the adjacent surfaces.
@@ -20,10 +20,10 @@ from kipe._types import NDArray_f64
 from kipe.fenicsx.sampling.common import observed_function_space
 from kipe.fenicsx.sampling.points import PointSampler
 from kipe.forward_solver import ForwardSolver
-from kipe.options import PointCoordinatesSamplingOptions, StudyFileError
+from kipe.options import DisplacedVertexSamplingOptions, StudyFileError
 
 
-class PointCoordinatesSampler(PointSampler):
+class DisplacedVertexSampler(PointSampler):
     """Evaluate ``X + u(X)`` at vertices selected by a union or intersection of tags.
 
     Only topological vertices are selected, including on higher-order meshes. The displacement
@@ -59,11 +59,11 @@ class PointCoordinatesSampler(PointSampler):
         gdim = source.mesh.geometry.dim
         if source.value_shape != (gdim,):
             raise StudyFileError(
-                f"fenicsx.points_coordinates needs a displacement vector with {gdim} components"
+                f"fenicsx.displaced_vertices needs a displacement vector with {gdim} components"
             )
         if not tags or operation not in ("union", "intersection"):
             raise StudyFileError(
-                "fenicsx.points_coordinates needs tags and operation union or intersection"
+                "fenicsx.displaced_vertices needs tags and operation union or intersection"
             )
         try:
             with io.XDMFFile(comm, mesh, "r") as file:
@@ -73,17 +73,17 @@ class PointCoordinatesSampler(PointSampler):
                 mesh_tags = file.read_meshtags(selection_mesh, name=tags_name)
         except (RuntimeError, OSError) as err:
             raise StudyFileError(
-                f"fenicsx.points_coordinates: cannot read mesh {mesh_name!r} and facet tags "
+                f"fenicsx.displaced_vertices: cannot read mesh {mesh_name!r} and facet tags "
                 f"{tags_name!r} from {mesh}: {err}"
             ) from err
         if selection_mesh.geometry.dim != gdim:
             raise StudyFileError(
-                "fenicsx.points_coordinates: selection mesh and displacement must have "
+                "fenicsx.displaced_vertices: selection mesh and displacement must have "
                 "the same geometric dimension"
             )
         dim = mesh_tags.dim
         if dim != tdim - 1:
-            raise StudyFileError("fenicsx.points_coordinates needs facet tags")
+            raise StudyFileError("fenicsx.displaced_vertices needs facet tags")
         selection_mesh.topology.create_connectivity(0, tdim)
         if dim:
             selection_mesh.topology.create_connectivity(dim, 0)
@@ -108,7 +108,7 @@ class PointCoordinatesSampler(PointSampler):
             parts = comm.allgather((ids, x))
             global_ids = np.unique(np.concatenate([part[0] for part in parts]))
             if not len(global_ids):
-                raise StudyFileError(f"fenicsx.points_coordinates: tag {tag} was not found")
+                raise StudyFileError(f"fenicsx.displaced_vertices: tag {tag} was not found")
             vertex_sets.append(global_ids)
             for part_ids, part_x in parts:
                 coordinates.update(zip(part_ids.tolist(), part_x.tolist(), strict=True))
@@ -118,7 +118,7 @@ class PointCoordinatesSampler(PointSampler):
         for vertices in vertex_sets[1:]:
             selected = combine(selected, vertices)
         if not len(selected):
-            raise StudyFileError("fenicsx.points_coordinates: the selected vertex set is empty")
+            raise StudyFileError("fenicsx.displaced_vertices: the selected vertex set is empty")
 
         points = [coordinates[int(node)] for node in selected]
         super().__init__(field, source, points, comm)
@@ -136,12 +136,12 @@ class PointCoordinatesSampler(PointSampler):
         return self._reference_coordinates + super().sample(fields)
 
 
-def build_point_coordinates_sampler(
-    options: PointCoordinatesSamplingOptions,
+def build_displaced_vertex_sampler(
+    options: DisplacedVertexSamplingOptions,
     fields: list[str],
     solver: ForwardSolver,
     comm: MPI.Comm = MPI.COMM_WORLD,
-) -> PointCoordinatesSampler:
+) -> DisplacedVertexSampler:
     """Construct the coordinate sampler from study options and solver capabilities.
 
     Args:
@@ -156,9 +156,9 @@ def build_point_coordinates_sampler(
     Raises:
         StudyFileError: if the solver does not provide the required capabilities
     """
-    kind = "fenicsx.points_coordinates"
+    kind = "fenicsx.displaced_vertices"
     field, source = observed_function_space(kind, fields, solver)
-    return PointCoordinatesSampler(
+    return DisplacedVertexSampler(
         field,
         source,
         options.mesh,

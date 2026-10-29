@@ -9,13 +9,13 @@ from mpi4py import MPI
 import numpy as np
 from dolfinx import fem, io, mesh
 
-from kipe.fenicsx.sampling.points_coordinates import PointCoordinatesSampler
+from kipe.fenicsx.sampling.displaced_vertices import DisplacedVertexSampler
 from kipe.measurements.operator import build_observation_operator
 from kipe.options import (
+    DisplacedVertexSamplingOptions,
     MeasurementOptions,
     NoiseOptions,
     NumpyDataOptions,
-    PointCoordinatesSamplingOptions,
     StudyFileError,
 )
 
@@ -86,7 +86,7 @@ def _gathered(sampler, local):
 def test_displaced_coordinates_in_file_order(domain, operation):
     distributed, reference, path = domain
     V = fem.functionspace(distributed, ("Lagrange", 2, (2,)))
-    sampler = PointCoordinatesSampler("u", V, path, [10, 20], operation)
+    sampler = DisplacedVertexSampler("u", V, path, [10, 20], operation)
     original_mesh = distributed.geometry.x.copy()
     owned = _owned(V, _displacement)
     original_field = owned.copy()
@@ -106,7 +106,7 @@ def test_displaced_coordinates_in_file_order(domain, operation):
 def test_duplicate_and_single_tags(domain):
     distributed, reference, path = domain
     V = fem.functionspace(distributed, ("Lagrange", 1, (2,)))
-    sampler = PointCoordinatesSampler("u", V, path, [10, 10])
+    sampler = DisplacedVertexSampler("u", V, path, [10, 10])
     actual = _gathered(
         sampler, sampler.sample({"u": np.zeros(V.dofmap.index_map.size_local * 2)})
     )
@@ -118,14 +118,14 @@ def test_missing_xdmf_names(domain, names):
     distributed, _, path = domain
     V = fem.functionspace(distributed, ("Lagrange", 1, (2,)))
     with pytest.raises(StudyFileError, match="cannot read mesh"):
-        PointCoordinatesSampler("u", V, path, [10], **names)
+        DisplacedVertexSampler("u", V, path, [10], **names)
 
 
 def test_missing_file(domain):
     distributed, _, path = domain
     V = fem.functionspace(distributed, ("Lagrange", 1, (2,)))
     with pytest.raises(StudyFileError, match="cannot read mesh"):
-        PointCoordinatesSampler("u", V, path + ".missing", [10])
+        DisplacedVertexSampler("u", V, path + ".missing", [10])
 
 
 def test_selection_outside_solver_mesh(domain):
@@ -134,14 +134,14 @@ def test_selection_outside_solver_mesh(domain):
     source_mesh.geometry.x[:, 0] += 2
     V = fem.functionspace(source_mesh, ("Lagrange", 1, (2,)))
     with pytest.raises(StudyFileError, match="points lie outside"):
-        PointCoordinatesSampler("u", V, path, [10])
+        DisplacedVertexSampler("u", V, path, [10])
 
 
 def test_selection_dimension_mismatch(domain):
     _, _, path = domain
     V = fem.functionspace(mesh.create_unit_cube(COMM, 2, 2, 2), ("Lagrange", 1, (3,)))
     with pytest.raises(StudyFileError, match="same geometric dimension"):
-        PointCoordinatesSampler("u", V, path, [10])
+        DisplacedVertexSampler("u", V, path, [10])
 
 
 def test_custom_xdmf_names(shared_tmp_path):
@@ -158,7 +158,7 @@ def test_custom_xdmf_names(shared_tmp_path):
             )
     COMM.barrier()
     V = fem.functionspace(mesh.create_unit_square(COMM, 3, 3), ("Lagrange", 1, (2,)))
-    sampler = PointCoordinatesSampler(
+    sampler = DisplacedVertexSampler(
         "u", V, str(path), [10, 20], mesh_name="Grid", tags_name="boundaries"
     )
     actual = _gathered(
@@ -180,7 +180,7 @@ def test_invalid_selection(domain, tags, operation, message):
     distributed, _, path = domain
     V = fem.functionspace(distributed, ("Lagrange", 1, (2,)))
     with pytest.raises(StudyFileError, match=message):
-        PointCoordinatesSampler("u", V, path, tags, operation)
+        DisplacedVertexSampler("u", V, path, tags, operation)
 
 
 @pytest.mark.parametrize("shape", [(), (3,)])
@@ -188,7 +188,7 @@ def test_requires_displacement_vector(domain, shape):
     distributed, _, path = domain
     V = fem.functionspace(distributed, ("Lagrange", 1, shape))
     with pytest.raises(StudyFileError, match="displacement vector with 2 components"):
-        PointCoordinatesSampler("u", V, path, [10])
+        DisplacedVertexSampler("u", V, path, [10])
 
 
 def test_builder_reads_tags_without_solver_method(domain):
@@ -210,8 +210,8 @@ def test_builder_reads_tags_without_solver_method(domain):
         fields=["u"],
         data=NumpyDataOptions(type="numpy", path="unused.npz"),
         noise=NoiseOptions(stddev=0.1),
-        spatial_sampling=PointCoordinatesSamplingOptions(
-            type="fenicsx.points_coordinates", tags=[10, 20], mesh=path
+        spatial_sampling=DisplacedVertexSamplingOptions(
+            type="fenicsx.displaced_vertices", tags=[10, 20], mesh=path
         ),
     )
     operator = build_observation_operator("coordinates", options, Solver())
@@ -233,7 +233,7 @@ def test_three_dimensional_surface_intersection(shared_tmp_path):
     # The source mesh has a different resolution and numbering from the selection mesh.
     domain = mesh.create_unit_cube(COMM, 3, 3, 3)
     V = fem.functionspace(domain, ("Lagrange", 1, (3,)))
-    sampler = PointCoordinatesSampler("u", V, str(path), [10, 20])
+    sampler = DisplacedVertexSampler("u", V, str(path), [10, 20])
     translation = np.array([0.1, 0.2, 0.3])
     values = sampler.sample({
         "u": _owned(V, lambda x: np.tile(translation[:, None], (1, x.shape[1])))

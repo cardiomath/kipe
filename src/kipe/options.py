@@ -300,7 +300,7 @@ class PointSamplingOptions:
 
 
 @dataclass(frozen=True, config=_CONFIG)
-class PointCoordinatesSamplingOptions:
+class DisplacedVertexSamplingOptions:
     """Return displaced mesh vertices selected by tags (FEniCSx backend).
 
     The observed field is a displacement vector with one component per spatial dimension.
@@ -308,7 +308,7 @@ class PointCoordinatesSamplingOptions:
     an XDMF file, ordered by the vertices' original geometry input indices.
     """
 
-    type: Literal["fenicsx.points_coordinates"]
+    type: Literal["fenicsx.displaced_vertices"]
     """Kind of spatial sampling."""
 
     tags: Annotated[list[int], Field(min_length=1)]
@@ -333,7 +333,7 @@ type SpatialSamplingOptions = Annotated[
     ArraySamplingOptions
     | MeshSamplingOptions
     | PointSamplingOptions
-    | PointCoordinatesSamplingOptions,
+    | DisplacedVertexSamplingOptions,
     Field(discriminator="type"),
 ]
 
