@@ -208,16 +208,79 @@ def test_estimation_needs_parameters(tmp_path, capsys):
     assert "needs a parameters section" in capsys.readouterr().err
 
 
-def test_measurements_must_share_times(tmp_path, capsys):
-    write_numpy(tmp_path / "v.npz", np.array([0.5, 1.0]), np.zeros((2, 1)))
-    write_numpy(tmp_path / "w.npz", np.array([0.5]), np.zeros((1, 1)))
-    options = _options(tmp_path, times=[0.5, 1.0])
+def _asynchronous(
+    tmp_path: Path, v: TimeRange | list[float], w: TimeRange | list[float], **kwargs
+) -> StudyOptions:
+    """Return the options of :func:`_options`, with v and w measured at different times."""
+    options = _options(tmp_path, times=v, **kwargs)
     assert options.measurements is not None
-    w = replace(options.measurements["w"], times=[0.5])
-    study = tmp_path / "study.yaml"
-    dump_study(replace(options, measurements={**options.measurements, "w": w}), study)
-    assert main(["estimation", str(study)]) == 1
-    assert "have different times" in capsys.readouterr().err
+    measurements = {**options.measurements, "w": replace(options.measurements["w"], times=w)}
+    return replace(options, measurements=measurements)
+
+
+def test_asynchronous_measurements(tmp_path):
+    """Measurements at different times: the filter steps through all times in order, each step
+    with the measurements at it."""
+    write_numpy(tmp_path / "v.npz", np.array([0.5, 1.0]), np.zeros((2, 1)))
+    write_numpy(tmp_path / "w.npz", np.array([0.75, 1.0]), np.zeros((2, 1)))
+    estimate(_asynchronous(tmp_path, v=[0.5, 1.0], w=[0.75, 1.0]))
+
+    np.testing.assert_allclose(_history(tmp_path)["time"], [0.0, 0.5, 0.75, 1.0])
+    run = YAML(typ="safe").load(tmp_path / "results" / "estimation" / "run.yaml")
+    assert run["assimilation_times"] == [0.5, 0.75, 1.0]
+
+
+def test_twin_experiment_with_asynchronous_measurements(tmp_path):
+    """v and w at interleaved times: each estimate is within three standard deviations of the
+    true value."""
+    v = TimeRange(start=0.5, stop=20.0, step=1.0)
+    w = TimeRange(start=1.0, stop=20.0, step=1.0)
+    options = _asynchronous(tmp_path, v=v, w=w)
+    synthesize(options)
+    estimate(options)
+
+    history = _history(tmp_path)
+    assert len(history["time"]) == 1 + 40  # the initial estimate and every time of v and w
+    names = list(history["names"])
+    theta, P = history["theta"][-1], history["P_theta"][-1]
+    theta_true = np.log([TRUE[name] / INITIAL[name] for name in names])  # log reparameterization
+    np.testing.assert_array_less(np.abs(theta - theta_true), 3 * np.sqrt(np.diag(P)))
+
+
+def test_measurement_split_by_times_gives_the_same_estimation(tmp_path):
+    """w split into two measurements at alternate times: the same steps with the same data, so
+    the same innovations in the same order (v, then the part of w), and the same history, bit
+    for bit."""
+    options = _options(tmp_path, iterations=2, times=TimeRange(start=0.5, stop=5.0, step=0.5))
+    assert options.measurements is not None
+    synthesize(options)
+    estimate(options)
+
+    # the data of one synthesis: synthesizing the parts would draw other noise
+    times, values = read_numpy(tmp_path / "w.npz")
+    parts = {}
+    w = options.measurements["w"]
+    for seed, (name, rows) in enumerate([
+        ("w_a", slice(0, None, 2)),
+        ("w_b", slice(1, None, 2)),
+    ]):
+        path = tmp_path / f"{name}.npz"
+        write_numpy(path, times[rows], values[rows])
+        data = NumpyDataOptions(type="numpy", path=str(path))
+        noise = replace(w.noise, seed=10 + seed)  # distinct, as required; unused here
+        parts[name] = replace(w, times=None, data=data, noise=noise)  # all times in its data
+    split = replace(
+        options,
+        output=OutputOptions(path=str(tmp_path / "split")),
+        measurements={"v": options.measurements["v"], **parts},
+    )
+    estimate(split)
+
+    history = _history(tmp_path)
+    split_history = np.load(tmp_path / "split" / "estimation" / "history.npz")
+    assert len(history["time"]) == 2 * (1 + 10)
+    for key in history.files:
+        np.testing.assert_array_equal(split_history[key], history[key], err_msg=key)
 
 
 def test_estimation_from_python(tmp_path):
