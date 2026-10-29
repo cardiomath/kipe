@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 # matplotlib's first colors, so that terminal and figure agree
 _COLORS = [(31, 119, 180), (255, 127, 14), (44, 160, 44), (214, 39, 40), (148, 103, 189)]
 _GRAY = (128, 128, 128)
-_GREEN = (0, 200, 0)  # starts of the outer iterations
+_GREEN = (144, 238, 144)  # starts of the outer iterations
 _TRUTH = (227, 119, 194)  # matplotlib's pink, not used for the estimates
 _ROWS_PER_PARAMETER = 12
 
@@ -453,13 +453,10 @@ def render_histories(
             lines.append(f"\x1b[38;2;{r};{g};{b}m━━\x1b[0m {label}" if color else f"━━ {label}")
 
     gray = "\x1b[38;2;128;128;128m{}\x1b[0m" if color else "{}"
-    green = "\x1b[38;2;0;200;0m{}\x1b[0m" if color else "{}"
-    key = (
-        f"colored line: estimate   {gray.format('gray lines')}: 1σ range (hidden under the "
-        f"estimate where narrower than a dot)"
-    )
+    green = "\x1b[38;2;144;238;144m{}\x1b[0m" if color else "{}"
+    key = f"colored line: estimate   {gray.format('1σ range')}"
     if all_iterations:
-        key += f", {green.format('green vertical lines')}: starts of outer iterations"
+        key += f", {green.format('starts of iterations')}"
     lines.append(key)
 
     return "\n".join(lines)
