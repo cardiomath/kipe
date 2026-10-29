@@ -338,9 +338,9 @@ def render_histories(
 
     Like :func:`plot_histories`, with the 1σ range drawn as gray lines below and above the
     estimate. With a single history, each subplot title shows the latest estimate and range.
-    Several histories or a truth get a legend below the plot, and a last line explains the
-    lines: the colored estimate, the gray 1σ range and, with all iterations, the green vertical
-    lines at the starts of the outer iterations.
+    Several histories get a legend below the plot, and a last line explains the lines: the
+    gray 1σ range, with all iterations the green vertical lines at the starts of the outer
+    iterations, and with a truth its reference line.
 
     By default, only the current (latest) outer iteration is drawn, which zooms in on where the
     estimate converges; its x axis counts the steps of that iteration.
@@ -364,10 +364,9 @@ def render_histories(
 
     names = _common_names(histories)
 
-    # as in plot_histories: a legend with several histories or a truth
+    # a legend with several histories; the truth is in the key to the lines
     legend = [(label, _color(k)) for k, label in enumerate(histories)]
-    if truth is not None and any(name in truth for name in names):
-        legend.append(("truth", _TRUTH))
+    has_truth = truth is not None and any(name in truth for name in names)
     columns = max(1, min(columns, len(names)))
     grid_rows = -(-len(names) // columns)
     legend_rows = (len(legend) if len(legend) > 1 else 0) + 1  # plus the key to the line styles
@@ -459,6 +458,8 @@ def render_histories(
     key = [entry("1σ range", _GRAY)]
     if all_iterations:
         key.append(entry("starts of iterations", _GREEN))
+    if has_truth:
+        key.append(entry("truth", _TRUTH))
     lines.append("   ".join(key))
 
     return "\n".join(lines)
