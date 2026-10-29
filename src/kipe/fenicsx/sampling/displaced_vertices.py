@@ -39,9 +39,9 @@ class DisplacedVertexSampler(PointSampler):
         mesh: XDMF file containing the selection mesh and its facet tags
         tags: nonempty list of tag IDs
         operation: union or intersection of the tags' vertex sets; intersection by default
-        comm: communicator of the mesh and run
         mesh_name: name of the mesh in the XDMF file
         tags_name: name of the facet tags in the XDMF file
+        comm: communicator of the mesh and run
 
     Raises:
         StudyFileError: if the field is not a displacement vector, a tag is absent globally,
@@ -55,9 +55,9 @@ class DisplacedVertexSampler(PointSampler):
         mesh: str,
         tags: list[int],
         operation: Literal["union", "intersection"] = "intersection",
-        comm: MPI.Comm = MPI.COMM_WORLD,
         mesh_name: str = "mesh",
         tags_name: str = "Facet tags",
+        comm: MPI.Comm = MPI.COMM_WORLD,
     ) -> None:
         gdim = source.mesh.geometry.dim
         if source.value_shape != (gdim,):
@@ -167,7 +167,7 @@ def build_displaced_vertex_sampler(
         options.mesh,
         options.tags,
         options.operation,
-        comm,
         options.mesh_name,
         options.tags_name,
+        comm,
     )
