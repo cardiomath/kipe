@@ -180,7 +180,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="time between redraws with --watch (default: %(default)s)",
     )
     plot.add_argument(
-        "--cpr",
+        "--plots-per-row",
         type=int,
         default=1,
         metavar="N",
@@ -190,7 +190,7 @@ def build_parser() -> argparse.ArgumentParser:
     plot.add_argument(
         "--all",
         action="store_true",
-        help="with --terminal or --watch, draw all outer iterations, not only the current one",
+        help="with --terminal or --watch, draw all outer iterations, not only the last one",
     )
     plot.set_defaults(func=_plot)
 
