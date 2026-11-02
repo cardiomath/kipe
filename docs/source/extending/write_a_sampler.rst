@@ -92,6 +92,13 @@ here, the observed field and its function space, from
 .. literalinclude:: ../../../src/kipe/fenicsx/sampling/points.py
    :pyobject: build_point_sampler
 
+Samplers selecting vertices of tagged facets can also use
+:func:`~kipe.fenicsx.sampling.common.observed_facet_tags`. It checks the solver's
+``facet_tags(field)`` capability and returns the tags. For example,
+:func:`~kipe.fenicsx.sampling.displaced_vertices.build_displaced_vertex_sampler` passes those
+tags, the selected tag IDs and ``combine`` to
+:class:`~kipe.fenicsx.sampling.displaced_vertices.DisplacedVertexSampler`.
+
 kipe calls it from :func:`kipe.sampling.build_sampler`, which has one ``case`` per kind of
 sampler. A backend's sampler is imported inside its case, so that kipe works without dolfinx
 as long as no study uses it:

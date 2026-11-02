@@ -205,11 +205,11 @@ def test_displaced_vertex_sampling_options():
     assert options.measurements["u"].spatial_sampling == DisplacedVertexSamplingOptions(
         type="fenicsx.displaced_vertices",
         tags=[30, 10],
-        operation="intersection",
+        combine="intersection",
     )
     for invalid in (
         {"tags": []},
-        {"operation": "difference"},
+        {"combine": "difference"},
         {"mesh": "unused.xdmf"},
         {"mesh_name": "mesh"},
         {"tags_name": "Facet tags"},

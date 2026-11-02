@@ -56,9 +56,10 @@ Measurement data are ``.npz`` files with two arrays (:class:`~kipe.options.Numpy
 - ``times``, shape ``(n,)``: the measurement times;
 - ``values``, shape ``(n, m)``: the m values of the measurement at each time.
 
-The order of the m values is the sampler's (see below), and it does not depend on the number of
-MPI ranks: data written on one rank can be read on eight. To use data from elsewhere, e.g.,
-from an image, write them in this order:
+The measurement model defines the order of the m values; by default, it keeps the sampler's
+order (see below). This order does not depend on the number of MPI ranks: data written on one
+rank can be read on eight. To use data from elsewhere, e.g., from an image, write them in this
+order:
 
 .. code-block:: python
 
@@ -129,23 +130,25 @@ A finite element field, evaluated at given points, in their order:
 ``fenicsx.displaced_vertices``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Returns the displaced coordinates ``X + u(X)`` of mesh vertices selected by facet tags.
-Use ``intersection`` (the default) for vertices shared by all listed tags, or ``union``
-for vertices belonging to any listed tag:
+Returns the displaced coordinates ``X + u(X)`` of vertices of mesh facets with the given tags.
+Use ``combine: intersection`` (the default) for vertices shared by the facet sets of all listed
+tags, or ``combine: union`` for vertices of facets with any listed tag:
 
 .. code-block:: yaml
 
     spatial_sampling:
       type: fenicsx.displaced_vertices
       tags: [30, 10]
-      operation: intersection
+      combine: intersection
 
-The sampler uses the solver's reference mesh and facet tags, provided through
-``function_space(field)`` and ``facet_tags(field)``. Each tag must exist and the selection
-must be nonempty. Cell tags are not supported.
+The mesh and facet tags are provided by the forward solver for the selected field, through
+``function_space(field).mesh`` and ``facet_tags(field)``. For solvers with multiple meshes,
+the field determines which mesh is used. Each tag must exist and the selection must be
+nonempty. Cell tags are not supported.
 
-The observed field must be a displacement vector. Coordinates are returned vertex by vertex
-as a flat array (``x0, y0, z0, x1, y1, z1, ...`` in 3D).
+The observed field must be a displacement vector with one component per spatial dimension.
+Coordinates are returned vertex by vertex as a flat array (``x0, y0, z0, x1, y1, z1, ...`` in
+3D). Only mesh vertices are selected, including when using higher-order elements.
 
 Another sampler? :doc:`../extending/write_a_sampler` walks through ``fenicsx.points``, step by
 step.

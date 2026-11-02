@@ -301,22 +301,23 @@ class PointSamplingOptions:
 
 @dataclass(frozen=True, config=_CONFIG)
 class DisplacedVertexSamplingOptions:
-    """Return displaced mesh vertices selected by tags (FEniCSx backend).
+    """Return displaced vertices of tagged mesh facets (FEniCSx backend).
 
     The observed field is a displacement vector with one component per spatial dimension.
-    The solver provides its function space and ``facet_tags(field)`` on the same reference
-    mesh. Vertices are ordered by their original geometry input indices.
+    The mesh and facet tags are provided by the forward solver for the observed field.
+    Vertices are ordered by their original geometry input indices.
     """
 
     type: Literal["fenicsx.displaced_vertices"]
     """Kind of spatial sampling."""
 
     tags: Annotated[list[int], Field(min_length=1)]
-    """Facet tag IDs whose vertices are selected."""
+    """Tag IDs of the mesh facets whose vertices are selected. Cell tags are not supported."""
 
-    operation: Literal["union", "intersection"] = "intersection"
-    """``union``: select vertices belonging to any listed tag;
-    ``intersection``: select vertices shared by all listed tags (the default)."""
+    combine: Literal["union", "intersection"] = "intersection"
+    """``union``: select vertices of facets with any listed tag;
+    ``intersection``: select vertices shared by the facet sets of all listed tags (the default).
+    """
 
 
 # the choices of a measurement, from the core and the backends

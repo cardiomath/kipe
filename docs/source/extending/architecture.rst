@@ -74,6 +74,9 @@ arguments can be any objects, e.g., the solver's own options.
   their nominal values.
 - **Backend capabilities.** A backend may need more from the solver: FEniCSx samplers need the
   function space of a field (:class:`kipe.fenicsx.forward_solver.SupportsFunctionSpaces`).
+  Selecting vertices of tagged facets also needs the mesh's facet tags
+  (:class:`kipe.fenicsx.forward_solver.SupportsFacetTags`). The field identifies the mesh when
+  the solver has more than one.
   Such a capability is a separate protocol, so a solver without it still works with the core
   samplers.
 
@@ -86,7 +89,8 @@ operator :math:`\mathcal{H} = M \circ S` has two parts:
 
 - the **spatial sampler** :math:`S` (:mod:`kipe.sampling`) evaluates the observed fields at
   the measurement locations: interpolation onto a measurement mesh, a projection onto a
-  direction or the surface normal, all entries of a field;
+  direction or the surface normal, displaced coordinates of tagged mesh vertices, all entries
+  of a field;
 - the **measurement model** :math:`M` (:mod:`kipe.measurements.models`) predicts the data from
   the sampled values and compares the prediction with the measured data, giving the innovation.
 
@@ -161,7 +165,7 @@ measurement model         :class:`kipe.measurements.models.MeasurementModel`  :f
 and ``global_indices`` and implements
 :meth:`~kipe.sampling.SpatialSampler.sample`, which takes the observed fields (rank-local
 arrays) and returns this rank's sampled entries. It may take what it needs from the solver at
-construction, e.g., function spaces, through a backend capability.
+construction, e.g., function spaces and facet tags, through a backend capability.
 
 **A measurement model** implements :meth:`~kipe.measurements.models.MeasurementModel.predict`
 and :meth:`~kipe.measurements.models.MeasurementModel.innovation`. It sees this rank's entries

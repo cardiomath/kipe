@@ -35,16 +35,18 @@ class SupportsFunctionSpaces(Protocol):
 
 @runtime_checkable
 class SupportsFacetTags(Protocol):
-    """A solver that provides facet tags on the reference mesh of a state field."""
+    """A forward solver that provides facet tags for its state fields."""
 
     def facet_tags(self, field: str) -> MeshTags:
-        """Return facet tags on the mesh of ``function_space(field)``.
+        """Return the mesh's facet tags for a state field.
+
+        For a solver with multiple meshes, the field identifies which mesh's tags to return.
 
         Args:
             field: name of the state field
 
         Returns:
-            facet tags on that field's reference mesh, with the same MPI partition
+            facet tags on the mesh, with the same MPI partition
         """
         ...
 

@@ -15,8 +15,8 @@ from time series of measurements,  with the reduced-order unscented Kalman filte
 
 The filter needs only forward runs of your model, no derivatives, through a lean interface. Around
 the estimation, kipe generates synthetic measurement data for twin experiments, from a run of the
-model or from the checkpoints of an earlier run, and will analyze the identifiability of the
-parameters with the Fisher information (planned).
+model or from the checkpoints of an earlier run, and analyzes the identifiability of the
+parameters with the Fisher information.
 
 ## Key features
 
@@ -74,7 +74,7 @@ pre-commit install --hook-type pre-commit --hook-type commit-msg
 pytest
 ```
 
-See [Development](https://cardiomath.github.io/kipe/development.html) in the documentation.
+See [Development](https://cardiomath.github.io/kipe/extending/development.html) in the documentation.
 
 ## License
 

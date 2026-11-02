@@ -42,7 +42,7 @@ def observed_function_space(
 
 
 def observed_facet_tags(kind: str, field: str, solver: ForwardSolver) -> MeshTags:
-    """Return the facet tags of an observed field's reference mesh.
+    """Return facet tags provided by the forward solver for an observed field.
 
     Args:
         kind: the sampler's ``type``, for error messages
@@ -50,7 +50,7 @@ def observed_facet_tags(kind: str, field: str, solver: ForwardSolver) -> MeshTag
         solver: the forward solver, which provides the field's facet tags
 
     Returns:
-        facet tags on the field's reference mesh, with the same MPI partition
+        facet tags on the mesh, with the same MPI partition
 
     Raises:
         StudyFileError: if the solver does not provide ``facet_tags(field)``
