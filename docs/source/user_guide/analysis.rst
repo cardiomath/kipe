@@ -57,12 +57,13 @@ bounds. Its figures show:
 - **the pairs**: for each pair of parameters, the estimates and the 2σ ellipses of the
   covariances, which show size and orientation together.
 
-For the example, the filter's standard deviation of ``b`` is about 30 %
-below the empirical one, which agrees with the Cramér–Rao bound, the bound of the data alone.
-The filter's standard deviation agrees with the Bayesian bound instead, which includes the
-prior. The outer iterations largely remove the prior's influence on the estimate, by
-anchoring each pass at the estimate of the one before, so the estimates scatter as the data
-alone allow. The filter's covariance, however, still contains the prior of its last pass, and
-understates that scatter where the prior is not small against the information of the data,
-as for ``b``. The correlations show the same: the filter's are those of the Bayesian bound,
-the estimates' those of the Cramér–Rao bound, and so do the ellipses of the pairs.
+In this example, the filter's standard deviation for ``b`` is about 30 % lower than the
+empirical standard deviation, which is close to the Cramér–Rao bound (the data-only bound).
+The filter's standard deviation instead agrees with the Bayesian bound, which also includes
+the prior. Outer iterations largely reduce the prior's influence on the estimate by anchoring
+each pass at the estimate from the previous pass. Consequently, the estimates scatter about
+as much as the data alone allow. The filter's covariance, however, still includes the prior
+from the final pass. When that prior is informative relative to the data, as for ``b``, the
+covariance understates the observed scatter. The correlations tell a similar story: the
+filter's agree with the Bayesian bound, while the empirical correlations and pairwise
+ellipses agree with the Cramér–Rao bound.
