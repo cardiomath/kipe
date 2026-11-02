@@ -84,6 +84,30 @@ class EstimatedParameter:
             case _:
                 assert_never(self.reparameterization)
 
+    def derivative(self, theta: float) -> float:
+        r"""Return the derivative of the physical value by :math:`\theta`,
+        :math:`\mathrm{d}\phi / \mathrm{d}\theta`.
+
+        It takes a standard deviation of :math:`\theta` to one of the physical value, to first
+        order, e.g., to compare the covariances of estimations with different anchors.
+
+        Args:
+            theta: reparameterized parameter
+
+        Returns:
+            :math:`\phi` for ``log``, the anchor :math:`\phi^0` for ``multiplicative``, 1 for
+            ``additive``
+        """
+        match self.reparameterization:
+            case "log":
+                return self.to_physical(theta)
+            case "multiplicative":
+                return self.anchor
+            case "additive":
+                return 1.0
+            case _:
+                assert_never(self.reparameterization)
+
     def theta_step(self, step: float) -> float:
         r"""Return the step in :math:`\theta` corresponding to a step in the parameter.
 
@@ -151,6 +175,22 @@ class Parameterization:
             the step in :math:`\theta` of each parameter
         """
         return np.array([parameter.theta_step(step) for parameter in self.parameters])
+
+    def derivative(self, theta: NDArray_f64) -> NDArray_f64:
+        r"""Return the derivative of each physical value by its :math:`\theta`, see
+        :meth:`EstimatedParameter.derivative`.
+
+        Args:
+            theta: reparameterized parameters, in the order of :attr:`parameters`
+
+        Returns:
+            :math:`\mathrm{d}\phi_i / \mathrm{d}\theta_i` of each parameter, the diagonal of
+            the Jacobian
+        """
+        return np.array([
+            parameter.derivative(float(value))
+            for parameter, value in zip(self.parameters, theta, strict=True)
+        ])
 
     def anchor_theta(self) -> NDArray_f64:
         r"""Return :math:`\theta` at the anchors, where the filter starts.
