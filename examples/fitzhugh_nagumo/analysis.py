@@ -76,8 +76,13 @@ print(f"{len(result.realizations)} realizations of {args.study}")
 # filter standard deviation clearly below the empirical one means an overconfident filter.
 
 # %%
-stddevs = {"empirical": empirical, "filter": filter_covariance} | bounds
-stddevs = {label: np.sqrt(np.diag(covariance)) for label, covariance in stddevs.items()}
+covariances = {"empirical": empirical, "filter": filter_covariance} | bounds
+covariances = {
+    label: covariances[label]
+    for label in ("empirical", "Cramér-Rao", "filter", "Bayesian")
+    if label in covariances
+}
+stddevs = {label: np.sqrt(np.diag(covariance)) for label, covariance in covariances.items()}
 
 header = f"{'parameter':<10}{'truth':>10}{'bias':>9}" + "".join(f"{s:>12}" for s in stddevs)
 print(header + f"{'filter/emp.':>13}")
@@ -180,7 +185,6 @@ def ellipse(center: np.ndarray, covariance: np.ndarray, color: str, label: str) 
     )
 
 
-covariances = {"empirical": empirical, "filter": filter_covariance} | bounds
 pairs = list(combinations(range(n), 2))
 columns = min(3, len(pairs))
 rows = -(-len(pairs) // columns)
@@ -193,6 +197,7 @@ for ax, (i, j) in zip(axes.flat, pairs, strict=False):  # the last row may have 
     center = result.parameters[:, [i, j]].mean(axis=0)
     for k, (label, covariance) in enumerate(covariances.items()):
         ax.add_patch(ellipse(center, covariance[np.ix_([i, j], [i, j])], COLORS[k], label))
+    ax.scatter(*center, s=36, facecolors="none", edgecolors=COLORS[0], linewidths=1.5, zorder=3)
     ax.plot(true_values[i], true_values[j], "x", color="0.1", ms=8, label="truth")
     ax.set(xlabel=names[i], ylabel=names[j])
     ax.grid(color="0.9")

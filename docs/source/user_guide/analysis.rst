@@ -57,7 +57,7 @@ bounds. Its figures show:
 - **the pairs**: for each pair of parameters, the estimates and the 2σ ellipses of the
   covariances, which show size and orientation together.
 
-For the example's 20 realizations, the filter's standard deviation of ``b`` is about 30 %
+For the example, the filter's standard deviation of ``b`` is about 30 %
 below the empirical one, which agrees with the Cramér–Rao bound, the bound of the data alone.
 The filter's standard deviation agrees with the Bayesian bound instead, which includes the
 prior. The outer iterations largely remove the prior's influence on the estimate, by
