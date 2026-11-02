@@ -35,7 +35,8 @@ from kipe.sensitivity import read_sensitivity
 parser = argparse.ArgumentParser(description="The estimates of a study's noise realizations.")
 parser.add_argument("study", nargs="?", default="study_realizations.yaml", help="study file")
 parser.add_argument("--save", metavar="DIR", help="save the figures to DIR, don't show them")
-args, _ = parser.parse_known_args()  # known only: Jupyter passes its own arguments
+parser.add_argument("-f", help=argparse.SUPPRESS)  # Jupyter kernel connection file
+args, _ = parser.parse_known_args()
 
 # colors that stay distinguishable with color vision deficiencies, in a fixed order
 COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100"]
