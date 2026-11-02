@@ -94,7 +94,9 @@ for i, name in enumerate(names):
 # deviation, the line the truth.
 
 # %%
-figure, axes = plt.subplots(1, len(names), figsize=(3 * len(names), 3.5), layout="constrained")
+figure_estimates, axes = plt.subplots(
+    1, len(names), figsize=(3 * len(names), 3.5), layout="constrained"
+)
 rng = np.random.default_rng(0)
 for i, (ax, name) in enumerate(zip(np.atleast_1d(axes), names, strict=True)):
     values = result.parameters[:, i]
@@ -114,7 +116,9 @@ np.atleast_1d(axes)[0].legend(fontsize="small")
 # the parameters can be determined to very different degrees.
 
 # %%
-figure, axes = plt.subplots(1, len(names), figsize=(3 * len(names), 3.5), layout="constrained")
+figure_consistency, axes = plt.subplots(
+    1, len(names), figsize=(3 * len(names), 3.5), layout="constrained"
+)
 for i, (ax, name) in enumerate(zip(np.atleast_1d(axes), names, strict=True)):
     for k, (label, s) in enumerate(stddevs.items()):
         ax.bar(k, 100 * s[i] / abs(true_values[i]), 0.8, color=COLORS[k], label=label)
@@ -122,7 +126,9 @@ for i, (ax, name) in enumerate(zip(np.atleast_1d(axes), names, strict=True)):
     ax.grid(axis="y", color="0.9")
     ax.set_axisbelow(True)
 np.atleast_1d(axes)[0].set_ylabel("standard deviation (% of the truth)")
-figure.legend(*np.atleast_1d(axes)[0].get_legend_handles_labels(), loc="outside right upper")
+figure_consistency.legend(
+    *np.atleast_1d(axes)[0].get_legend_handles_labels(), loc="outside right upper"
+)
 
 # %% [markdown]
 # ## Correlations
@@ -144,7 +150,7 @@ correlations = {"empirical": correlation(empirical), "filter": correlation(filte
 correlations |= {label: correlation(covariance) for label, covariance in bounds.items()}
 
 n = len(names)
-figure, axes = plt.subplots(
+figure_correlations, axes = plt.subplots(
     1, len(correlations), figsize=(3.2 * len(correlations), 3), layout="constrained"
 )
 for ax, (label, matrix) in zip(np.atleast_1d(axes), correlations.items(), strict=True):
@@ -153,7 +159,7 @@ for ax, (label, matrix) in zip(np.atleast_1d(axes), correlations.items(), strict
         ax.text(j, i, f"{value:.2f}", ha="center", va="center", fontsize="small",
                 color="white" if abs(value) > 0.6 else "black")  # fmt: skip
     ax.set(title=label, xticks=range(n), yticks=range(n), xticklabels=names, yticklabels=names)
-figure.colorbar(image, ax=axes, shrink=0.8)
+figure_correlations.colorbar(image, ax=axes, shrink=0.8)
 
 # %% [markdown]
 # ## Pairs: the estimates and the covariance ellipses
@@ -178,7 +184,7 @@ covariances = {"empirical": empirical, "filter": filter_covariance} | bounds
 pairs = list(combinations(range(n), 2))
 columns = min(3, len(pairs))
 rows = -(-len(pairs) // columns)
-figure, axes = plt.subplots(
+figure_pairs, axes = plt.subplots(
     rows, columns, figsize=(3.4 * columns, 3.2 * rows), layout="constrained", squeeze=False
 )
 for ax, (i, j) in zip(axes.flat, pairs, strict=False):  # the last row may have room to spare
@@ -193,14 +199,18 @@ for ax, (i, j) in zip(axes.flat, pairs, strict=False):  # the last row may have 
     ax.set_axisbelow(True)
 for ax in axes.flat[len(pairs) :]:
     ax.set_visible(False)
-figure.legend(*axes.flat[0].get_legend_handles_labels(), loc="outside right upper")
+figure_pairs.legend(*axes.flat[0].get_legend_handles_labels(), loc="outside right upper")
 
 # %%
 if args.save:
     directory = Path(args.save)
     directory.mkdir(parents=True, exist_ok=True)
     figures = ["estimates", "consistency", "correlations", "pairs"]
-    for number, name in zip(plt.get_fignums(), figures, strict=True):
-        plt.figure(number).savefig(directory / f"{name}.png", dpi=150)
+    for figure, name in zip(
+        (figure_estimates, figure_consistency, figure_correlations, figure_pairs),
+        figures,
+        strict=True,
+    ):
+        figure.savefig(directory / f"{name}.png", dpi=150)
 else:
     plt.show()
