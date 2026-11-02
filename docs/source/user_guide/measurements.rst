@@ -131,8 +131,8 @@ A finite element field, evaluated at given points, in their order:
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Returns the displaced coordinates ``X + u(X)`` of vertices of mesh facets with the given tags.
-Use ``combine: intersection`` (the default) for vertices shared by the facet sets of all listed
-tags, or ``combine: union`` for vertices of facets with any listed tag:
+Use ``combine: union`` (the default) for vertices of facets with any listed tag, or
+``combine: intersection`` for vertices shared by the facet sets of all listed tags:
 
 .. code-block:: yaml
 

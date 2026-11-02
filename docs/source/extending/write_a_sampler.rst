@@ -98,6 +98,8 @@ Samplers selecting vertices of tagged facets can also use
 :func:`~kipe.fenicsx.sampling.displaced_vertices.build_displaced_vertex_sampler` passes those
 tags, the selected tag IDs and ``combine`` to
 :class:`~kipe.fenicsx.sampling.displaced_vertices.DisplacedVertexSampler`.
+This sampler uses an internal :class:`~kipe.fenicsx.sampling.points.PointSampler` to evaluate
+the displacement, then adds the selected vertices' coordinates to the sampled values.
 
 kipe calls it from :func:`kipe.sampling.build_sampler`, which has one ``case`` per kind of
 sampler. A backend's sampler is imported inside its case, so that kipe works without dolfinx

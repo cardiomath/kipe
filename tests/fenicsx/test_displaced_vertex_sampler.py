@@ -79,17 +79,18 @@ def _gathered(sampler, local):
     return full.reshape(-1, 2)
 
 
-@pytest.mark.parametrize("combine", ["union", "intersection"])
+@pytest.mark.parametrize("combine", [None, "union", "intersection"])
 def test_displaced_coordinates_in_file_order(domain, combine):
     distributed, reference = domain
     V = fem.functionspace(distributed, ("Lagrange", 2, (2,)))
-    sampler = DisplacedVertexSampler("u", V, _tags(distributed), [10, 20], combine=combine)
+    selection = {} if combine is None else {"combine": combine}
+    sampler = DisplacedVertexSampler("u", V, _tags(distributed), [10, 20], **selection)
     original_mesh = distributed.geometry.x.copy()
     owned = _owned(V, _displacement)
     original_field = owned.copy()
     actual = _gathered(sampler, sampler.sample({"u": owned}))
     left, bottom = np.isclose(reference[:, 0], 0), np.isclose(reference[:, 1], 0)
-    selected = reference[left | bottom if combine == "union" else left & bottom]
+    selected = reference[left & bottom if combine == "intersection" else left | bottom]
     np.testing.assert_allclose(actual, selected + _displacement(selected.T).T, atol=1e-12)
     np.testing.assert_array_equal(distributed.geometry.x, original_mesh)
     np.testing.assert_array_equal(owned, original_field)
@@ -182,7 +183,7 @@ def test_builder_uses_solver_facet_tags(domain):
     )
     operator = build_observation_operator("coordinates", options, Solver())
     actual = _gathered(operator.sampler, operator({"u": np.zeros(Spec.local_size)}))
-    expected = reference[np.isclose(reference[:, 0], 0) & np.isclose(reference[:, 1], 0)]
+    expected = reference[np.isclose(reference[:, 0], 0) | np.isclose(reference[:, 1], 0)]
     np.testing.assert_allclose(actual, expected)
 
     class WithoutFacetTags:
@@ -198,7 +199,7 @@ def test_builder_uses_solver_facet_tags(domain):
 def test_three_dimensional_surface_intersection():
     domain = mesh.create_unit_cube(COMM, 2, 2, 2)
     V = fem.functionspace(domain, ("Lagrange", 1, (3,)))
-    sampler = DisplacedVertexSampler("u", V, _tags(domain), [10, 20])
+    sampler = DisplacedVertexSampler("u", V, _tags(domain), [10, 20], combine="intersection")
     translation = np.array([0.1, 0.2, 0.3])
     values = sampler.sample({
         "u": _owned(V, lambda x: np.tile(translation[:, None], (1, x.shape[1])))

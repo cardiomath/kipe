@@ -25,9 +25,10 @@ from kipe.fenicsx.sampling.common import observed_facet_tags, observed_function_
 from kipe.fenicsx.sampling.points import PointSampler
 from kipe.forward_solver import ForwardSolver
 from kipe.options import DisplacedVertexSamplingOptions, StudyFileError
+from kipe.sampling import SpatialSampler
 
 
-class DisplacedVertexSampler(PointSampler):
+class DisplacedVertexSampler(SpatialSampler):
     """Evaluate ``X + u(X)`` at vertices selected from tagged mesh facets.
 
     Only topological vertices are selected, including on higher-order meshes. The displacement
@@ -39,7 +40,7 @@ class DisplacedVertexSampler(PointSampler):
         source: displacement function space on the mesh
         facet_tags: facet tags on the source mesh, with the same MPI partition
         tags: nonempty list of facet tag IDs
-        combine: union or intersection of the facets' vertex sets; intersection by default
+        combine: union or intersection of the facets' vertex sets; union by default
         comm: communicator of the mesh and run
 
     Raises:
@@ -53,7 +54,7 @@ class DisplacedVertexSampler(PointSampler):
         source: fem.FunctionSpace,
         facet_tags: MeshTags,
         tags: list[int],
-        combine: Literal["union", "intersection"] = "intersection",
+        combine: Literal["union", "intersection"] = "union",
         comm: MPI.Comm = MPI.COMM_WORLD,
     ) -> None:
         mesh = source.mesh
@@ -108,7 +109,9 @@ class DisplacedVertexSampler(PointSampler):
             raise StudyFileError("fenicsx.displaced_vertices: the selected vertex set is empty")
 
         points = [coordinates[int(node)] for node in selected]
-        super().__init__(field, source, points, comm)
+        self._displacement = PointSampler(field, source, points, comm)
+        self.size = self._displacement.size
+        self.global_indices = self._displacement.global_indices
         self._reference_coordinates = np.asarray(points, dtype=np.float64).ravel()[
             self.global_indices
         ]
@@ -122,7 +125,7 @@ class DisplacedVertexSampler(PointSampler):
         Returns:
             mesh vertex coordinates plus evaluated displacement, at ``global_indices``
         """
-        return self._reference_coordinates + super().sample(fields)
+        return self._reference_coordinates + self._displacement.sample(fields)
 
 
 def build_displaced_vertex_sampler(

@@ -98,8 +98,8 @@
           "type": "array"
         },
         "combine": {
-          "default": "intersection",
-          "description": "``union``: select vertices of facets with any listed tag;\n``intersection``: select vertices shared by the facet sets of all listed tags (the default).",
+          "default": "union",
+          "description": "``union``: select vertices of facets with any listed tag (the default);\n``intersection``: select vertices shared by the facet sets of all listed tags.",
           "enum": [
             "union",
             "intersection"

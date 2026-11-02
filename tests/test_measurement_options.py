@@ -205,7 +205,7 @@ def test_displaced_vertex_sampling_options():
     assert options.measurements["u"].spatial_sampling == DisplacedVertexSamplingOptions(
         type="fenicsx.displaced_vertices",
         tags=[30, 10],
-        combine="intersection",
+        combine="union",
     )
     for invalid in (
         {"tags": []},
