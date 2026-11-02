@@ -267,7 +267,7 @@ def _write_line_mesh(path: Path, k: int, x0: float = 1.0) -> tuple[NDArray_f64, 
         x = np.column_stack([np.full(k + 1, x0), np.linspace(0.0, 1.0, k + 1)])
         cells = np.column_stack([np.arange(k), np.arange(1, k + 1)]).astype(np.int64)
         element = ufl.Mesh(basix.ufl.element("Lagrange", "interval", 1, shape=(2,)))
-        written = mesh.create_mesh(MPI.COMM_SELF, cells, x, element)
+        written = mesh.create_mesh(MPI.COMM_SELF, cells, x=x, e=element)
         with io.XDMFFile(MPI.COMM_SELF, path, "w") as f:
             f.write_mesh(written)
         reference = (written.geometry.x[:, :2].copy(), written.geometry.dofmap.copy())

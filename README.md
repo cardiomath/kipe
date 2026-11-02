@@ -44,7 +44,7 @@ pip install kipe
 pip install mpich  # only if there is no MPI library on your system
 ```
 
-For FEniCSx models, install kipe into your FEniCSx (dolfinx 0.9) environment.
+For FEniCSx models, install kipe into your FEniCSx (dolfinx 0.9 to 0.11) environment.
 
 ## Quick start
 

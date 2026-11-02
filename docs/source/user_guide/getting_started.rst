@@ -18,9 +18,9 @@ The latest development version installs from GitHub:
 
     pip install "kipe @ git+https://github.com/cardiomath/kipe"
 
-**For FEniCSx models,** kipe also needs dolfinx (0.9), which pip does not install. Install kipe
-into the Python environment of your FEniCSx installation (e.g., Spack, conda or the
-``dolfinx/dolfinx`` Docker image): its MPI is then the one kipe uses.
+**For FEniCSx models,** kipe also needs dolfinx (0.9 to 0.11), which pip does not install.
+Install kipe into the Python environment of your FEniCSx installation (e.g., Spack, conda or
+the ``dolfinx/dolfinx`` Docker image): its MPI is then the one kipe uses.
 
 The shell can complete kipe's commands and options on Tab, once its completion script is
 installed (:ref:`kipe-completion`).

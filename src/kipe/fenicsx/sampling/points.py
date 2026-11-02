@@ -58,7 +58,7 @@ class PointSampler(SpatialSampler):
         # that a cell is not found by its owner and by the ranks that have it as a ghost
         tdim = mesh.topology.dim
         n_owned = mesh.topology.index_map(tdim).size_local
-        tree = geometry.bb_tree(mesh, tdim, np.arange(n_owned, dtype=np.int32))
+        tree = geometry.bb_tree(mesh, tdim, entities=np.arange(n_owned, dtype=np.int32))
         candidates = geometry.compute_collisions_points(tree, x)
         colliding = geometry.compute_colliding_cells(mesh, candidates, x)
         cells = np.full(len(x), -1, dtype=np.int32)

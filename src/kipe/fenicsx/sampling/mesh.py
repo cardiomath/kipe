@@ -114,8 +114,9 @@ class MeshSampler(SpatialSampler):
             vector = _projection_vector(projection, field, shape, measurement_mesh, mesh)
             output = fem.functionspace(measurement_mesh, family)
             self._projected = fem.Function(output)
+            points = output.element.interpolation_points  # a method in 0.9, a property from 0.10
             self._expression = fem.Expression(
-                ufl.dot(self._target, vector), output.element.interpolation_points()
+                ufl.dot(self._target, vector), points() if callable(points) else points
             )
 
         bs = output.dofmap.index_map_bs
@@ -207,7 +208,9 @@ def _check_inside(
     """
     outside = 0
     if n_cells:
-        owners = np.asarray(interpolation.src_owner()).reshape(n_cells, -1)
+        src_owner = interpolation.src_owner  # a method in dolfinx 0.9, a property from 0.10
+        owners = np.asarray(src_owner() if callable(src_owner) else src_owner)
+        owners = owners.reshape(n_cells, -1)
         outside = int(np.any(owners[:n_owned] < 0, axis=1).sum())
     outside = comm.allreduce(outside)
     if outside:

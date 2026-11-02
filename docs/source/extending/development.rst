@@ -14,7 +14,7 @@ Setup
     pip install -e ".[dev]"
     pre-commit install --hook-type pre-commit --hook-type commit-msg
 
-For the FEniCSx backend, install kipe into a FEniCSx (dolfinx 0.9) environment instead.
+For the FEniCSx backend, install kipe into a FEniCSx (dolfinx 0.9 to 0.11) environment instead.
 
 Tests
 -----

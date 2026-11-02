@@ -23,14 +23,13 @@ env/
 htmlcov/
 
 # Output of running the examples
-examples/**/data/
-examples/**/results/
+**/data
+**/results
 
 # Docs build
-docs/build/
-docs/source/_apidoc/
-docs/source/_generated/
-docs/_build/
+docs/**/*build
+docs/**/_apidoc
+docs/source/_generated
 
 # Editors / OS
 .idea/
