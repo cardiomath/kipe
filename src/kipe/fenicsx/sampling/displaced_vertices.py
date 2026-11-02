@@ -57,6 +57,8 @@ class DisplacedVertexSampler(SpatialSampler):
         combine: Literal["union", "intersection"] = "union",
         comm: MPI.Comm = MPI.COMM_WORLD,
     ) -> None:
+
+        # Load necessary mesh and function space information
         mesh = source.mesh
         gdim = mesh.geometry.dim
         if source.value_shape != (gdim,):
@@ -80,9 +82,13 @@ class DisplacedVertexSampler(SpatialSampler):
         mesh.topology.create_connectivity(0, tdim)
         mesh.topology.create_connectivity(dim, 0)
 
+        # Initialize the list of vertex sets and a dictionary to store their coordinates
         vertex_sets = []
         coordinates: dict[int, list[float]] = {}
+        # Iterate over the unique facet tags to collect the corresponding vertices
+        # and their coordinates
         for tag in dict.fromkeys(tags):
+            # Skip any duplicate facet tags to avoid redundant computations
             entities = facet_tags.find(tag)
             vertices = compute_incident_entities(mesh.topology, entities, dim, 0)
             # entities_to_geometry fails on empty arrays in DOLFINx 0.9.
