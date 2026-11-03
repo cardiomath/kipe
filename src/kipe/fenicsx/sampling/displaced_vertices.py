@@ -58,19 +58,21 @@ class DisplacedVertexSampler(SpatialSampler):
         comm: MPI.Comm = MPI.COMM_WORLD,
     ) -> None:
 
-        # Load necessary mesh and function space information
+        # Check that the field provides one displacement component per spatial dimension.
         mesh = source.mesh
         gdim = mesh.geometry.dim
         if source.value_shape != (gdim,):
             raise StudyFileError(
                 f"fenicsx.displaced_vertices needs a displacement vector with {gdim} components"
             )
+        # Validate the tag selection, including calls made directly without study options.
         if not tags:
             raise StudyFileError("fenicsx.displaced_vertices needs at least one facet tag")
         if combine not in ("union", "intersection"):
             raise StudyFileError(
                 "fenicsx.displaced_vertices: combine must be union or intersection"
             )
+        # Require facet tags on this field's mesh, rather than cell tags or another mesh.
         tdim = mesh.topology.dim
         dim = facet_tags.dim
         if dim != tdim - 1:
@@ -79,26 +81,30 @@ class DisplacedVertexSampler(SpatialSampler):
             raise StudyFileError(
                 "fenicsx.displaced_vertices: the facet tags are not on the mesh of the field"
             )
+        # Prepare vertex-to-cell lookup for geometry and facet-to-vertex lookup for selection.
         mesh.topology.create_connectivity(0, tdim)
         mesh.topology.create_connectivity(dim, 0)
 
-        # Initialize the list of vertex sets and a dictionary to store their coordinates
+        # Store each tag's global vertex IDs and the coordinates associated with those IDs.
         vertex_sets = []
         coordinates: dict[int, list[float]] = {}
-        # Iterate over the unique facet tags to collect the corresponding vertices
-        # and their coordinates
+        # Process each tag once; dict.fromkeys removes repeated tags while keeping their order.
         for tag in dict.fromkeys(tags):
-            # Skip any duplicate facet tags to avoid redundant computations
+            # Find this rank's tagged facets and extract their topological vertices.
             entities = facet_tags.find(tag)
             vertices = compute_incident_entities(mesh.topology, entities, dim, 0)
+            # Map topology vertices to geometry nodes before reading coordinates.
             # entities_to_geometry fails on empty arrays in DOLFINx 0.9.
             geometry_nodes = (
                 entities_to_geometry(mesh, 0, vertices, False).ravel()
                 if len(vertices)
                 else np.empty(0, dtype=np.int32)
             )
+            # Original geometry IDs identify the same vertices across MPI partitions.
             ids = mesh.geometry.input_global_indices[geometry_nodes]
             x = mesh.geometry.x[geometry_nodes, :gdim]
+            # Gather each complete surface before combining tags: adjacent surfaces may
+            # be held by different ranks. Remove IDs repeated at partition boundaries.
             parts = comm.allgather((ids, x))
             global_ids = np.unique(np.concatenate([part[0] for part in parts]))
             if not len(global_ids):
@@ -107,6 +113,8 @@ class DisplacedVertexSampler(SpatialSampler):
             for part_ids, part_x in parts:
                 coordinates.update(zip(part_ids.tolist(), part_x.tolist(), strict=True))
 
+        # Combine the global vertex sets. NumPy keeps unique IDs in sorted order, so the
+        # output order is independent of the tag order and the number of MPI ranks.
         selected = vertex_sets[0]
         combine_vertices = np.union1d if combine == "union" else np.intersect1d
         for vertices in vertex_sets[1:]:
@@ -114,10 +122,13 @@ class DisplacedVertexSampler(SpatialSampler):
         if not len(selected):
             raise StudyFileError("fenicsx.displaced_vertices: the selected vertex set is empty")
 
+        # Let PointSampler assign each point to one rank and evaluate its displacement.
         vertices_coordinates = [coordinates[int(node)] for node in selected]
         self._displacement_vertices = PointSampler(field, source, vertices_coordinates, comm)
         self.size = self._displacement_vertices.size
         self.global_indices = self._displacement_vertices.global_indices
+        # Keep this rank's original coordinate components in the same order as its sampled
+        # displacement: component c of vertex i has global position i * gdim + c.
         self._reference_coordinates = np.asarray(vertices_coordinates, dtype=np.float64).ravel()[
             self.global_indices
         ]
@@ -131,6 +142,7 @@ class DisplacedVertexSampler(SpatialSampler):
         Returns:
             mesh vertex coordinates plus evaluated displacement, at ``global_indices``
         """
+        # Evaluate the current displacement and return X + u(X) without moving the mesh.
         return self._reference_coordinates + self._displacement_vertices.sample(fields)
 
 
@@ -154,6 +166,7 @@ def build_displaced_vertex_sampler(
     Raises:
         StudyFileError: if the solver does not provide the required capabilities
     """
+    # Retrieve the function space and facet tags for the same observed field.
     kind = "fenicsx.displaced_vertices"
     field, source = observed_function_space(kind, fields, solver)
     facet_tags = observed_facet_tags(kind, field, solver)
