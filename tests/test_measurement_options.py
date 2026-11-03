@@ -200,7 +200,7 @@ def test_estimation_directory_of_a_missing_realization():
 
 
 def test_displaced_vertex_sampling_options():
-    sampling = {"type": "fenicsx.displaced_vertices", "tags": [30, 10]}
+    sampling = {"type": "fenicsx.displaced_vertices", "tags": [30, 10], "combine": "union"}
     options = _study({"u": MEASUREMENT | {"spatial_sampling": sampling}})
     assert options.measurements["u"].spatial_sampling == DisplacedVertexSamplingOptions(
         type="fenicsx.displaced_vertices",
@@ -216,3 +216,9 @@ def test_displaced_vertex_sampling_options():
     ):
         with pytest.raises(ValidationError):
             _study({"u": MEASUREMENT | {"spatial_sampling": sampling | invalid}})
+
+
+def test_displaced_vertex_sampling_requires_combine():
+    sampling = {"type": "fenicsx.displaced_vertices", "tags": [30, 10]}
+    with pytest.raises(ValidationError, match="combine"):
+        _study({"u": MEASUREMENT | {"spatial_sampling": sampling}})

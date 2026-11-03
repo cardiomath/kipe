@@ -40,7 +40,7 @@ class DisplacedVertexSampler(SpatialSampler):
         source: displacement function space on the mesh
         facet_tags: facet tags on the source mesh, with the same MPI partition
         tags: nonempty list of facet tag IDs
-        combine: union or intersection of the facets' vertex sets; union by default
+        combine: union or intersection of the facets' vertex sets; must be specified explicitly
         comm: communicator of the mesh and run
 
     Raises:
@@ -54,7 +54,7 @@ class DisplacedVertexSampler(SpatialSampler):
         source: fem.FunctionSpace,
         facet_tags: MeshTags,
         tags: list[int],
-        combine: Literal["union", "intersection"] = "union",
+        combine: Literal["union", "intersection"],
         comm: MPI.Comm = MPI.COMM_WORLD,
     ) -> None:
 

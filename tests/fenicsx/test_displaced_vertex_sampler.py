@@ -79,12 +79,11 @@ def _gathered(sampler, local):
     return full.reshape(-1, 2)
 
 
-@pytest.mark.parametrize("combine", [None, "union", "intersection"])
+@pytest.mark.parametrize("combine", ["union", "intersection"])
 def test_displaced_coordinates_in_file_order(domain, combine):
     distributed, reference = domain
     V = fem.functionspace(distributed, ("Lagrange", 2, (2,)))
-    selection = {} if combine is None else {"combine": combine}
-    sampler = DisplacedVertexSampler("u", V, _tags(distributed), [10, 20], **selection)
+    sampler = DisplacedVertexSampler("u", V, _tags(distributed), [10, 20], combine=combine)
     original_mesh = distributed.geometry.x.copy()
     owned = _owned(V, _displacement)
     original_field = owned.copy()
@@ -104,7 +103,7 @@ def test_displaced_coordinates_in_file_order(domain, combine):
 def test_duplicate_and_single_tags(domain):
     distributed, reference = domain
     V = fem.functionspace(distributed, ("Lagrange", 1, (2,)))
-    sampler = DisplacedVertexSampler("u", V, _tags(distributed), [10, 10])
+    sampler = DisplacedVertexSampler("u", V, _tags(distributed), [10, 10], combine="union")
     actual = _gathered(
         sampler, sampler.sample({"u": np.zeros(V.dofmap.index_map.size_local * 2)})
     )
@@ -116,7 +115,7 @@ def test_facet_tags_from_another_mesh_are_rejected(domain):
     V = fem.functionspace(distributed, ("Lagrange", 1, (2,)))
     other_mesh = mesh.create_unit_square(COMM, 4, 4)
     with pytest.raises(StudyFileError, match="facet tags are not on the mesh of the field"):
-        DisplacedVertexSampler("u", V, _tags(other_mesh), [10])
+        DisplacedVertexSampler("u", V, _tags(other_mesh), [10], combine="union")
 
 
 def test_cell_tags_are_rejected(domain):
@@ -126,7 +125,7 @@ def test_cell_tags_are_rejected(domain):
     cells = np.arange(distributed.topology.index_map(tdim).size_local, dtype=np.int32)
     tags = mesh.meshtags(distributed, tdim, cells, np.full(len(cells), 10, dtype=np.int32))
     with pytest.raises(StudyFileError, match="needs facet tags"):
-        DisplacedVertexSampler("u", V, tags, [10])
+        DisplacedVertexSampler("u", V, tags, [10], combine="union")
 
 
 @pytest.mark.parametrize(
@@ -150,7 +149,7 @@ def test_requires_displacement_vector(domain, shape):
     distributed, _ = domain
     V = fem.functionspace(distributed, ("Lagrange", 1, shape))
     with pytest.raises(StudyFileError, match="displacement vector with 2 components"):
-        DisplacedVertexSampler("u", V, _tags(distributed), [10])
+        DisplacedVertexSampler("u", V, _tags(distributed), [10], combine="union")
 
 
 def test_builder_uses_solver_facet_tags(domain):
@@ -178,7 +177,7 @@ def test_builder_uses_solver_facet_tags(domain):
         data=NumpyDataOptions(type="numpy", path="unused.npz"),
         noise=NoiseOptions(stddev=0.1),
         spatial_sampling=DisplacedVertexSamplingOptions(
-            type="fenicsx.displaced_vertices", tags=[10, 20]
+            type="fenicsx.displaced_vertices", tags=[10, 20], combine="union"
         ),
     )
     operator = build_observation_operator("coordinates", options, Solver())

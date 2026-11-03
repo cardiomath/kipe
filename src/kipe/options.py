@@ -314,9 +314,11 @@ class DisplacedVertexSamplingOptions:
     tags: Annotated[list[int], Field(min_length=1)]
     """Tag IDs of the mesh facets whose vertices are selected. Cell tags are not supported."""
 
-    combine: Literal["union", "intersection"] = "union"
-    """``union``: select vertices of facets with any listed tag (the default);
+    combine: Literal["union", "intersection"]
+    """
+    ``union``: select vertices of facets with any listed tag;
     ``intersection``: select vertices shared by the facet sets of all listed tags.
+    Must be specified explicitly.
     """
 
 

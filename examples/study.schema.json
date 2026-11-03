@@ -98,8 +98,7 @@
           "type": "array"
         },
         "combine": {
-          "default": "union",
-          "description": "``union``: select vertices of facets with any listed tag (the default);\n``intersection``: select vertices shared by the facet sets of all listed tags.",
+          "description": "``union``: select vertices of facets with any listed tag;\n``intersection``: select vertices shared by the facet sets of all listed tags.\nMust be specified explicitly.",
           "enum": [
             "union",
             "intersection"
@@ -110,7 +109,8 @@
       },
       "required": [
         "type",
-        "tags"
+        "tags",
+        "combine"
       ],
       "title": "DisplacedVertexSamplingOptions",
       "type": "object"
