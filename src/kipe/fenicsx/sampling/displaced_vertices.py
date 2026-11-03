@@ -57,6 +57,8 @@ class DisplacedVertexSampler(SpatialSampler):
         combine: Literal["union", "intersection"] = "union",
         comm: MPI.Comm = MPI.COMM_WORLD,
     ) -> None:
+
+        # Load necessary mesh and function space information
         mesh = source.mesh
         gdim = mesh.geometry.dim
         if source.value_shape != (gdim,):
@@ -80,9 +82,13 @@ class DisplacedVertexSampler(SpatialSampler):
         mesh.topology.create_connectivity(0, tdim)
         mesh.topology.create_connectivity(dim, 0)
 
+        # Initialize the list of vertex sets and a dictionary to store their coordinates
         vertex_sets = []
         coordinates: dict[int, list[float]] = {}
+        # Iterate over the unique facet tags to collect the corresponding vertices
+        # and their coordinates
         for tag in dict.fromkeys(tags):
+            # Skip any duplicate facet tags to avoid redundant computations
             entities = facet_tags.find(tag)
             vertices = compute_incident_entities(mesh.topology, entities, dim, 0)
             # entities_to_geometry fails on empty arrays in DOLFINx 0.9.
@@ -108,11 +114,11 @@ class DisplacedVertexSampler(SpatialSampler):
         if not len(selected):
             raise StudyFileError("fenicsx.displaced_vertices: the selected vertex set is empty")
 
-        points = [coordinates[int(node)] for node in selected]
-        self._displacement = PointSampler(field, source, points, comm)
-        self.size = self._displacement.size
-        self.global_indices = self._displacement.global_indices
-        self._reference_coordinates = np.asarray(points, dtype=np.float64).ravel()[
+        vertices_coordinates = [coordinates[int(node)] for node in selected]
+        self._displacement_vertices = PointSampler(field, source, vertices_coordinates, comm)
+        self.size = self._displacement_vertices.size
+        self.global_indices = self._displacement_vertices.global_indices
+        self._reference_coordinates = np.asarray(vertices_coordinates, dtype=np.float64).ravel()[
             self.global_indices
         ]
 
@@ -125,7 +131,7 @@ class DisplacedVertexSampler(SpatialSampler):
         Returns:
             mesh vertex coordinates plus evaluated displacement, at ``global_indices``
         """
-        return self._reference_coordinates + self._displacement.sample(fields)
+        return self._reference_coordinates + self._displacement_vertices.sample(fields)
 
 
 def build_displaced_vertex_sampler(
