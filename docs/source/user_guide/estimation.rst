@@ -56,8 +56,10 @@ Both run directories also contain ``kipe.log`` and provenance files: ``run.yaml`
 ``study.yaml``, ``environment.yaml``, ``packages.txt``, and patches for uncommitted package
 changes.
 
-``kipe plot`` draws one subplot per parameter over the assimilation steps. The title shows the
-latest estimate and its 1σ range. The colored line is the estimate after each step; the two gray
+``kipe plot-estimation`` draws one subplot per parameter over time: the outer iterations side by
+side, each from the initial state to the last assimilation time, so that steps at irregular
+times, e.g., of asynchronous measurements, are where they belong. The title shows the latest
+estimate and its 1σ range. The colored line is the estimate after each step; the two gray
 lines around it are the ends of its 1σ range (lower and upper), hidden behind the estimate wherever
 the range is narrower than one dot of the terminal plot; vertical lines mark the starts of the outer
 iterations; and, with ``--truth``, a differently colored horizontal line is the true value. With

@@ -175,3 +175,12 @@ def test_theta_step(reparameterization, stddev_theta, lower, upper, rtol):
     step, theta = parameter.theta_step(0.01), parameter.anchor_theta()
     assert parameter.to_physical(theta - step) == pytest.approx(lower, rel=rtol)
     assert parameter.to_physical(theta + step) == pytest.approx(upper, rel=rtol)
+
+
+@pytest.mark.parametrize("reparameterization", ["log", "multiplicative", "additive"])
+def test_derivative(reparameterization):
+    """dphi/dtheta, against central differences of to_physical."""
+    parameter = EstimatedParameter("x", reparameterization, 2.0, 0.1)
+    theta, h = parameter.anchor_theta() + 0.3, 1e-6
+    difference = (parameter.to_physical(theta + h) - parameter.to_physical(theta - h)) / (2 * h)
+    assert parameter.derivative(theta) == pytest.approx(difference, rel=1e-9)
