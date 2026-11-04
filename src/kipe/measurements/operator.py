@@ -92,9 +92,8 @@ def build_observation_operator(
 
     try:
         sampler = build_sampler(options.spatial_sampling, options.fields, solver, comm)
+        model = build_model(options.model, sampler, comm)
     except StudyFileError as err:
         raise StudyFileError(f"measurements.{name}: {err}") from err
 
-    return ObservationOperator(
-        fields=options.fields, sampler=sampler, model=build_model(options.model)
-    )
+    return ObservationOperator(fields=options.fields, sampler=sampler, model=model)

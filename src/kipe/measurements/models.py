@@ -12,8 +12,15 @@ To add a model: subclass :class:`MeasurementModel`, implement both methods (and
 from abc import ABC, abstractmethod
 from typing import assert_never
 
+from mpi4py import MPI
+
 from kipe._types import NDArray_f64, NDArray_i64
-from kipe.options import DifferenceModelOptions
+from kipe.options import (
+    DifferenceModelOptions,
+    MeasurementModelOptions,
+    PlaneModelOptions,
+    StudyFileError,
+)
 from kipe.sampling import SpatialSampler
 
 
@@ -55,7 +62,7 @@ class MeasurementModel(ABC):
         By default those of the sampler: a model that acts entry by entry, like
         :class:`DifferenceModel`, predicts one value per sampled entry, on the rank that holds
         it. A model that combines entries has its own, e.g., a plane fitted to sampled
-        points: three values, held by the rank that holds all of the points. As for the
+        vertices: three coefficients, held by rank 0 after gathering the coordinates. As for the
         sampler, each entry is held by exactly one rank, and the positions do not depend on
         the number of ranks.
 
@@ -98,11 +105,17 @@ class DifferenceModel(MeasurementModel):
         return z - z_hat
 
 
-def build_model(options: DifferenceModelOptions) -> MeasurementModel:
+def build_model(
+    options: MeasurementModelOptions,
+    sampler: SpatialSampler | None = None,
+    comm: MPI.Comm = MPI.COMM_WORLD,
+) -> MeasurementModel:
     """Construct the measurement model given by the ``model`` options of a measurement.
 
     Args:
         options: ``model`` options of the measurement
+        sampler: spatial sampler, required by models that combine its entries
+        comm: communicator of the run
 
     Returns:
         the measurement model
@@ -110,5 +123,11 @@ def build_model(options: DifferenceModelOptions) -> MeasurementModel:
     match options:
         case DifferenceModelOptions():
             return DifferenceModel()
+        case PlaneModelOptions():
+            from kipe.measurements.plane import PlaneModel
+
+            if sampler is None:
+                raise StudyFileError("plane model needs a spatial sampler")
+            return PlaneModel(sampler, comm)
         case _:
             assert_never(options)
