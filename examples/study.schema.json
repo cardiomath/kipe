@@ -78,6 +78,43 @@
       "title": "DifferenceModelOptions",
       "type": "object"
     },
+    "DisplacedVertexSamplingOptions": {
+      "additionalProperties": false,
+      "description": "Return displaced vertices of tagged mesh facets (FEniCSx backend).\n\nThe observed field is a displacement vector with one component per spatial dimension.\nThe mesh and facet tags are provided by the forward solver for the observed field.\nVertices are ordered by their original geometry input indices.",
+      "properties": {
+        "type": {
+          "const": "fenicsx.displaced_vertices",
+          "description": "Kind of spatial sampling.",
+          "title": "Type",
+          "type": "string"
+        },
+        "tags": {
+          "description": "Tag IDs of the mesh facets whose vertices are selected. Cell tags are not supported.",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 1,
+          "title": "Tags",
+          "type": "array"
+        },
+        "combine": {
+          "description": "``union``: select vertices of facets with any listed tag;\n``intersection``: select vertices shared by the facet sets of all listed tags.\nMust be specified explicitly.",
+          "enum": [
+            "union",
+            "intersection"
+          ],
+          "title": "Combine",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "tags",
+        "combine"
+      ],
+      "title": "DisplacedVertexSamplingOptions",
+      "type": "object"
+    },
     "EstimationOptions": {
       "additionalProperties": false,
       "description": "Parameter estimation with the reduced-order unscented Kalman filter (ROUKF).",
@@ -489,6 +526,7 @@
       "discriminator": {
         "mapping": {
           "array": "#/$defs/ArraySamplingOptions",
+          "fenicsx.displaced_vertices": "#/$defs/DisplacedVertexSamplingOptions",
           "fenicsx.mesh": "#/$defs/MeshSamplingOptions",
           "fenicsx.points": "#/$defs/PointSamplingOptions"
         },
@@ -503,6 +541,9 @@
         },
         {
           "$ref": "#/$defs/PointSamplingOptions"
+        },
+        {
+          "$ref": "#/$defs/DisplacedVertexSamplingOptions"
         }
       ]
     },

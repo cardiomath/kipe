@@ -94,6 +94,10 @@ Some features need more from the solver, again as structural protocols:
   returns the function space of a distributed field. The FEniCSx samplers need it to
   interpolate a field onto a measurement mesh or to evaluate it at points
   (:doc:`measurements`).
+- :class:`~kipe.fenicsx.forward_solver.SupportsFacetTags`: ``facet_tags(field)`` returns
+  the mesh's facet tags. When the forward solver contains multiple meshes, the field
+  identifies which mesh's tags to return.
+  The displaced vertex sampler uses them to select the vertices of tagged surfaces.
 
 Checking a solver
 -----------------

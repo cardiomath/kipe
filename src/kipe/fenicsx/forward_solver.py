@@ -11,6 +11,7 @@ from typing import Protocol, runtime_checkable
 
 import basix.ufl
 from dolfinx import fem
+from dolfinx.mesh import MeshTags
 
 
 @runtime_checkable
@@ -28,6 +29,24 @@ class SupportsFunctionSpaces(Protocol):
 
         Returns:
             the function space
+        """
+        ...
+
+
+@runtime_checkable
+class SupportsFacetTags(Protocol):
+    """A forward solver that provides facet tags for its state fields."""
+
+    def facet_tags(self, field: str) -> MeshTags:
+        """Return the mesh's facet tags for a state field.
+
+        For a solver with multiple meshes, the field identifies which mesh's tags to return.
+
+        Args:
+            field: name of the state field
+
+        Returns:
+            facet tags on the mesh, with the same MPI partition
         """
         ...
 
