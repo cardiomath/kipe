@@ -142,8 +142,8 @@ for i, name in enumerate(names):
 # %% [markdown]
 # ## The estimates over the realizations
 #
-# Each point is the final estimate of one realization; the bar shows their mean and standard
-# deviation, the line the truth.
+# Each point is the final estimate of one realization; the error bars show the standard
+# deviations from the listed covariances, all centered at the mean estimate. The line is truth.
 
 # %%
 figure_estimates, axes = plt.subplots(
@@ -154,8 +154,10 @@ for i, (ax, name) in enumerate(zip(np.atleast_1d(axes), names, strict=True)):
     values = result.parameters[:, i]
     ax.scatter(rng.uniform(-0.15, 0.15, values.size), values, s=16, color=COLORS[0],
                alpha=0.7, label="realizations")  # fmt: skip
-    ax.errorbar(0.4, values.mean(), yerr=values.std(ddof=1), fmt="o", color=COLORS[1],
-                capsize=4, label="mean ± std")  # fmt: skip
+    offsets = np.linspace(-0.2, 0.2, len(covariances))
+    for k, (label, s) in enumerate(stddevs.items()):
+        ax.errorbar(0.4 + offsets[k], values.mean(), yerr=s[i], fmt="o", color=COLORS[k],
+                    capsize=4, label=label)  # fmt: skip
     ax.axhline(true_values[i], color="0.2", lw=1, ls="--", label="truth")
     ax.set(title=name, xticks=[], xlim=(-0.5, 0.8))
     ax.grid(axis="y", color="0.9")
