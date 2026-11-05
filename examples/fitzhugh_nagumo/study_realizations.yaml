@@ -33,7 +33,7 @@ measurements:
     noise: {stddev: 0.05, seed: 1}
 
 synthesis:
-  realizations: 50
+  realizations: 40
 
 estimation:
   iterations: 6
