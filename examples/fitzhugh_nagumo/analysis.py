@@ -76,6 +76,13 @@ names = result.names
 truth = build_forward_solver(study.forward_solver).nominal_parameters()
 true_values = np.array([truth[name] for name in names])
 
+# retrieves the prior covariances
+names = list(study.parameters.priors)
+parametrization = build_parameterization(study.parameters, names)
+priors_stddev = parametrization.stddev_physical(np.zeros(parametrization.parameter_count))
+prior_information_bound = 1.0 / (priors_stddev**2)
+
+# %%
 empirical = np.cov(result.parameters, rowvar=False)  # over the realizations
 filter_covariance = result.covariance.mean(axis=0)  # mean over the realizations
 
@@ -101,6 +108,8 @@ print(f"{len(result.realizations)} realizations of {args.study}")
 # filter standard deviation clearly below the empirical one means an overconfident filter.
 
 # %%
+# Collect the available covariance estimates in display order and derive their
+# standard deviations
 covariances = {"empirical": empirical, "filter": filter_covariance} | bounds
 covariances = {
     label: covariances[label]
