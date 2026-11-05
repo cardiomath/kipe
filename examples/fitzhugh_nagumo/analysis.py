@@ -38,6 +38,7 @@
 
 # %%
 import argparse
+import shutil
 from itertools import combinations
 from pathlib import Path
 
@@ -229,6 +230,8 @@ figure_pairs.legend(*axes.flat[0].get_legend_handles_labels(), loc="outside righ
 if args.save:
     directory = Path(args.save)
     directory.mkdir(parents=True, exist_ok=True)
+    study_file = Path(args.study) if args.study else None
+    shutil.copy2(study_file, directory)
     figures = ["estimates", "consistency", "correlations", "pairs"]
     for figure, name in zip(
         (figure_estimates, figure_consistency, figure_correlations, figure_pairs),
