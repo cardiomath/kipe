@@ -85,7 +85,8 @@ true_values = np.array([truth[name] for name in names])
 # retrieves the prior covariances
 names = list(study.parameters.priors)
 parametrization = build_parameterization(study.parameters, names)
-priors_stddev = parametrization.stddev_physical(np.zeros(parametrization.parameter_count))
+count_parameters = parametrization.parameter_count
+priors_stddev = parametrization.stddev_physical(np.zeros(count_parameters))
 
 # %%
 empirical = np.cov(result.parameters, rowvar=False)  # over the realizations
@@ -131,12 +132,13 @@ covariances = {
 }
 stddevs = {label: np.sqrt(np.diag(covariance)) for label, covariance in covariances.items()}
 
-header = f"{'parameter':<10}{'truth':>10}{'bias':>9}" + "".join(f"{s:>12}" for s in stddevs)
+width = max(12, *(len(s) + 2 for s in stddevs))
+header = f"{'parameter':<10}{'truth':>10}{'bias':>9}" + "".join(f"{s:>{width}}" for s in stddevs)
 print(header + f"{'filter/emp.':>13}")
 for i, name in enumerate(names):
     bias = (result.parameters[:, i].mean() - true_values[i]) / true_values[i]
     row = f"{name:<10}{true_values[i]:>10.4g}{bias:>9.2%}"
-    row += "".join(f"{s[i]:>12.3g}" for s in stddevs.values())
+    row += "".join(f"{s[i]:>{width}.3g}" for s in stddevs.values())
     print(row + f"{stddevs['filter'][i] / stddevs['empirical'][i]:>13.2f}")
 
 # %% [markdown]
@@ -184,36 +186,6 @@ figure_consistency.legend(
     *np.atleast_1d(axes)[0].get_legend_handles_labels(), loc="outside right upper"
 )
 
-# %% [markdown]
-# ## Correlations
-#
-# Of the estimates over the realizations, of the filter (mean over the realizations), and of
-# the bounds. The filter can have the right spreads but miss correlations. Where the prior
-# matters, the filter's correlations are those of the Bayesian bound, which includes it, and
-# the estimates' those of the Cramér-Rao bound (see the summary).
-
-
-# %%
-def correlation(covariance: np.ndarray) -> np.ndarray:
-    """Return the correlations of a covariance matrix."""
-    stddev = np.sqrt(np.diag(covariance))
-    return covariance / np.outer(stddev, stddev)
-
-
-correlations = {"empirical": correlation(empirical), "filter": correlation(filter_covariance)}
-correlations |= {label: correlation(covariance) for label, covariance in bounds.items()}
-
-n = len(names)
-figure_correlations, axes = plt.subplots(
-    1, len(correlations), figsize=(3.2 * len(correlations), 3), layout="constrained"
-)
-for ax, (label, matrix) in zip(np.atleast_1d(axes), correlations.items(), strict=True):
-    image = ax.imshow(matrix, cmap="RdBu_r", vmin=-1, vmax=1)
-    for (i, j), value in np.ndenumerate(matrix):
-        ax.text(j, i, f"{value:.2f}", ha="center", va="center", fontsize="small",
-                color="white" if abs(value) > 0.6 else "black")  # fmt: skip
-    ax.set(title=label, xticks=range(n), yticks=range(n), xticklabels=names, yticklabels=names)
-figure_correlations.colorbar(image, ax=axes, shrink=0.8)
 
 # %% [markdown]
 # ## Pairs: the estimates and the covariance ellipses
@@ -234,7 +206,7 @@ def ellipse(center: np.ndarray, covariance: np.ndarray, color: str, label: str) 
     )
 
 
-pairs = list(combinations(range(n), 2))
+pairs = list(combinations(range(count_parameters), 2))
 columns = min(3, len(pairs))
 rows = -(-len(pairs) // columns)
 figure_pairs, axes = plt.subplots(
@@ -255,7 +227,44 @@ for ax in axes.flat[len(pairs) :]:
     ax.set_visible(False)
 figure_pairs.legend(*axes.flat[0].get_legend_handles_labels(), loc="outside right upper")
 
+
+# %% [markdown]
+# ## Correlations
+#
+# Of the estimates over the realizations, of the filter (mean over the realizations), and of
+# the bounds. The filter can have the right spreads but miss correlations. Where the prior
+# matters, the filter's correlations are those of the Bayesian bound, which includes it, and
+# the estimates' those of the Cramér-Rao bound (see the summary).
+
+
 # %%
+def correlation(covariance: np.ndarray) -> np.ndarray:
+    """Return the correlations of a covariance matrix."""
+    stddev = np.sqrt(np.diag(covariance))
+    return covariance / np.outer(stddev, stddev)
+
+
+correlations = {label: correlation(covariance) for label, covariance in covariances.items()}
+
+figure_correlations, axes = plt.subplots(
+    1, len(correlations), figsize=(3.2 * len(correlations), 3), layout="constrained"
+)
+for ax, (label, matrix) in zip(np.atleast_1d(axes), correlations.items(), strict=True):
+    image = ax.imshow(matrix, cmap="RdBu_r", vmin=-1, vmax=1)
+    for (i, j), value in np.ndenumerate(matrix):
+        ax.text(j, i, f"{value:.2f}", ha="center", va="center", fontsize="small",
+                color="white" if abs(value) > 0.6 else "black")  # fmt: skip
+    ax.set(
+        title=label,
+        xticks=range(count_parameters),
+        yticks=range(count_parameters),
+        xticklabels=names,
+        yticklabels=names,
+    )
+figure_correlations.colorbar(image, ax=axes, shrink=0.8)
+
+# %%
+# SAVE FIGURES INTO DIRECTORY (OPTIONAL)
 if args.save:
     directory = Path(args.save)
     directory.mkdir(parents=True, exist_ok=True)
