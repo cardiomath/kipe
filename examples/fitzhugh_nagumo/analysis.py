@@ -64,7 +64,7 @@ parser.add_argument("-f", help=argparse.SUPPRESS)  # Jupyter kernel connection f
 args, _ = parser.parse_known_args()
 
 # colors that stay distinguishable with color vision deficiencies, in a fixed order
-COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100"]
+COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#8e63b0"]
 
 # %% [markdown]
 # ## Reading the results
@@ -80,11 +80,14 @@ true_values = np.array([truth[name] for name in names])
 names = list(study.parameters.priors)
 parametrization = build_parameterization(study.parameters, names)
 priors_stddev = parametrization.stddev_physical(np.zeros(parametrization.parameter_count))
-prior_information_bound = 1.0 / (priors_stddev**2)
 
 # %%
 empirical = np.cov(result.parameters, rowvar=False)  # over the realizations
 filter_covariance = result.covariance.mean(axis=0)  # mean over the realizations
+# Getting back the filter covariance that would correspond to the CRB
+inflated_filter_covariance = np.linalg.inv(
+    np.linalg.inv(filter_covariance) - np.diag(1.0 / (priors_stddev**2))
+)
 
 # the bounds, if the study has a sensitivity analysis: from theta to physical units
 bounds: dict[str, np.ndarray] = {}
@@ -96,7 +99,7 @@ if path.exists():
     J = nominal.derivative(sensitivity.theta)
     if np.all(np.isfinite(sensitivity.covariance)):
         bounds["Cramér-Rao"] = np.outer(J, J) * sensitivity.covariance
-    bounds["Bayesian"] = np.outer(J, J) * sensitivity.posterior_covariance
+    bounds["Bayesian CR"] = np.outer(J, J) * sensitivity.posterior_covariance
 
 print(f"{len(result.realizations)} realizations of {args.study}")
 
@@ -110,10 +113,14 @@ print(f"{len(result.realizations)} realizations of {args.study}")
 # %%
 # Collect the available covariance estimates in display order and derive their
 # standard deviations
-covariances = {"empirical": empirical, "filter": filter_covariance} | bounds
+covariances = {
+    "empirical": empirical,
+    "filter": filter_covariance,
+    "inflated filter": inflated_filter_covariance,
+} | bounds
 covariances = {
     label: covariances[label]
-    for label in ("empirical", "Cramér-Rao", "filter", "Bayesian")
+    for label in ("empirical", "Cramér-Rao", "inflated filter", "filter", "Bayesian CR")
     if label in covariances
 }
 stddevs = {label: np.sqrt(np.diag(covariance)) for label, covariance in covariances.items()}
