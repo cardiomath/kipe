@@ -8,14 +8,31 @@
 # and, if the study has a sensitivity analysis, with the Cramér-Rao and Bayesian bounds. All
 # in physical units, which are comparable across realizations (see `kipe.results`).
 #
-# Run the study first, e.g., in this directory:
+# ## Run this study
 #
-#     kipe synthesis study_realizations.yaml
-#     kipe estimation study_realizations.yaml
-#     kipe sensitivity study_realizations.yaml   # optional: the bounds
+# E.g., in this directory:
+# ```bash
+# kipe synthesis study_realizations.yaml
+# kipe estimation study_realizations.yaml
+# kipe sensitivity study_realizations.yaml   # optional: the bounds
+# ```
 #
 # Then run this file as a script, `python analysis.py study_realizations.yaml [--save DIR]`,
 # or cell by cell, e.g., in VS Code or in Jupyter (with jupytext).
+#
+# ## Understanding the results
+#
+# The empirical confidence intervals and ellipsoids should converge
+# to the Cramér-Rao bound as the number of realizations grow. This will only happen
+# as long as `estimation.iterations` is large enough,
+# so that the effect of the parameter prior mean is negligible.
+#
+# Still, the filter's standard deviations (and covariances) should be smaller than the empirical
+# standard deviation and covariances, while they should approximately agrees with the
+# Bayesian Cramér-Rao bound.
+#
+# The correlations tell a similar story: the filter's should agree with the Bayesian bound,
+# while the empirical correlations and pairwise ellipses should agree with the Cramér-Rao bound.
 
 # %%
 import argparse
