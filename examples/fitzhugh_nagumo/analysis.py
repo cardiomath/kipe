@@ -40,6 +40,12 @@
 # the prior will increase, and therefore it will require more outer iterations to unbias
 # the estimates. This should show up as the empirical covariance (much) smaller than the CRB.
 # This effect should be reduced when increasing the number of outer iterations.
+#
+# Also, the influence of the prior on the filter's covariance can be assessed by comparing the
+# inflated filter covariance with the empirical covariance. If the inflated filter covariance
+# closely matches the empirical covariance, it indicates that the prior's effect has been
+# properly removed (e.g., by sufficiently increasing the number of outer iterations)
+# and the filter is unbiased with respect to the true parameter values.
 
 # %%
 import argparse
