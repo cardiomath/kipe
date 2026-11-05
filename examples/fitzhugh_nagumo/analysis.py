@@ -229,6 +229,36 @@ figure_pairs.legend(*axes.flat[0].get_legend_handles_labels(), loc="outside righ
 
 
 # %% [markdown]
+# ## Singular values of the covariances
+#
+# The covariance matrices are symmetric positive semi-definite, so their singular values are
+# their eigenvalues. The square roots of the singular values, in log scale, show the uncertainty
+# along each principal direction.
+
+
+# %%
+figure_singular, ax = plt.subplots(figsize=(5, 3.5), layout="constrained")
+for k, (label, matrix) in enumerate(covariances.items()):
+    singular_values = np.linalg.svd(matrix, compute_uv=False)  # descending
+    ax.semilogy(
+        range(1, count_parameters + 1),
+        np.sqrt(singular_values),
+        "o-",
+        color=COLORS[k],
+        label=label,
+    )
+ax.set(
+    xlabel="index",
+    ylabel="square root of singular value",
+    title="SVD analysis of the covariances",
+    xticks=range(1, count_parameters + 1),
+)
+ax.grid(color="0.9", which="both")
+ax.set_axisbelow(True)
+ax.legend()
+
+
+# %% [markdown]
 # ## Correlations
 #
 # Of the estimates over the realizations, of the filter (mean over the realizations), and of
@@ -263,6 +293,7 @@ for ax, (label, matrix) in zip(np.atleast_1d(axes), correlations.items(), strict
     )
 figure_correlations.colorbar(image, ax=axes, shrink=0.8)
 
+
 # %%
 # SAVE FIGURES INTO DIRECTORY (OPTIONAL)
 if args.save:
@@ -270,9 +301,15 @@ if args.save:
     directory.mkdir(parents=True, exist_ok=True)
     study_file = Path(args.study) if args.study else None
     shutil.copy2(study_file, directory)
-    figures = ["estimates", "consistency", "correlations", "pairs"]
+    figures = ["estimates", "consistency", "correlations", "singular_values", "pairs"]
     for figure, name in zip(
-        (figure_estimates, figure_consistency, figure_correlations, figure_pairs),
+        (
+            figure_estimates,
+            figure_consistency,
+            figure_correlations,
+            figure_singular,
+            figure_pairs,
+        ),
         figures,
         strict=True,
     ):
