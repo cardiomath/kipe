@@ -33,6 +33,12 @@
 # so that the influence of the prior mean is negligible. If for example only 1 outer iterations
 #  is performed, the empirical covariances will be closer to the Bayesian ones.
 #
+# Also, the influence of the prior on the filter's covariance can be assessed by comparing the
+# inflated filter covariance with the empirical covariance. If the inflated filter covariance
+# closely matches the empirical covariance, it indicates that the prior's effect has been
+# properly removed (e.g., by sufficiently increasing the number of outer iterations)
+# and the filter is unbiased with respect to the true parameter values.
+#
 # The correlations tell a similar story: the filter's should agree with the Bayesian bound,
 # while the empirical correlations and pairwise ellipses should agree with the Cramér-Rao bound.
 #
@@ -41,11 +47,7 @@
 # the estimates. This should show up as the empirical covariance (much) smaller than the CRB.
 # This effect should be reduced when increasing the number of outer iterations.
 #
-# Also, the influence of the prior on the filter's covariance can be assessed by comparing the
-# inflated filter covariance with the empirical covariance. If the inflated filter covariance
-# closely matches the empirical covariance, it indicates that the prior's effect has been
-# properly removed (e.g., by sufficiently increasing the number of outer iterations)
-# and the filter is unbiased with respect to the true parameter values.
+# The effects above are more clear for the largest singular values of the covariance matrices.
 
 # %%
 import argparse
