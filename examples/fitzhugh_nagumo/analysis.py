@@ -24,12 +24,14 @@
 #
 # The empirical confidence intervals and ellipsoids should converge
 # to the Cramér-Rao bound as the number of realizations grow. This will only happen
-# as long as `estimation.iterations` is large enough,
+# as long as the number of outer iterations is large enough,
 # so that the effect of the parameter prior mean is negligible.
 #
 # Still, the filter's standard deviations (and covariances) should be smaller than the empirical
 # standard deviation and covariances, while they should approximately agrees with the
-# Bayesian Cramér-Rao bound.
+# Bayesian Cramér-Rao bound. Again, only for a sufficiently large number of outer iterations,
+# so that the influence of the prior mean is negligible. If for example only 1 outer iterations
+#  is performed, the empirical covariances will be closer to the Bayesian ones.
 #
 # The correlations tell a similar story: the filter's should agree with the Bayesian bound,
 # while the empirical correlations and pairwise ellipses should agree with the Cramér-Rao bound.
