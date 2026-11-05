@@ -9,7 +9,7 @@ forward_solver:
   arguments: {dt: 0.05}  # nominal parameter values in solver: a = 0.2, b = 0.2, c = 3
 
 parameters:
-  reparameterization: multiplicative
+  reparameterization: log  # multiplicative
   priors:
     a: {mean: 0.2, relative_stddev: 0.1}
     b: {mean: 0.2, relative_stddev: 0.1}

@@ -34,5 +34,4 @@ which differs from realization to realization, so that the realizations' :math:`
 A template notebook
 -------------------
 
-``examples/fitzhugh_nagumo/analysis.py`` is a (fully documented) template to copy and adapt, for a study with
-noise realizations, such as ``examples/fitzhugh_nagumo/study_realizations.yaml``. The template contains also an explanation on how to interpret the results over multiple realizations.
+``examples/fitzhugh_nagumo/analysis.py`` is a (fully documented) template to copy and adapt, for a study with noise realizations, such as ``examples/fitzhugh_nagumo/study_realizations.yaml``. The template contains also an explanation on how to interpret the results, and how the results should look like when changing the configuration.

@@ -35,6 +35,11 @@
 #
 # The correlations tell a similar story: the filter's should agree with the Bayesian bound,
 # while the empirical correlations and pairwise ellipses should agree with the Cramér-Rao bound.
+#
+# Another interesting test is to increse measurement noise. Here, the relative weighting of
+# the prior will increase, and therefore it will require more outer iterations to unbias
+# the estimates. This should show up as the empirical covariance (much) smaller than the CRB.
+# This effect should be reduced when increasing the number of outer iterations.
 
 # %%
 import argparse
