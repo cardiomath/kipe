@@ -1,10 +1,5 @@
 # yaml-language-server: $schema=../study.schema.json
-# FitzHugh-Nagumo twin experiment with 20 noise realizations, for the statistics of the
-# estimates over the noise. Run from this directory:
-#   kipe synthesis study_realizations.yaml  # data/r00/ to data/r19/, with the nominal parameters
-#   kipe estimation study_realizations.yaml  # estimates a, b, c from each realization
-#   kipe sensitivity study_realizations.yaml  # the bounds, to compare the spread with
-#   python analysis.py study_realizations.yaml  # the figures (analysis.py)
+# See analysis.py for how to analyze the results of this study over its noise realizations
 output:
   path: results_realizations
   log_level: info
@@ -14,7 +9,7 @@ forward_solver:
   arguments: {dt: 0.05}  # nominal parameter values in solver: a = 0.2, b = 0.2, c = 3
 
 parameters:
-  reparameterization: multiplicative
+  reparameterization: log  # multiplicative
   priors:
     a: {mean: 0.2, relative_stddev: 0.1}
     b: {mean: 0.2, relative_stddev: 0.1}
@@ -33,7 +28,7 @@ measurements:
     noise: {stddev: 0.05, seed: 1}
 
 synthesis:
-  realizations: 50
+  realizations: 40
 
 estimation:
   iterations: 6
