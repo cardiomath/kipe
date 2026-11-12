@@ -331,7 +331,9 @@ class _SumModel(MeasurementModel):
 def test_model_with_its_own_layout(tmp_path, monkeypatch):
     """A model that combines the sampled entries (here v and w into their sum) has data of its
     own size: synthesis writes them, estimation reads them and compares them."""
-    monkeypatch.setattr("kipe.measurements.operator.build_model", lambda options: _SumModel())
+    monkeypatch.setattr(
+        "kipe.measurements.operator.build_model", lambda options, sampler, comm: _SumModel()
+    )
     options = _options(tmp_path, iterations=1)
     study = replace(
         options,

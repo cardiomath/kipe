@@ -106,8 +106,7 @@ result enters the filter.
        data[/"measured data z"/] --> innovation
        innovation -- "innovation Γ(z, ẑ)" --> filter["ROUKF correction<br/>kipe.roukf"]
 
-Synthesis and estimation use the same operator, so the model that generates synthetic data
-is the one that inverts them; a sensitivity analysis would use it too.
+Synthesis, estimation and sensitivity analysis use the same observation operator.
 
 **Why two parts.** Samplers depend on the discretization, models on the acquisition physics
 (e.g., the phase of an MRI signal, a Fourier transform, a mask). Models act on arrays only,
@@ -172,9 +171,13 @@ and :meth:`~kipe.measurements.models.MeasurementModel.innovation`. It sees this 
 as arrays. A model that acts entry by entry predicts one value per sampled entry and keeps
 the sampler's layout. A model that combines entries, e.g., a plane fitted to sampled points,
 overrides :meth:`~kipe.measurements.models.MeasurementModel.layout` with the size and
-positions of its own data. Without a communicator, it needs all of its input on one rank, as
-a sampler that gathers its entries on rank 0 provides. A model that combines entries spread
-over the ranks would also need the communicator; none does so far.
+positions of its own data. The :class:`~kipe.measurements.plane.PlaneModel` receives the
+sampler and communicator at construction, caches the global positions of the sampled
+coordinates, and gathers the current vertices on rank 0 for each prediction. Its layout
+contains three coefficients on rank 0 and no entries on the other ranks. Fit errors are
+reported to all ranks before prediction returns. The fitting utility
+:func:`~kipe.measurements.plane.fit_plane` works without MPI communication and can also
+preprocess measured vertices.
 
 **A data format** is read where the data are read
 (:func:`kipe.estimation.estimate` and :func:`kipe.synthesis.synthesize`, through

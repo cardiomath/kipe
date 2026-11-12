@@ -209,6 +209,24 @@ class DifferenceModelOptions:
 
 
 @dataclass(frozen=True, config=_CONFIG)
+class PlaneModelOptions:
+    """Fit ``z = a*x + b*y + c`` to sampled 3D vertices by orthogonal least squares.
+
+    The sampler must return flattened vertex coordinates, with x, y and z together for each
+    vertex. Predicted and measured data are the three coefficients, ordered ``[a, b, c]``.
+    The innovation is measured minus predicted coefficients.
+    """
+
+    type: Literal["plane"] = "plane"
+    """Kind of measurement model."""
+
+
+type MeasurementModelOptions = Annotated[
+    DifferenceModelOptions | PlaneModelOptions, Field(discriminator="type")
+]
+
+
+@dataclass(frozen=True, config=_CONFIG)
 class NoiseOptions:
     """Measurement noise: assumed by ``estimation``, added by ``synthesis``.
 
@@ -355,7 +373,7 @@ class MeasurementOptions:
     """How the observed fields are brought to the measurement locations; the kind is selected
     by ``type``, ``array`` by default."""
 
-    model: DifferenceModelOptions = field(default_factory=DifferenceModelOptions)
+    model: MeasurementModelOptions = field(default_factory=DifferenceModelOptions)
     """How predicted data are computed from the sampled fields and compared with the data."""
 
 

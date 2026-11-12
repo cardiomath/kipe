@@ -158,6 +158,23 @@
       "title": "ForwardSolverOptions",
       "type": "object"
     },
+    "MeasurementModelOptions": {
+      "discriminator": {
+        "mapping": {
+          "difference": "#/$defs/DifferenceModelOptions",
+          "plane": "#/$defs/PlaneModelOptions"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/DifferenceModelOptions"
+        },
+        {
+          "$ref": "#/$defs/PlaneModelOptions"
+        }
+      ]
+    },
     "MeasurementOptions": {
       "additionalProperties": false,
       "description": "One measurement: which fields it observes, its data, and how to compare them.",
@@ -203,7 +220,7 @@
           "description": "How the observed fields are brought to the measurement locations; the kind is selected\nby ``type``, ``array`` by default."
         },
         "model": {
-          "$ref": "#/$defs/DifferenceModelOptions",
+          "$ref": "#/$defs/MeasurementModelOptions",
           "description": "How predicted data are computed from the sampled fields and compared with the data."
         }
       },
@@ -444,6 +461,21 @@
         "priors"
       ],
       "title": "ParametersOptions",
+      "type": "object"
+    },
+    "PlaneModelOptions": {
+      "additionalProperties": false,
+      "description": "Fit ``z = a*x + b*y + c`` to sampled 3D vertices by orthogonal least squares.\n\nThe sampler must return flattened vertex coordinates, with x, y and z together for each\nvertex. Predicted and measured data are the three coefficients, ordered ``[a, b, c]``.\nThe innovation is measured minus predicted coefficients.",
+      "properties": {
+        "type": {
+          "const": "plane",
+          "default": "plane",
+          "description": "Kind of measurement model.",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "title": "PlaneModelOptions",
       "type": "object"
     },
     "PointSamplingOptions": {
