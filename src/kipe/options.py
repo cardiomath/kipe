@@ -220,6 +220,21 @@ class PlaneModelOptions:
     type: Literal["plane"] = "plane"
     """Kind of measurement model."""
 
+    normal_toward: (
+        tuple[
+            Annotated[float, Field(allow_inf_nan=False)],
+            Annotated[float, Field(allow_inf_nan=False)],
+            Annotated[float, Field(allow_inf_nan=False)],
+        ]
+        | None
+    ) = None
+    """Optional fixed reference point toward which the fitted normal is oriented.
+
+    Coordinates use the mesh's coordinate system and units. The point must lie off the
+    fitted plane. This affects the exposed normal, not the predicted ``[a, b, c]``.
+    Without a point, the normal is consistently oriented with positive z component.
+    """
+
 
 type MeasurementModelOptions = Annotated[
     DifferenceModelOptions | PlaneModelOptions, Field(discriminator="type")

@@ -473,6 +473,32 @@
           "description": "Kind of measurement model.",
           "title": "Type",
           "type": "string"
+        },
+        "normal_toward": {
+          "anyOf": [
+            {
+              "maxItems": 3,
+              "minItems": 3,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional fixed reference point toward which the fitted normal is oriented.\n\nCoordinates use the mesh's coordinate system and units. The point must lie off the\nfitted plane. This affects the exposed normal, not the predicted ``[a, b, c]``.\nWithout a point, the normal is consistently oriented with positive z component.",
+          "title": "Normal Toward"
         }
       },
       "title": "PlaneModelOptions",

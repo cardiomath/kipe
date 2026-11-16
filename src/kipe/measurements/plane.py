@@ -4,6 +4,8 @@ The same :func:`fit_plane` utility fits measured vertices before writing their c
 as measurement data. Neither the utility nor the model depends on a finite element backend.
 """
 
+from dataclasses import dataclass
+
 from mpi4py import MPI
 
 import numpy as np
@@ -14,16 +16,34 @@ from kipe.options import StudyFileError
 from kipe.sampling import SpatialSampler
 
 
+@dataclass(frozen=True)
+class PlaneFit:
+    """Fitted coefficients, unit normal and centroid, all in the input coordinate system."""
+
+    coefficients: NDArray_f64
+    normal: NDArray_f64
+    centroid: NDArray_f64
+
+
 def fit_plane(vertices: NDArray_f64) -> NDArray_f64:
+    """Return ``[a, b, c]``; see :func:`fit_plane_geometry` for an oriented normal."""
+    return fit_plane_geometry(vertices).coefficients
+
+
+def fit_plane_geometry(
+    vertices: NDArray_f64, *, normal_toward: tuple[float, float, float] | None = None
+) -> PlaneFit:
     """Fit ``z = a*x + b*y + c`` by minimizing squared perpendicular distances.
 
     Args:
         vertices: finite 3D coordinates, shape ``(n_vertices, 3)``; at least three
             noncollinear vertices
+        normal_toward: optional fixed point on the desired side of the plane, in the same
+            coordinates and units as the vertices; must not lie on the fitted plane
 
     Returns:
-        coefficients ``[a, b, c]``; a and b are dimensionless slopes, c has the coordinates'
-        length unit
+        coefficients ``[a, b, c]``, centroid and unit normal. With no target, the normal has
+        positive z component, independent of time, vertex order or evaluation history.
 
     Raises:
         ValueError: if the coordinates are invalid, do not determine a unique plane, or the
@@ -61,9 +81,29 @@ def fit_plane(vertices: NDArray_f64) -> NDArray_f64:
         raise ValueError(
             "vertical or nearly vertical plane cannot be written as z = a*x + b*y + c"
         )
+    if normal_toward is not None:
+        target = np.asarray(normal_toward, dtype=np.float64)
+        if target.shape != (3,) or not np.all(np.isfinite(target)):
+            raise ValueError("normal_toward must contain three finite coordinates")
+        direction = target - centroid
+        distance = float(normal @ direction)
+        orientation_tolerance = (
+            32
+            * np.finfo(float).eps
+            * max(np.linalg.norm(target), np.linalg.norm(centroid), singular_values[0])
+        )
+        if abs(distance) <= orientation_tolerance:
+            raise ValueError("normal_toward lies on the fitted plane; orientation is undefined")
+        if distance < 0:
+            normal = -normal
+    elif normal[2] < 0:
+        # Use a fixed hemisphere, not the previous prediction: sigma points and restarts
+        # can evaluate the same times in different orders. Vertical planes are rejected.
+        normal = -normal
     # Convert n . (X - centroid) = 0 to [a, b, c]. These ratios are unchanged if SVD flips
     # the normal, so no previous normal or temporal orientation history is needed.
-    return np.array([-normal[0], -normal[1], normal @ centroid]) / normal[2]
+    coefficients = np.array([-normal[0], -normal[1], normal @ centroid]) / normal[2]
+    return PlaneFit(coefficients, normal, centroid)
 
 
 class PlaneModel(MeasurementModel):
@@ -76,19 +116,28 @@ class PlaneModel(MeasurementModel):
     Args:
         sampler: sampler of flattened coordinates ``x0, y0, z0, x1, y1, z1, ...``
         comm: communicator shared with the sampler
+        normal_toward: optional fixed point toward which the fitted unit normal points
 
     Raises:
         StudyFileError: if the sampled size is not three coordinates per vertex with at least
             three vertices, or the global indices do not cover every entry exactly once
     """
 
-    def __init__(self, sampler: SpatialSampler, comm: MPI.Comm = MPI.COMM_WORLD) -> None:
+    def __init__(
+        self,
+        sampler: SpatialSampler,
+        comm: MPI.Comm = MPI.COMM_WORLD,
+        *,
+        normal_toward: tuple[float, float, float] | None = None,
+    ) -> None:
         # Each vertex contributes x, y and z; fitting needs at least nine sampled entries.
         if sampler.size < 9 or sampler.size % 3:
             raise StudyFileError("plane model needs at least three 3D vertices (3N coordinates)")
         # Keep the sampler's global input size and the communicator used for all collectives.
         self._comm = comm
         self._size = sampler.size
+        self._normal_toward = normal_toward
+        self._normal: NDArray_f64 | None = None
 
         # Cache the global positions, which the sampler fixes at construction. This also
         # supports a partition that splits the coordinate components of a vertex.
@@ -107,6 +156,15 @@ class PlaneModel(MeasurementModel):
         error = comm.bcast(error, root=0)
         if error is not None:
             raise StudyFileError(error)
+
+    @property
+    def normal(self) -> NDArray_f64 | None:
+        """Copy of the last fitted unit normal, on rank 0; None before a fit or on peers.
+
+        This describes the latest prediction, which may be a sigma point, not the final
+        estimated state. A failed prediction clears it.
+        """
+        return None if self._normal is None else self._normal.copy()
 
     def layout(self, sampler: SpatialSampler) -> tuple[int, NDArray_i64]:
         """Return three coefficients, owned by rank 0 independently of the vertex count.
@@ -136,6 +194,7 @@ class PlaneModel(MeasurementModel):
         """
         # Gather the current coordinate components, including empty arrays from ranks that
         # own no sampled entries. The stored global indices restore the vertex order.
+        self._normal = None
         parts = self._comm.gather(y, root=0)
         # Other ranks keep an empty prediction because rank 0 owns all three coefficients.
         coefficients = np.empty(0, dtype=np.float64)
@@ -152,7 +211,11 @@ class PlaneModel(MeasurementModel):
                         )
                     vertices_coordinates[indices] = values
                 # Group each vertex's x, y and z, then fit one plane to all vertices.
-                coefficients = fit_plane(vertices_coordinates.reshape(-1, 3))
+                fit = fit_plane_geometry(
+                    vertices_coordinates.reshape(-1, 3), normal_toward=self._normal_toward
+                )
+                coefficients = fit.coefficients
+                self._normal = fit.normal
             except ValueError as err:
                 # Delay raising until the failure has been communicated to every rank.
                 error = str(err)

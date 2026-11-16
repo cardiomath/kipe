@@ -128,6 +128,6 @@ def build_model(
 
             if sampler is None:
                 raise StudyFileError("plane model needs a spatial sampler")
-            return PlaneModel(sampler, comm)
+            return PlaneModel(sampler, comm, normal_toward=options.normal_toward)
         case _:
             assert_never(options)

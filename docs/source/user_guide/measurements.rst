@@ -93,9 +93,7 @@ Fits a plane to sampled 3D vertices and predicts its three coefficients:
    z = a x + b y + c.
 
 The data at each time are ``[a, b, c]``: two dimensionless slopes and an intercept in the
-coordinates' length unit. The fit minimizes squared perpendicular distances to the plane.
-The innovation is measured minus predicted coefficients. For example, to fit the vertices
-shared by two tagged surfaces of the solver's mesh:
+coordinates' length unit. To fit the vertices shared by two tagged surfaces:
 
 .. code-block:: yaml
 
@@ -111,10 +109,21 @@ shared by two tagged surfaces of the solver's mesh:
           combine: intersection
         model: {type: plane}
 
-The sampler must return coordinates in the order ``x0, y0, z0, x1, y1, z1, ...``, with at
-least three noncollinear vertices. Degenerate selections and vertical or nearly vertical
-planes produce an error; this equation cannot represent those planes reliably. The model
-gathers distributed coordinates and returns the three coefficients on MPI rank 0.
+Select at least three noncollinear vertices. Vertical or nearly vertical planes are not
+supported.
+
+By default, normals have positive z component. To orient them toward a fixed reference
+point, add the optional ``normal_toward``:
+
+.. code-block:: yaml
+
+    model:
+      type: plane
+      normal_toward: [0.012, -0.008, -0.045]
+
+Replace the example point with coordinates in your mesh's coordinate system and units,
+off the fitted plane. Omit ``normal_toward`` when the point is unknown. Orientation does
+not change the measured coefficients ``[a, b, c]``.
 
 For measured vertices, use the same fitting utility before writing the data file:
 
@@ -128,10 +137,8 @@ For measured vertices, use the same fitting utility before writing the data file
     coefficients = np.vstack([fit_plane(vertices) for vertices in vertices_at_times])
     write_numpy("data/valve_plane.npz", times, coefficients)
 
-The file's ``values`` array has shape ``(n_times, 3)``. Measured vertices need not have the
-same count or ordering as the sampled vertices: both fits produce ``[a, b, c]``. Currently,
-``noise.stddev`` is one scalar shared by the three coefficients; separate standard deviations
-for slopes and intercept are not yet supported.
+The file's ``values`` array has shape ``(n_times, 3)``. ``noise.stddev`` is a single value
+shared by the three coefficients.
 
 Spatial sampling
 ----------------

@@ -15,7 +15,7 @@ from kipe.estimation import estimate
 from kipe.measurements.data import read_numpy
 from kipe.measurements.models import build_model
 from kipe.measurements.operator import build_observation_operator
-from kipe.measurements.plane import PlaneModel, fit_plane
+from kipe.measurements.plane import PlaneModel, fit_plane, fit_plane_geometry
 from kipe.options import (
     EstimationOptions,
     ForwardSolverOptions,
@@ -63,6 +63,73 @@ def test_fit_plane_orthogonal_distances_and_vertex_order():
     perturbed = np.vstack((vertices + 0.01 * normal, vertices - 0.01 * normal))
     np.testing.assert_allclose(fit_plane(perturbed), [0.2, -0.3, 1.1], atol=1e-14)
     np.testing.assert_allclose(fit_plane(perturbed[::-1]), fit_plane(perturbed), atol=1e-14)
+
+
+def test_normal_toward_opposite_sides_and_translated_mesh():
+    vertices = _vertices()
+    above = fit_plane_geometry(vertices, normal_toward=(0, 0, 5))
+    below = fit_plane_geometry(vertices[::-1], normal_toward=(0, 0, -5))
+    np.testing.assert_allclose(above.normal, -below.normal)
+    np.testing.assert_allclose(above.coefficients, below.coefficients)
+    assert above.normal @ (np.array([0, 0, 5]) - above.centroid) > 0
+    assert below.normal @ (np.array([0, 0, -5]) - below.centroid) > 0
+    assert np.linalg.norm(above.normal) == pytest.approx(1)
+    shift = np.array([10, -20, 30])
+    moved = fit_plane_geometry(
+        vertices + shift, normal_toward=tuple(shift + np.array([0, 0, -5]))
+    )
+    np.testing.assert_allclose(moved.normal, below.normal, atol=1e-14)
+
+
+@pytest.mark.parametrize("target", [None, (0, 0, -5)])
+def test_normals_consistent_across_times_and_evaluation_order(target):
+    """Orientation must not depend on point order or a previous sigma-point prediction."""
+    frames = [_vertices(a=0.1 + 0.02 * t, b=-0.2, c=1 + 0.1 * t) for t in range(5)]
+    expected = [fit_plane_geometry(points, normal_toward=target) for points in frames]
+    for i in [4, 1, 3, 0, 2, 0]:
+        actual = fit_plane_geometry(frames[i][::-1], normal_toward=target)
+        np.testing.assert_allclose(actual.normal, expected[i].normal, atol=1e-14)
+        assert actual.normal @ expected[0].normal > 0
+        assert (actual.normal[2] > 0) == (target is None)
+        np.testing.assert_allclose(actual.coefficients, fit_plane(frames[i]), atol=1e-14)
+
+
+@pytest.mark.parametrize("target", [(0, 0, 1.1), (0, 0), (0, 0, np.nan), (0, 0, np.inf)])
+def test_normal_toward_rejects_undefined_orientation(target):
+    with pytest.raises(ValueError, match="normal_toward"):
+        fit_plane_geometry(_vertices(), normal_toward=target)
+
+
+@pytest.mark.parametrize("target", [[1, 2], [1, 2, 3, 4], [1, 2, np.inf]])
+def test_normal_toward_configuration_validation(target):
+    with pytest.raises(ValidationError):
+        TypeAdapter(MeasurementModelOptions).validate_python({
+            "type": "plane",
+            "normal_toward": target,
+        })
+
+
+def test_oriented_model_distributed_and_collective_failure():
+    comm = MPI.COMM_WORLD
+    sampler = _VertexSampler(12, comm)
+    options = PlaneModelOptions(normal_toward=(0, 0, -5))
+    model = build_model(options, sampler, comm)
+    assert isinstance(model, PlaneModel)
+    assert model.normal is None
+    predicted = model.predict(sampler.sample({"vertices": _vertices().ravel()}))
+    expected = np.array([0.2, -0.3, 1.1])[model.layout(sampler)[1]]
+    np.testing.assert_allclose(predicted, expected, atol=1e-14)
+    if comm.rank == 0:
+        normal = model.normal
+        assert normal is not None and normal[2] < 0
+        normal[:] = 0
+        assert np.linalg.norm(model.normal) == pytest.approx(1)
+    else:
+        assert model.normal is None
+    # Moving the plane through the target must fail on every rank and clear the normal.
+    with pytest.raises(ValueError, match="orientation is undefined"):
+        model.predict(sampler.sample({"vertices": _vertices(c=-5).ravel()}))
+    assert model.normal is None
 
 
 @pytest.mark.parametrize(
@@ -190,6 +257,8 @@ class _AnalyticSolver:
 
 def test_plane_synthesis_estimation_and_sensitivity(tmp_path, monkeypatch):
     """The real operator reduces 12 coordinates to three data and estimates plane motion."""
+    # Synthesis writes on rank 0; every rank must read the same data and provenance.
+    tmp_path = MPI.COMM_WORLD.bcast(tmp_path if MPI.COMM_WORLD.rank == 0 else None, root=0)
     module = types.ModuleType("plane_solver")
     module.Solver = _AnalyticSolver
     monkeypatch.setitem(sys.modules, "plane_solver", module)
@@ -218,13 +287,16 @@ def test_plane_synthesis_estimation_and_sensitivity(tmp_path, monkeypatch):
     assert operator.sampler.size == 12
     assert operator.size == 3
     synthesize(study)
+    MPI.COMM_WORLD.barrier()
     times, values = read_numpy(tmp_path / "plane.npz")
     np.testing.assert_allclose(times, [0.5, 1.0])
     np.testing.assert_allclose(values, [[0.2, -0.3, 0.75], [0.2, -0.3, 1.5]], atol=1e-14)
     assert estimate(study)["height"] == pytest.approx(1.5, abs=1e-6)
     for i in range(sensitivity.run_count(study)):
         sensitivity.run(study, i)
+    MPI.COMM_WORLD.barrier()  # rank 0 must finish writing run metadata before assembly
     result = sensitivity.assemble(study)
     np.testing.assert_allclose(
         result.jacobians["plane"].ravel(), [0.0, 0.0, 0.5, 0.0, 0.0, 1.0], atol=1e-10
     )
+    MPI.COMM_WORLD.barrier()
