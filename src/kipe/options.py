@@ -248,8 +248,15 @@ class NoiseOptions:
     ``synthesis.noise`` can set another noise for synthesis to add, e.g., none.
     """
 
-    stddev: PositiveFloat
-    """Standard deviation of the noise, in the unit of the data."""
+    stddev: (
+        Annotated[float, Field(gt=0, allow_inf_nan=False)]
+        | Annotated[
+            list[Annotated[float, Field(gt=0, allow_inf_nan=False)]], Field(min_length=1)
+        ]
+    )
+    """Independent noise standard deviations: one scalar for all data entries, or a list
+    with one positive value per entry, in the data's global order and units.
+    """
 
     seed: Annotated[int, Field(ge=0)] | None = None
     """Seed of the noise added by ``synthesis`` (required there, unless it adds none, see
@@ -449,8 +456,13 @@ type TruthOptions = Annotated[
 class SynthesisNoiseOptions:
     """Noise that synthesis adds to the data of a measurement."""
 
-    stddev: Annotated[float, Field(ge=0)]
-    """Standard deviation of the noise, in the unit of the data; 0 for noise-free data."""
+    stddev: (
+        Annotated[float, Field(ge=0, allow_inf_nan=False)]
+        | Annotated[
+            list[Annotated[float, Field(ge=0, allow_inf_nan=False)]], Field(min_length=1)
+        ]
+    )
+    """Added independent noise: a scalar or one value per data entry; 0 means noise-free."""
 
 
 @dataclass(frozen=True, config=_CONFIG)

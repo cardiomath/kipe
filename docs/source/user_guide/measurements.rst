@@ -71,6 +71,15 @@ Noise
 -----
 
 ``noise.stddev`` is the standard deviation of measurement noise assumed during estimation.
+Use a positive scalar for all entries, or a list of positive values in the data's column
+order. The list must have one value per entry at each time. For a plane, the order is
+``[a, b, c]``:
+
+.. code-block:: yaml
+
+    noise: {stddev: [0.01, 0.01, 0.001], seed: 0}
+
+Noise is independent between entries. The same values weight estimation and sensitivity.
 See :doc:`synthetic_data` for how synthesis uses this value and can override it for generated
 data.
 
@@ -137,8 +146,8 @@ For measured vertices, use the same fitting utility before writing the data file
     coefficients = np.vstack([fit_plane(vertices) for vertices in vertices_at_times])
     write_numpy("data/valve_plane.npz", times, coefficients)
 
-The file's ``values`` array has shape ``(n_times, 3)``. ``noise.stddev`` is a single value
-shared by the three coefficients.
+The file's ``values`` array has shape ``(n_times, 3)``. Set ``noise.stddev`` to a scalar or
+three values in the order ``[a, b, c]``.
 
 Spatial sampling
 ----------------

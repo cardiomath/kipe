@@ -81,7 +81,7 @@ from ruamel.yaml import YAML
 from kipe._formatting import format_table
 from kipe._types import NDArray_f64
 from kipe.forward_solver import build_forward_solver
-from kipe.measurements.data import measurement_times, read_numpy, write_data
+from kipe.measurements.data import measurement_times, noise_stddev, read_numpy, write_data
 from kipe.measurements.operator import build_observation_operator
 from kipe.options import StudyFileError, StudyOptions
 from kipe.parameters import Parameterization, build_parameterization
@@ -413,7 +413,16 @@ def _sensitivity(
     assert study.measurements is not None
 
     # noise-weighted Jacobians, of all times of each measurement
-    J_tilde = {name: J / study.measurements[name].noise.stddev for name, J in jacobians.items()}
+    J_tilde = {}
+    for name, J in jacobians.items():
+        stddev = study.measurements[name].noise.stddev
+        if isinstance(stddev, list):
+            # Jacobian rows are time-major: repeat the per-entry noise at every time.
+            count = len(_times(name, study))
+            scale = noise_stddev(stddev, J.shape[0] // count)
+            J_tilde[name] = J / np.tile(scale, count)[:, None]
+        else:
+            J_tilde[name] = J / stddev
     fims = {name: J.T @ J for name, J in J_tilde.items()}
     fim = sum(fims.values(), start=np.zeros((len(parameterization.names),) * 2))
 

@@ -255,7 +255,8 @@ class _AnalyticSolver:
         return {"vertices": _vertices(c=height * t1).ravel()}
 
 
-def test_plane_synthesis_estimation_and_sensitivity(tmp_path, monkeypatch):
+@pytest.mark.parametrize("stddev", [1e-4, [1e-4, 2e-4, 3e-4]])
+def test_plane_synthesis_estimation_and_sensitivity(tmp_path, monkeypatch, stddev):
     """The real operator reduces 12 coordinates to three data and estimates plane motion."""
     # Synthesis writes on rank 0; every rank must read the same data and provenance.
     tmp_path = MPI.COMM_WORLD.bcast(tmp_path if MPI.COMM_WORLD.rank == 0 else None, root=0)
@@ -274,7 +275,7 @@ def test_plane_synthesis_estimation_and_sensitivity(tmp_path, monkeypatch):
                 fields=["vertices"],
                 times=[0.5, 1.0],
                 data=NumpyDataOptions(type="numpy", path=str(tmp_path / "plane.npz")),
-                noise=NoiseOptions(stddev=1e-4),
+                noise=NoiseOptions(stddev=stddev),
                 model=PlaneModelOptions(),
             )
         },
@@ -299,4 +300,6 @@ def test_plane_synthesis_estimation_and_sensitivity(tmp_path, monkeypatch):
     np.testing.assert_allclose(
         result.jacobians["plane"].ravel(), [0.0, 0.0, 0.5, 0.0, 0.0, 1.0], atol=1e-10
     )
+    shift_stddev = stddev[2] if isinstance(stddev, list) else stddev
+    np.testing.assert_allclose(result.fim, [[1.25 / shift_stddev**2]], rtol=1e-8)
     MPI.COMM_WORLD.barrier()

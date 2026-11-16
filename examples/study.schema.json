@@ -304,10 +304,22 @@
       "description": "Measurement noise: assumed by ``estimation``, added by ``synthesis``.\n\n``synthesis.noise`` can set another noise for synthesis to add, e.g., none.",
       "properties": {
         "stddev": {
-          "description": "Standard deviation of the noise, in the unit of the data.",
-          "exclusiveMinimum": 0,
-          "title": "Stddev",
-          "type": "number"
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "items": {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              "minItems": 1,
+              "type": "array"
+            }
+          ],
+          "description": "Independent noise standard deviations: one scalar for all data entries, or a list\nwith one positive value per entry, in the data's global order and units.",
+          "title": "Stddev"
         },
         "seed": {
           "anyOf": [
@@ -610,10 +622,22 @@
       "description": "Noise that synthesis adds to the data of a measurement.",
       "properties": {
         "stddev": {
-          "description": "Standard deviation of the noise, in the unit of the data; 0 for noise-free data.",
-          "minimum": 0,
-          "title": "Stddev",
-          "type": "number"
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "items": {
+                "minimum": 0,
+                "type": "number"
+              },
+              "minItems": 1,
+              "type": "array"
+            }
+          ],
+          "description": "Added independent noise: a scalar or one value per data entry; 0 means noise-free.",
+          "title": "Stddev"
         }
       },
       "required": [

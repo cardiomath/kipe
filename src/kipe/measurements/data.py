@@ -15,7 +15,7 @@ from mpi4py import MPI
 
 import numpy as np
 
-from kipe._types import NDArray_f64
+from kipe._types import NDArray_f64, NDArray_i64
 from kipe.measurements.operator import ObservationOperator
 from kipe.options import StudyFileError, TimeRange
 
@@ -40,8 +40,50 @@ class Measurement:
     """This rank's entries of the measured data at each of the n times, at the positions
     ``operator.global_indices``, shape ``(n, number of this rank's entries)``."""
 
-    stddev: float
-    """Standard deviation of the measurement noise, in the unit of the data."""
+    stddev: float | NDArray_f64
+    """Noise standard deviation: scalar or this rank's entries, in the unit of the data."""
+
+
+def noise_stddev(
+    stddev: float | list[float], size: int, indices: NDArray_i64 | None = None
+) -> float | NDArray_f64:
+    """Validate the global noise length and optionally select this rank's entries.
+
+    Scalars apply to all entries; lists must match the measurement model's output size.
+
+    Args:
+        stddev: scalar or per-entry standard deviations
+        size: global number of predicted entries
+        indices: optional positions owned by this rank
+
+    Returns:
+        the scalar or the selected standard deviations
+
+    Raises:
+        StudyFileError: if the list does not match the global size
+    """
+    if not isinstance(stddev, list):
+        return stddev
+    if len(stddev) != size:
+        raise StudyFileError(
+            f"noise.stddev has {len(stddev)} entries; expected {size} measurement entries"
+        )
+    values = np.asarray(stddev, dtype=np.float64)
+    return values if indices is None else values[indices]
+
+
+def format_noise(stddev: float | list[float] | NDArray_f64) -> str:
+    """Format scalar or component-wise noise for logs.
+
+    Args:
+        stddev: scalar or per-entry standard deviations
+
+    Returns:
+        a scalar or bracketed list
+    """
+    if np.ndim(stddev) == 0:
+        return f"{np.asarray(stddev).item():g}"
+    return "[" + ", ".join(f"{value:g}" for value in np.asarray(stddev)) + "]"
 
 
 def measurement_times(times: list[float] | TimeRange) -> NDArray_f64:
