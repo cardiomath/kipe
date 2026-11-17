@@ -67,88 +67,6 @@ order:
 
     write_numpy("data/u.npz", times, values)  # = numpy.savez(path, times=..., values=...)
 
-Noise
------
-
-``noise.stddev`` is the standard deviation of measurement noise assumed during estimation.
-Use a positive scalar for all entries, or a list of positive values in the data's column
-order. The list must have one value per entry at each time. For a plane, the order is
-``[a, b, c]``:
-
-.. code-block:: yaml
-
-    noise: {stddev: [0.01, 0.01, 0.001], seed: 0}
-
-Noise is independent between entries. The same values weight estimation and sensitivity.
-See :doc:`synthetic_data` for how synthesis uses this value and can override it for generated
-data.
-
-Measurement models
-------------------
-
-``difference``
-^^^^^^^^^^^^^^
-
-The default model uses the sampled values directly as predicted data. Its innovation is
-measured minus predicted values.
-
-``plane``
-^^^^^^^^^
-
-Fits a plane to sampled 3D vertices and predicts its three coefficients:
-
-.. math::
-
-   z = a x + b y + c.
-
-The data at each time are ``[a, b, c]``: two dimensionless slopes and an intercept in the
-coordinates' length unit. To fit the vertices shared by two tagged surfaces:
-
-.. code-block:: yaml
-
-    measurements:
-      valve_plane:
-        fields: [solid.displacement]
-        times: [0.1, 0.2, 0.3]
-        data: {type: numpy, path: data/valve_plane.npz}
-        noise: {stddev: 0.01, seed: 0}
-        spatial_sampling:
-          type: fenicsx.displaced_vertices
-          tags: [30, 10]
-          combine: intersection
-        model: {type: plane}
-
-Select at least three noncollinear vertices. Vertical or nearly vertical planes are not
-supported.
-
-By default, normals have positive z component. To orient them toward a fixed reference
-point, add the optional ``normal_toward``:
-
-.. code-block:: yaml
-
-    model:
-      type: plane
-      normal_toward: [0.012, -0.008, -0.045]
-
-Replace the example point with coordinates in your mesh's coordinate system and units,
-off the fitted plane. Omit ``normal_toward`` when the point is unknown. Orientation does
-not change the measured coefficients ``[a, b, c]``.
-
-For measured vertices, use the same fitting utility before writing the data file:
-
-.. code-block:: python
-
-    import numpy as np
-    from kipe.measurements.data import write_numpy
-    from kipe.measurements.plane import fit_plane
-
-    # vertices_at_times: one (n_vertices, 3) array of measured coordinates per time
-    coefficients = np.vstack([fit_plane(vertices) for vertices in vertices_at_times])
-    write_numpy("data/valve_plane.npz", times, coefficients)
-
-The file's ``values`` array has shape ``(n_times, 3)``. Set ``noise.stddev`` to a scalar or
-three values in the order ``[a, b, c]``.
-
 Spatial sampling
 ----------------
 
@@ -227,3 +145,85 @@ Coordinates are returned vertex by vertex as a flat array (``x0, y0, z0, x1, y1,
 
 Another sampler? :doc:`../extending/write_a_sampler` walks through ``fenicsx.points``, step by
 step.
+
+Measurement models
+------------------
+
+``difference``
+^^^^^^^^^^^^^^
+
+The default model uses the sampled values directly as predicted data. Its innovation is
+measured minus predicted values.
+
+``plane``
+^^^^^^^^^
+
+Fits a plane to sampled 3D vertices and predicts its three coefficients:
+
+.. math::
+
+   z = a x + b y + c.
+
+The data at each time are ``[a, b, c]``: two dimensionless slopes and an intercept in the
+coordinates' length unit. To fit the vertices shared by two tagged surfaces:
+
+.. code-block:: yaml
+
+    measurements:
+      valve_plane:
+        fields: [solid.displacement]
+        times: [0.1, 0.2, 0.3]
+        data: {type: numpy, path: data/valve_plane.npz}
+        noise: {stddev: 0.01, seed: 0}
+        spatial_sampling:
+          type: fenicsx.displaced_vertices
+          tags: [30, 10]
+          combine: intersection
+        model: {type: plane}
+
+Select at least three noncollinear vertices. Vertical or nearly vertical planes are not
+supported.
+
+By default, normals have positive z component. To orient them toward a fixed reference
+point, add the optional ``normal_toward``:
+
+.. code-block:: yaml
+
+    model:
+      type: plane
+      normal_toward: [0.012, -0.008, -0.045]
+
+Replace the example point with coordinates in your mesh's coordinate system and units,
+off the fitted plane. Omit ``normal_toward`` when the point is unknown. Orientation does
+not change the measured coefficients ``[a, b, c]``.
+
+For measured vertices, use the same fitting utility before writing the data file:
+
+.. code-block:: python
+
+    import numpy as np
+    from kipe.measurements.data import write_numpy
+    from kipe.measurements.plane import fit_plane
+
+    # vertices_at_times: one (n_vertices, 3) array of measured coordinates per time
+    coefficients = np.vstack([fit_plane(vertices) for vertices in vertices_at_times])
+    write_numpy("data/valve_plane.npz", times, coefficients)
+
+The file's ``values`` array has shape ``(n_times, 3)``. Set ``noise.stddev`` to a scalar or
+three values in the order ``[a, b, c]``.
+
+Noise
+-----
+
+``noise.stddev`` is the standard deviation of measurement noise assumed during estimation.
+Use a positive scalar for all entries, or a list of positive values in the data's column
+order. The list must have one value per entry at each time. For a plane, the order is
+``[a, b, c]``:
+
+.. code-block:: yaml
+
+    noise: {stddev: [0.01, 0.01, 0.001], seed: 0}
+
+Noise is independent between entries. The same values weight estimation and sensitivity.
+See :doc:`synthetic_data` for how synthesis uses this value and can override it for generated
+data.
