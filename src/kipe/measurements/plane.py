@@ -166,7 +166,7 @@ class PlaneModel(MeasurementModel):
         """
         return None if self._normal is None else self._normal.copy()
 
-    def layout(self, sampler: SpatialSampler) -> tuple[int, NDArray_i64]:
+    def layout(self, sampler: SpatialSampler | None = None) -> tuple[int, NDArray_i64]:
         """Return three coefficients, owned by rank 0 independently of the vertex count.
 
         Args:
