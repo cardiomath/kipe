@@ -48,24 +48,6 @@ The estimation steps through the times of all measurements in order; at each, it
 the measurements taken then, together. Times of different measurements that agree up to
 round-off are the same time.
 
-Data
-----
-
-Measurement data are ``.npz`` files with two arrays (:class:`~kipe.options.NumpyDataOptions`):
-
-- ``times``, shape ``(n,)``: the measurement times;
-- ``values``, shape ``(n, m)``: the m values of the measurement at each time.
-
-The measurement model defines the order of the m values; by default, it keeps the sampler's
-order (see below). This order does not depend on the number of MPI ranks: data written on one
-rank can be read on eight. To use data from elsewhere, e.g., from an image, write them in this
-order:
-
-.. code-block:: python
-
-    from kipe.measurements.data import write_numpy
-
-    write_numpy("data/u.npz", times, values)  # = numpy.savez(path, times=..., values=...)
 
 Spatial sampling
 ----------------
@@ -227,3 +209,22 @@ order. The list must have one value per entry at each time. For a plane, the ord
 Noise is independent between entries. The same values weight estimation and sensitivity.
 See :doc:`synthetic_data` for how synthesis uses this value and can override it for generated
 data.
+
+Data
+----
+
+Measurement data are ``.npz`` files with two arrays (:class:`~kipe.options.NumpyDataOptions`):
+
+- ``times``, shape ``(n,)``: the measurement times;
+- ``values``, shape ``(n, m)``: the m values of the measurement at each time.
+
+The measurement model defines the order of the m values; by default, it keeps the sampler's
+order (see below). This order does not depend on the number of MPI ranks: data written on one
+rank can be read on eight. To use data from elsewhere, e.g., from an image, write them in this
+order:
+
+.. code-block:: python
+
+    from kipe.measurements.data import write_numpy
+
+    write_numpy("data/u.npz", times, values)  # = numpy.savez(path, times=..., values=...)
