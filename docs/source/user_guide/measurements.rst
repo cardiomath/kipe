@@ -166,8 +166,7 @@ coordinates' length unit. To fit the vertices shared by two tagged surfaces:
 Select at least three noncollinear vertices. Vertical or nearly vertical planes are not
 supported.
 
-By default, normals have positive z component. To orient them toward a fixed reference
-point, add the optional ``normal_toward``:
+To specify a reference point for normal orientation, add the optional ``normal_toward``:
 
 .. code-block:: yaml
 
@@ -175,9 +174,8 @@ point, add the optional ``normal_toward``:
       type: plane
       normal_toward: [0.012, -0.008, -0.045]
 
-Replace the example point with coordinates in your mesh's coordinate system and units,
-off the fitted plane. Omit ``normal_toward`` when the point is unknown. Orientation does
-not change the measured coefficients ``[a, b, c]``.
+Use coordinates in your mesh's coordinate system and units. Omit ``normal_toward`` when
+no reference point is available.
 
 For measured vertices, use the same fitting utility before writing the data file:
 

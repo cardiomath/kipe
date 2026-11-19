@@ -228,11 +228,11 @@ class PlaneModelOptions:
         ]
         | None
     ) = None
-    """Optional fixed reference point toward which the fitted normal is oriented.
+    """Optional reference point toward which the first fitted normal is oriented.
 
     Coordinates use the mesh's coordinate system and units. The point must lie off the
-    fitted plane. This affects the exposed normal, not the predicted ``[a, b, c]``.
-    Without a point, the normal is consistently oriented with positive z component.
+    first plane. Later normals align with the first normal, whether or not a point was
+    provided. This affects the exposed normal, not the predicted ``[a, b, c]``.
     """
 
 

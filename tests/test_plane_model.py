@@ -15,7 +15,7 @@ from kipe.estimation import estimate
 from kipe.measurements.data import read_numpy
 from kipe.measurements.models import build_model
 from kipe.measurements.operator import build_observation_operator
-from kipe.measurements.plane import PlaneModel, fit_plane, fit_plane_geometry
+from kipe.measurements.plane import PlaneModel, fit_plane, fit_plane_geometry, orient_normal
 from kipe.options import (
     EstimationOptions,
     ForwardSolverOptions,
@@ -83,15 +83,53 @@ def test_normal_toward_opposite_sides_and_translated_mesh():
 
 @pytest.mark.parametrize("target", [None, (0, 0, -5)])
 def test_normals_consistent_across_times_and_evaluation_order(target):
-    """Orientation must not depend on point order or a previous sigma-point prediction."""
+    """With a fixed first normal, later signs do not depend on evaluation order."""
     frames = [_vertices(a=0.1 + 0.02 * t, b=-0.2, c=1 + 0.1 * t) for t in range(5)]
-    expected = [fit_plane_geometry(points, normal_toward=target) for points in frames]
+    first = fit_plane_geometry(frames[0], normal_toward=target).normal
+    expected = [fit_plane_geometry(points, reference_normal=first) for points in frames]
     for i in [4, 1, 3, 0, 2, 0]:
-        actual = fit_plane_geometry(frames[i][::-1], normal_toward=target)
+        actual = fit_plane_geometry(
+            frames[i][::-1], normal_toward=target, reference_normal=first
+        )
         np.testing.assert_allclose(actual.normal, expected[i].normal, atol=1e-14)
         assert actual.normal @ expected[0].normal > 0
-        assert (actual.normal[2] > 0) == (target is None)
         np.testing.assert_allclose(actual.coefficients, fit_plane(frames[i]), atol=1e-14)
+
+
+def test_orientation_helper_uses_first_normal_not_previous_or_target():
+    """The first normal's hemisphere wins even after the point crosses a later plane."""
+    first = np.array([0.0, 0.0, -1.0])
+    np.testing.assert_array_equal(orient_normal(first, np.zeros(3)), first)
+    point = (0.0, 0.0, -5.0)
+    np.testing.assert_array_equal(orient_normal(-first, np.zeros(3), normal_toward=point), first)
+    # The target is above this later plane, but the original normal remains the reference.
+    np.testing.assert_array_equal(
+        orient_normal(-first, np.array([0, 0, -6]), normal_toward=point, reference_normal=first),
+        first,
+    )
+    left = np.array([-1.0, 0.0, -0.1])
+    right = np.array([1.0, 0.0, -0.1])
+    left /= np.linalg.norm(left)
+    right /= np.linalg.norm(right)
+    for normal in [left, right, -left, -right]:
+        result = orient_normal(normal, np.zeros(3), reference_normal=first)
+        assert np.dot(result, first) > 0
+    assert np.dot(left, right) < 0  # aligning to the previous normal would give another sign
+
+
+@pytest.mark.parametrize("reference", [np.zeros(3), np.array([np.nan, 0, 1]), np.ones(2)])
+def test_orientation_helper_rejects_invalid_reference(reference):
+    """A reference must be finite, three-dimensional and nonzero."""
+    with pytest.raises(ValueError, match="reference_normal"):
+        orient_normal(np.array([0.0, 0.0, 1.0]), np.zeros(3), reference_normal=reference)
+
+
+def test_orientation_helper_rejects_perpendicular_reference():
+    """Perpendicular normals do not determine a consistent side."""
+    with pytest.raises(ValueError, match="perpendicular"):
+        orient_normal(
+            np.array([0.0, 0.0, 1.0]), np.zeros(3), reference_normal=np.array([1.0, 0, 0])
+        )
 
 
 @pytest.mark.parametrize("target", [(0, 0, 1.1), (0, 0), (0, 0, np.nan), (0, 0, np.inf)])
@@ -109,10 +147,12 @@ def test_normal_toward_configuration_validation(target):
         })
 
 
-def test_oriented_model_distributed_and_collective_failure():
+@pytest.mark.parametrize("target", [None, (0, 0, -5)])
+def test_oriented_model_distributed_and_collective_failure(target):
+    """A model retains its first reference across predictions and recoverable fit errors."""
     comm = MPI.COMM_WORLD
     sampler = _VertexSampler(12, comm)
-    options = PlaneModelOptions(normal_toward=(0, 0, -5))
+    options = PlaneModelOptions(normal_toward=target)
     model = build_model(options, sampler, comm)
     assert isinstance(model, PlaneModel)
     assert model.normal is None
@@ -121,15 +161,25 @@ def test_oriented_model_distributed_and_collective_failure():
     np.testing.assert_allclose(predicted, expected, atol=1e-14)
     if comm.rank == 0:
         normal = model.normal
-        assert normal is not None and normal[2] < 0
-        normal[:] = 0
+        assert normal is not None
+        if target is not None:
+            assert normal[2] < 0
+        first = normal.copy()
+        normal[:] = 0  # callers cannot mutate the stored reference through this property
         assert np.linalg.norm(model.normal) == pytest.approx(1)
     else:
         assert model.normal is None
-    # Moving the plane through the target must fail on every rank and clear the normal.
-    with pytest.raises(ValueError, match="orientation is undefined"):
-        model.predict(sampler.sample({"vertices": _vertices(c=-5).ravel()}))
+    # Later planes can pass through the target: only the first fit uses it.
+    model.predict(sampler.sample({"vertices": _vertices(c=-5).ravel()}))
+    if comm.rank == 0:
+        np.testing.assert_allclose(model.normal, first)
+    invalid = np.full(12, np.nan)
+    with pytest.raises(ValueError, match="finite"):
+        model.predict(sampler.sample({"vertices": invalid}))
     assert model.normal is None
+    model.predict(sampler.sample({"vertices": _vertices(c=-6).ravel()}))
+    if comm.rank == 0:
+        np.testing.assert_allclose(model.normal, first)
 
 
 @pytest.mark.parametrize(

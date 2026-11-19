@@ -25,25 +25,84 @@ class PlaneFit:
     centroid: NDArray_f64
 
 
+def orient_normal(
+    normal: NDArray_f64,
+    centroid: NDArray_f64,
+    *,
+    normal_toward: tuple[float, float, float] | None = None,
+    reference_normal: NDArray_f64 | None = None,
+) -> NDArray_f64:
+    """Orient the first normal toward a point, or a later normal toward the first.
+
+    Args:
+        normal: fitted unit normal
+        centroid: fitted plane's centroid
+        normal_toward: optional point choosing the first normal's side
+        reference_normal: first oriented normal; takes precedence over the point
+
+    Returns:
+        a copy of the normal, with its sign selected. With neither reference nor point,
+        the first normal keeps its fitted sign.
+
+    Raises:
+        ValueError: if the reference is invalid or does not determine an orientation
+    """
+    oriented = np.asarray(normal, dtype=np.float64).copy()
+    if reference_normal is not None:
+        reference = np.asarray(reference_normal, dtype=np.float64)
+        if reference.shape != (3,) or not np.all(np.isfinite(reference)):
+            raise ValueError("reference_normal must contain three finite coordinates")
+        length = np.linalg.norm(reference)
+        if length == 0:
+            raise ValueError("reference_normal must be nonzero")
+        # Every subsequent fit uses the first normal, never the preceding one.
+        alignment = float(np.dot(oriented, reference / length))
+        if abs(alignment) <= 32 * np.finfo(float).eps:
+            raise ValueError("reference_normal is perpendicular; orientation is undefined")
+    elif normal_toward is not None:
+        target = np.asarray(normal_toward, dtype=np.float64)
+        if target.shape != (3,) or not np.all(np.isfinite(target)):
+            raise ValueError("normal_toward must contain three finite coordinates")
+        # Only the first fit uses the point to choose a side of its plane.
+        direction = target - centroid
+        alignment = float(np.dot(oriented, direction))
+        tolerance = (
+            32
+            * np.finfo(float).eps
+            * max(np.linalg.norm(target), np.linalg.norm(centroid), np.linalg.norm(direction))
+        )
+        if abs(alignment) <= tolerance:
+            raise ValueError("normal_toward lies on the fitted plane; orientation is undefined")
+    else:
+        return oriented
+    if alignment < 0:
+        oriented = -oriented
+    return oriented
+
+
 def fit_plane(vertices: NDArray_f64) -> NDArray_f64:
     """Return ``[a, b, c]``; see :func:`fit_plane_geometry` for an oriented normal."""
     return fit_plane_geometry(vertices).coefficients
 
 
 def fit_plane_geometry(
-    vertices: NDArray_f64, *, normal_toward: tuple[float, float, float] | None = None
+    vertices: NDArray_f64,
+    *,
+    normal_toward: tuple[float, float, float] | None = None,
+    reference_normal: NDArray_f64 | None = None,
 ) -> PlaneFit:
     """Fit ``z = a*x + b*y + c`` by minimizing squared perpendicular distances.
 
     Args:
         vertices: finite 3D coordinates, shape ``(n_vertices, 3)``; at least three
             noncollinear vertices
-        normal_toward: optional fixed point on the desired side of the plane, in the same
+        normal_toward: optional point on the desired side of the first plane, in the same
             coordinates and units as the vertices; must not lie on the fitted plane
+        reference_normal: first oriented normal; aligns later fits and overrides the point
 
     Returns:
-        coefficients ``[a, b, c]``, centroid and unit normal. With no target, the normal has
-        positive z component, independent of time, vertex order or evaluation history.
+        coefficients ``[a, b, c]``, centroid and unit normal. Without a reference or point,
+        the normal retains the SVD sign. Pass the first fit's normal to align later fits.
 
     Raises:
         ValueError: if the coordinates are invalid, do not determine a unique plane, or the
@@ -81,27 +140,11 @@ def fit_plane_geometry(
         raise ValueError(
             "vertical or nearly vertical plane cannot be written as z = a*x + b*y + c"
         )
-    if normal_toward is not None:
-        target = np.asarray(normal_toward, dtype=np.float64)
-        if target.shape != (3,) or not np.all(np.isfinite(target)):
-            raise ValueError("normal_toward must contain three finite coordinates")
-        direction = target - centroid
-        distance = float(normal @ direction)
-        orientation_tolerance = (
-            32
-            * np.finfo(float).eps
-            * max(np.linalg.norm(target), np.linalg.norm(centroid), singular_values[0])
-        )
-        if abs(distance) <= orientation_tolerance:
-            raise ValueError("normal_toward lies on the fitted plane; orientation is undefined")
-        if distance < 0:
-            normal = -normal
-    elif normal[2] < 0:
-        # Use a fixed hemisphere, not the previous prediction: sigma points and restarts
-        # can evaluate the same times in different orders. Vertical planes are rejected.
-        normal = -normal
+    normal = orient_normal(
+        normal, centroid, normal_toward=normal_toward, reference_normal=reference_normal
+    )
     # Convert n . (X - centroid) = 0 to [a, b, c]. These ratios are unchanged if SVD flips
-    # the normal, so no previous normal or temporal orientation history is needed.
+    # the normal, so selecting its orientation does not change the coefficients.
     coefficients = np.array([-normal[0], -normal[1], normal @ centroid]) / normal[2]
     return PlaneFit(coefficients, normal, centroid)
 
@@ -116,7 +159,8 @@ class PlaneModel(MeasurementModel):
     Args:
         sampler: sampler of flattened coordinates ``x0, y0, z0, x1, y1, z1, ...``
         comm: communicator shared with the sampler
-        normal_toward: optional fixed point toward which the fitted unit normal points
+        normal_toward: optional point toward which the first fitted unit normal points;
+            later predictions align with that first normal
 
     Raises:
         StudyFileError: if the sampled size is not three coordinates per vertex with at least
@@ -138,6 +182,7 @@ class PlaneModel(MeasurementModel):
         self._size = sampler.size
         self._normal_toward = normal_toward
         self._normal: NDArray_f64 | None = None
+        self._reference_normal: NDArray_f64 | None = None
 
         # Cache the global positions, which the sampler fixes at construction. This also
         # supports a partition that splits the coordinate components of a vertex.
@@ -212,10 +257,14 @@ class PlaneModel(MeasurementModel):
                     vertices_coordinates[indices] = values
                 # Group each vertex's x, y and z, then fit one plane to all vertices.
                 fit = fit_plane_geometry(
-                    vertices_coordinates.reshape(-1, 3), normal_toward=self._normal_toward
+                    vertices_coordinates.reshape(-1, 3),
+                    normal_toward=self._normal_toward,
+                    reference_normal=self._reference_normal,
                 )
                 coefficients = fit.coefficients
                 self._normal = fit.normal
+                if self._reference_normal is None:
+                    self._reference_normal = fit.normal.copy()
             except ValueError as err:
                 # Delay raising until the failure has been communicated to every rank.
                 error = str(err)

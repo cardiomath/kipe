@@ -509,7 +509,7 @@
             }
           ],
           "default": null,
-          "description": "Optional fixed reference point toward which the fitted normal is oriented.\n\nCoordinates use the mesh's coordinate system and units. The point must lie off the\nfitted plane. This affects the exposed normal, not the predicted ``[a, b, c]``.\nWithout a point, the normal is consistently oriented with positive z component.",
+          "description": "Optional reference point toward which the first fitted normal is oriented.\n\nCoordinates use the mesh's coordinate system and units. The point must lie off the\nfirst plane. Later normals align with the first normal, whether or not a point was\nprovided. This affects the exposed normal, not the predicted ``[a, b, c]``.",
           "title": "Normal Toward"
         }
       },
