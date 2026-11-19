@@ -22,7 +22,7 @@ from kipe.sampling import SpatialSampler
 
 
 @dataclass(frozen=True)
-class PlaneFit:
+class Plane:
     """Geometry of an orthogonal least-squares plane fit.
 
     All arrays have shape ``(3,)`` and use the input coordinate system. Changing the normal's
@@ -124,7 +124,7 @@ def fit_plane_geometry(
     *,
     normal_toward: tuple[float, float, float] | None = None,
     reference_normal: NDArray_f64 | None = None,
-) -> PlaneFit:
+) -> Plane:
     """Fit ``z = a*x + b*y + c`` by minimizing squared perpendicular distances.
 
     Center the vertices at their centroid and use the least varying SVD direction as the
@@ -187,7 +187,7 @@ def fit_plane_geometry(
     # Convert n . (X - centroid) = 0 to [a, b, c]. These ratios are unchanged if SVD flips
     # the normal, so selecting its orientation does not change the coefficients.
     coefficients = np.array([-normal[0], -normal[1], np.dot(normal, centroid)]) / normal[2]
-    return PlaneFit(coefficients, normal, centroid)
+    return Plane(coefficients, normal, centroid)
 
 
 class PlaneModel(MeasurementModel):
