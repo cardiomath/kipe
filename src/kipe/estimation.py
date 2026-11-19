@@ -49,8 +49,8 @@ from kipe.measurements.data import (
     format_noise,
     measurement_schedule,
     measurement_times,
-    noise_stddev,
     read_data,
+    select_noise_stddev,
     time_tolerance,
 )
 from kipe.measurements.operator import build_observation_operator
@@ -526,7 +526,9 @@ def _build_measurements(
                 operator,
                 times,
                 values,
-                noise_stddev(options.noise.stddev, operator.size, operator.global_indices),
+                select_noise_stddev(
+                    options.noise.stddev, operator.size, operator.global_indices
+                ),
             )
         )
 

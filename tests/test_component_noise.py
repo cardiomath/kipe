@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 from pydantic import ValidationError
 
-from kipe.measurements.data import noise_stddev
+from kipe.measurements.data import select_noise_stddev
 from kipe.options import NoiseOptions, StudyFileError, SynthesisNoiseOptions
 from kipe.synthesis import _add_noise
 
@@ -26,7 +26,9 @@ def test_component_noise_global_order_and_realizations():
             for k in range(2)
         ])
         np.testing.assert_array_equal(noisy, expected)
-    np.testing.assert_array_equal(noise_stddev(stddev, 3, indices), np.array(stddev)[indices])
+    np.testing.assert_array_equal(
+        select_noise_stddev(stddev, 3, indices), np.array(stddev)[indices]
+    )
     zero = _add_noise(values, operator, [0, 0, 0], None, 0)
     np.testing.assert_array_equal(zero, values)
     with pytest.raises(StudyFileError, match="expected 3"):
@@ -45,4 +47,4 @@ def test_zero_only_allowed_for_synthesis():
     with pytest.raises(ValidationError):
         NoiseOptions(stddev=[0, 0.1, 0])
     with pytest.raises(StudyFileError, match="expected 3"):
-        noise_stddev([0.1, 0.2], 3)
+        select_noise_stddev([0.1, 0.2], 3)

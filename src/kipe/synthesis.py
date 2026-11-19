@@ -45,8 +45,8 @@ from kipe.measurements.data import (
     format_noise,
     measurement_schedule,
     measurement_times,
-    noise_stddev,
     read_data,
+    select_noise_stddev,
     time_tolerance,
     write_data,
 )
@@ -94,8 +94,8 @@ def synthesize(study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD) -> list[lis
     # Validate both assumed and generated noise before reading checkpoints or running a solver.
     noise = _noise(study)
     for name, options in study.measurements.items():
-        noise_stddev(options.noise.stddev, operators[name].size)
-        noise_stddev(noise[name][0], operators[name].size)
+        select_noise_stddev(options.noise.stddev, operators[name].size)
+        select_noise_stddev(noise[name][0], operators[name].size)
 
     output = Path(study.output.path) / "synthesis"
     with recorded_run(output, study, _run_info(study), comm):
@@ -327,7 +327,7 @@ def _realization(
             operators[name],
             times[name],
             _add_noise(true_data[name], operators[name], *noise[name], realization),
-            noise_stddev(
+            select_noise_stddev(
                 options.noise.stddev, operators[name].size, operators[name].global_indices
             ),
         )
@@ -452,7 +452,7 @@ def _add_noise(
     Returns:
         the data, at the positions ``operator.global_indices``
     """
-    scale = noise_stddev(stddev, operator.size)
+    scale = select_noise_stddev(stddev, operator.size)
     if seed is None:
         return values.copy()
 

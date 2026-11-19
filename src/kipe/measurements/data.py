@@ -44,7 +44,7 @@ class Measurement:
     """Noise standard deviation: scalar or this rank's entries, in the unit of the data."""
 
 
-def noise_stddev(
+def select_noise_stddev(
     stddev: float | list[float], size: int, indices: NDArray_i64 | None = None
 ) -> float | NDArray_f64:
     """Validate the global noise length and optionally select this rank's entries.
