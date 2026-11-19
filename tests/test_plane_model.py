@@ -15,7 +15,7 @@ from kipe.estimation import estimate
 from kipe.measurements.data import read_numpy
 from kipe.measurements.models import build_model
 from kipe.measurements.operator import build_observation_operator
-from kipe.measurements.plane import PlaneModel, fit_plane, fit_plane_geometry, orient_normal
+from kipe.measurements.plane import PlaneModel, fit_from_coordinates, fit_plane, orient_normal
 from kipe.options import (
     EstimationOptions,
     ForwardSolverOptions,
@@ -83,15 +83,15 @@ def test_normal_toward_opposite_sides_and_translated_mesh():
     orientation must also be independent of vertex ordering.
     """
     vertices = _vertices()
-    above = fit_plane_geometry(vertices, normal_toward=(0, 0, 5))
-    below = fit_plane_geometry(vertices[::-1], normal_toward=(0, 0, -5))
+    above = fit_from_coordinates(vertices, normal_toward=(0, 0, 5))
+    below = fit_from_coordinates(vertices[::-1], normal_toward=(0, 0, -5))
     np.testing.assert_allclose(above.normal, -below.normal)
     np.testing.assert_allclose(above.coefficients, below.coefficients)
     assert np.dot(above.normal, np.array([0, 0, 5]) - above.centroid) > 0
     assert np.dot(below.normal, np.array([0, 0, -5]) - below.centroid) > 0
     assert np.linalg.norm(above.normal) == pytest.approx(1)
     shift = np.array([10, -20, 30])
-    moved = fit_plane_geometry(
+    moved = fit_from_coordinates(
         vertices + shift, normal_toward=tuple(shift + np.array([0, 0, -5]))
     )
     np.testing.assert_allclose(moved.normal, below.normal, atol=1e-14)
@@ -105,10 +105,10 @@ def test_normals_consistent_across_times_and_evaluation_order(target):
     arrays must produce the same normals and leave the coefficients unchanged.
     """
     frames = [_vertices(a=0.1 + 0.02 * t, b=-0.2, c=1 + 0.1 * t) for t in range(5)]
-    first = fit_plane_geometry(frames[0], normal_toward=target).normal
-    expected = [fit_plane_geometry(points, reference_normal=first) for points in frames]
+    first = fit_from_coordinates(frames[0], normal_toward=target).normal
+    expected = [fit_from_coordinates(points, reference_normal=first) for points in frames]
     for i in [4, 1, 3, 0, 2, 0]:
-        actual = fit_plane_geometry(
+        actual = fit_from_coordinates(
             frames[i][::-1], normal_toward=target, reference_normal=first
         )
         np.testing.assert_allclose(actual.normal, expected[i].normal, atol=1e-14)
@@ -161,7 +161,7 @@ def test_orientation_helper_rejects_perpendicular_reference():
 def test_normal_toward_rejects_undefined_orientation(target):
     """Reject a target on the first plane, a malformed target, and nonfinite coordinates."""
     with pytest.raises(ValueError, match="normal_toward"):
-        fit_plane_geometry(_vertices(), normal_toward=target)
+        fit_from_coordinates(_vertices(), normal_toward=target)
 
 
 @pytest.mark.parametrize("target", [[1, 2], [1, 2, 3, 4], [1, 2, np.inf]])

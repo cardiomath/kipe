@@ -1,6 +1,6 @@
 """Fit sampled 3D coordinates to ``z = a*x + b*y + c`` for the ``plane`` measurement model.
 
-:func:`fit_plane_geometry` performs an orthogonal least-squares fit using SVD;
+:func:`fit_from_coordinates` performs an orthogonal least-squares fit using SVD;
 :func:`orient_normal` selects the sign of its unit normal. :func:`fit_plane` returns only
 the coefficients and can also prepare measurement data from externally measured points.
 These utilities use NumPy arrays and do not require a finite element backend.
@@ -114,12 +114,12 @@ def fit_plane(vertices: NDArray_f64) -> NDArray_f64:
 
     Raises:
         ValueError: if the vertices do not define a unique supported plane; see
-            :func:`fit_plane_geometry` for the geometric restrictions
+            :func:`fit_from_coordinates` for the geometric restrictions
     """
-    return fit_plane_geometry(vertices).coefficients
+    return fit_from_coordinates(vertices).coefficients
 
 
-def fit_plane_geometry(
+def fit_from_coordinates(
     vertices: NDArray_f64,
     *,
     normal_toward: tuple[float, float, float] | None = None,
@@ -292,7 +292,7 @@ class PlaneModel(MeasurementModel):
 
         Raises:
             ValueError: on every rank if sampled entries do not match the cached layout,
-                the vertices cannot be fitted by :func:`fit_plane_geometry`, or orientation
+                the vertices cannot be fitted by :func:`fit_from_coordinates`, or orientation
                 relative to the first normal is ambiguous
         """
         # Gather the current coordinate components, including empty arrays from ranks that
@@ -314,7 +314,7 @@ class PlaneModel(MeasurementModel):
                         )
                     vertices_coordinates[indices] = values
                 # Group each vertex's x, y and z, then fit one plane to all vertices.
-                fit = fit_plane_geometry(
+                fit = fit_from_coordinates(
                     vertices_coordinates.reshape(-1, 3),
                     normal_toward=self._normal_toward,
                     reference_normal=self._reference_normal,
