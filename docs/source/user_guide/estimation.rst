@@ -32,6 +32,32 @@ turn and writes its results to a separate directory. To run a single realization
 task in a cluster job array — use ``kipe estimation study.yaml --realization R``
 (:option:`kipe estimation --realization`, :doc:`parallel`).
 
+Anderson acceleration
+---------------------
+
+To accelerate the outer iterations, add ``anderson`` to ``estimation``:
+
+.. code-block:: yaml
+
+    estimation:
+      iterations: 10
+      anderson:
+        memory: 3
+        regularization: 0.01
+
+``memory`` is the number of previous differences used (default 3). ``regularization``
+stabilizes the extrapolation (default 0.01; use 0 to disable it). Omit ``anderson`` or set
+it to ``null`` for ordinary ROUKF iterations.
+
+Each outer iteration still performs one complete ROUKF pass. Anderson selects the next
+pass's starting parameters; the reported estimate and covariance remain those of the
+completed filter pass. No additional forward evaluations or line search are used.
+Acceleration can reduce the required number of passes, but is not guaranteed to improve
+convergence on every nonlinear problem.
+
+With ``--resume``, keep the same Anderson settings. Completed iterations reconstruct the
+mixing history, so resuming gives the same sequence as an uninterrupted run.
+
 Results
 -------
 

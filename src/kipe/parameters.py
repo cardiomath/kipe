@@ -214,6 +214,32 @@ class Parameterization:
             for parameter, value in zip(self.parameters, theta, strict=True)
         }
 
+    def to_theta(self, values: Mapping[str, float]) -> NDArray_f64:
+        """Map physical values to this parameterization's fixed coordinates.
+
+        Args:
+            values: physical values by parameter name
+
+        Returns:
+            reparameterized values in parameter order
+
+        Raises:
+            ValueError: if a log parameter changes sign or is zero
+        """
+        result = []
+        for parameter in self.parameters:
+            value = values[parameter.name]
+            match parameter.reparameterization:
+                case "log":
+                    result.append(math.log(value / parameter.anchor))
+                case "multiplicative":
+                    result.append(value / parameter.anchor)
+                case "additive":
+                    result.append(value - parameter.anchor)
+                case _:
+                    assert_never(parameter.reparameterization)
+        return np.asarray(result, dtype=np.float64)
+
     def with_anchor(self, values: Mapping[str, float]) -> Self:
         r"""Return the parameterization with other anchors.
 

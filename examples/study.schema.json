@@ -2,6 +2,28 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "kipe study file",
   "$defs": {
+    "AndersonOptions": {
+      "additionalProperties": false,
+      "description": "Anderson acceleration between complete passes of the ROUKF, without line search.",
+      "properties": {
+        "memory": {
+          "default": 3,
+          "description": "Maximum number of previous differences used for the extrapolation.",
+          "exclusiveMinimum": 0,
+          "title": "Memory",
+          "type": "integer"
+        },
+        "regularization": {
+          "default": 0.01,
+          "description": "Relative regularization of residual differences; 0 disables regularization.",
+          "minimum": 0,
+          "title": "Regularization",
+          "type": "number"
+        }
+      },
+      "title": "AndersonOptions",
+      "type": "object"
+    },
     "ArraySamplingOptions": {
       "additionalProperties": false,
       "description": "Sample all entries of the observed fields, concatenated in the order of ``fields``.",
@@ -130,6 +152,18 @@
           "minimum": 1,
           "title": "Iterations",
           "type": "integer"
+        },
+        "anderson": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AndersonOptions"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional acceleration of outer iterations, e.g., ``{memory: 3}``; omitted or null\nkeeps plain ROUKF iterations. Uses fixed parameter coordinates scaled by the initial\nprior deviations, with logarithmic coordinates for ``log`` parameters."
         }
       },
       "title": "EstimationOptions",

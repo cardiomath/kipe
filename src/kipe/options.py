@@ -450,6 +450,17 @@ type SigmaPoints = Literal["simplex", "canonical", "unique"]
 
 
 @dataclass(frozen=True, config=_CONFIG)
+class AndersonOptions:
+    """Anderson acceleration between complete passes of the ROUKF, without line search."""
+
+    memory: PositiveInt = 3
+    """Maximum number of previous differences used for the extrapolation."""
+
+    regularization: Annotated[float, Field(ge=0, allow_inf_nan=False)] = 0.01
+    """Relative regularization of residual differences; 0 disables regularization."""
+
+
+@dataclass(frozen=True, config=_CONFIG)
 class EstimationOptions:
     """Parameter estimation with the reduced-order unscented Kalman filter (ROUKF)."""
 
@@ -466,6 +477,12 @@ class EstimationOptions:
     iterations: Annotated[int, Field(ge=1)] = 1
     """Number of passes over the measurements. Each pass after the first starts from the
     previous estimate, with the initial uncertainty."""
+
+    anderson: AndersonOptions | None = None
+    """Optional acceleration of outer iterations, e.g., ``{memory: 3}``; omitted or null
+    keeps plain ROUKF iterations. Uses fixed parameter coordinates scaled by the initial
+    prior deviations, with logarithmic coordinates for ``log`` parameters.
+    """
 
 
 @dataclass(frozen=True, config=_CONFIG)

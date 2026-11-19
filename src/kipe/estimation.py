@@ -28,6 +28,7 @@ from mpi4py import MPI
 import numpy as np
 
 from kipe import roukf
+from kipe._anderson import Anderson
 from kipe._formatting import format_table
 from kipe._history import (
     History,
@@ -101,6 +102,7 @@ class Estimation:
         self._measurements = measurements
         self._iterations = options.iterations
         self._sigma_points = options.sigma_points
+        self._anderson = options.anderson
         self._output = output
         self._comm = comm
 
@@ -135,9 +137,9 @@ class Estimation:
 
         # the estimate after the completed iterations, anchored as they were
         parameterization = self._parameterization
+        acceleration = None if self._anderson is None else Anderson(self._anderson)
         for theta in final_thetas(self._history.steps):
-            estimate = parameterization.to_physical(theta)
-            parameterization = parameterization.with_anchor(estimate)
+            parameterization = self._next_iteration(parameterization, theta, acceleration)
         if self._completed_iterations:
             logger.info(
                 "resumed after iteration %d/%d", self._completed_iterations, self._iterations
@@ -163,7 +165,9 @@ class Estimation:
 
             estimate = parameterization.to_physical(filter_state.theta)
             # get parameterization of next iteration, anchored at the current estimate
-            parameterization = parameterization.with_anchor(estimate)
+            parameterization = self._next_iteration(
+                parameterization, filter_state.theta, acceleration
+            )
             self._history.write_npz()
 
         logger.info("%s", "━" * _WIDTH)
@@ -171,6 +175,41 @@ class Estimation:
         logger.info("%-11s%.3g s", "run time", time.perf_counter() - started)
 
         return estimate
+
+    def _next_iteration(
+        self,
+        parameterization: Parameterization,
+        theta: NDArray_f64,
+        acceleration: Anderson | None,
+    ) -> Parameterization:
+        """Return the next pass's anchor, replayable from completed filter estimates.
+
+        Args:
+            parameterization: the current pass's anchors and uncertainty
+            theta: final unaccelerated filter estimate of that pass
+            acceleration: optional mixing history, replayed identically on resume
+
+        Returns:
+            a parameterization with the next anchor and the unchanged initial uncertainty
+        """
+        values = parameterization.to_physical(theta)
+        if acceleration is None:
+            return parameterization.with_anchor(values)
+        fixed = self._parameterization
+        scale = fixed.stddev_theta()
+        anchors = {p.name: p.anchor for p in parameterization.parameters}
+        x = fixed.to_theta(anchors) / scale
+        g = fixed.to_theta(values) / scale
+        candidate = acceleration.update(x, g)
+        try:
+            mixed = fixed.to_physical(candidate * scale)
+            if not all(np.isfinite(value) for value in mixed.values()):
+                raise ValueError("nonfinite accelerated parameters")
+            return parameterization.with_anchor(mixed)
+        except (OverflowError, ValueError):
+            logger.warning("invalid Anderson extrapolation; using the ROUKF estimate")
+            acceleration.reset()
+            return parameterization.with_anchor(values)
 
     def _log_setup(self) -> None:
         """Log what is estimated, from which measurements, and how."""
@@ -183,6 +222,12 @@ class Estimation:
         n_points = self._stencil.points.shape[1]
         logger.info("    %-14s%s (%d sigma points)", "stencil", self._sigma_points, n_points)
         logger.info("    %-14s%d", "iterations", self._iterations)
+        if self._anderson is not None:
+            logger.info(
+                "    Anderson       memory=%d, regularization=%g",
+                self._anderson.memory,
+                self._anderson.regularization,
+            )
         logger.info("    %-14s%d", "steps", len(self._schedule))
         logger.info("    %-14s%d", "MPI ranks", self._comm.size)
         logger.info("")

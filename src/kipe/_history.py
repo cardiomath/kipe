@@ -235,6 +235,8 @@ def _check_unchanged(output: Path, study: StudyOptions) -> None:
     ]
     if earlier.estimation.sigma_points != study.estimation.sigma_points:
         changed.append("estimation.sigma_points")
+    if earlier.estimation.anderson != study.estimation.anderson:
+        changed.append("estimation.anderson")
     if changed:
         raise StudyFileError(
             f"cannot resume the estimation in {output}: the study has changed since "
