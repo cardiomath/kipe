@@ -87,8 +87,8 @@ def test_normal_toward_opposite_sides_and_translated_mesh():
     below = fit_plane_geometry(vertices[::-1], normal_toward=(0, 0, -5))
     np.testing.assert_allclose(above.normal, -below.normal)
     np.testing.assert_allclose(above.coefficients, below.coefficients)
-    assert above.normal @ (np.array([0, 0, 5]) - above.centroid) > 0
-    assert below.normal @ (np.array([0, 0, -5]) - below.centroid) > 0
+    assert np.dot(above.normal, np.array([0, 0, 5]) - above.centroid) > 0
+    assert np.dot(below.normal, np.array([0, 0, -5]) - below.centroid) > 0
     assert np.linalg.norm(above.normal) == pytest.approx(1)
     shift = np.array([10, -20, 30])
     moved = fit_plane_geometry(
@@ -112,7 +112,7 @@ def test_normals_consistent_across_times_and_evaluation_order(target):
             frames[i][::-1], normal_toward=target, reference_normal=first
         )
         np.testing.assert_allclose(actual.normal, expected[i].normal, atol=1e-14)
-        assert actual.normal @ expected[0].normal > 0
+        assert np.dot(actual.normal, expected[0].normal) > 0
         np.testing.assert_allclose(actual.coefficients, fit_plane(frames[i]), atol=1e-14)
 
 

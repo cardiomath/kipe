@@ -186,7 +186,7 @@ def fit_plane_geometry(
     )
     # Convert n . (X - centroid) = 0 to [a, b, c]. These ratios are unchanged if SVD flips
     # the normal, so selecting its orientation does not change the coefficients.
-    coefficients = np.array([-normal[0], -normal[1], normal @ centroid]) / normal[2]
+    coefficients = np.array([-normal[0], -normal[1], np.dot(normal, centroid)]) / normal[2]
     return PlaneFit(coefficients, normal, centroid)
 
 
