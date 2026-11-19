@@ -1,7 +1,12 @@
-"""Plane coefficients fitted to sampled vertices: measurement model ``plane``.
+"""Fit sampled 3D coordinates to ``z = a*x + b*y + c`` for the ``plane`` measurement model.
 
-The same :func:`fit_plane` utility fits measured vertices before writing their coefficients
-as measurement data. Neither the utility nor the model depends on a finite element backend.
+:func:`fit_plane_geometry` performs an orthogonal least-squares fit using SVD;
+:func:`orient_normal` selects the sign of its unit normal. :func:`fit_plane` returns only
+the coefficients and can also prepare measurement data from externally measured points.
+These utilities use NumPy arrays and do not require a finite element backend.
+
+:class:`PlaneModel` gathers distributed sampled coordinates, fits the complete point set
+on MPI rank 0, and compares predicted and measured coefficients by subtraction.
 """
 
 from dataclasses import dataclass
@@ -18,11 +23,20 @@ from kipe.sampling import SpatialSampler
 
 @dataclass(frozen=True)
 class PlaneFit:
-    """Fitted coefficients, unit normal and centroid, all in the input coordinate system."""
+    """Geometry of an orthogonal least-squares plane fit.
+
+    All arrays have shape ``(3,)`` and use the input coordinate system. Changing the normal's
+    sign does not change the coefficients or the geometric plane.
+    """
 
     coefficients: NDArray_f64
+    """``[a, b, c]`` for ``z = a*x + b*y + c``; slopes are dimensionless and c is a length."""
+
     normal: NDArray_f64
+    """Unit normal perpendicular to the fitted plane, with the selected orientation."""
+
     centroid: NDArray_f64
+    """Mean of the fitted vertices; the fitted plane passes through this point."""
 
 
 def orient_normal(
@@ -32,20 +46,27 @@ def orient_normal(
     normal_toward: tuple[float, float, float] | None = None,
     reference_normal: NDArray_f64 | None = None,
 ) -> NDArray_f64:
-    """Orient the first normal toward a point, or a later normal toward the first.
+    """Select a normal's sign without changing the plane or the input arrays.
+
+    With ``reference_normal``, choose the sign giving a positive dot product with that
+    reference. Otherwise, if ``normal_toward`` is supplied, choose the side containing that
+    point. With neither option, keep the fitted sign. This function stores no history:
+    callers retain the first oriented normal and pass it as the reference for later fits.
 
     Args:
-        normal: fitted unit normal
-        centroid: fitted plane's centroid
-        normal_toward: optional point choosing the first normal's side
-        reference_normal: first oriented normal; takes precedence over the point
+        normal: fitted unit normal, shape ``(3,)``
+        centroid: fitted plane's centroid, shape ``(3,)``
+        normal_toward: optional point in the same coordinates and units as the centroid
+        reference_normal: finite nonzero normal, shape ``(3,)``; takes precedence over
+            the point, which is then ignored. Use the first fit's normal for a fixed reference.
 
     Returns:
-        a copy of the normal, with its sign selected. With neither reference nor point,
-        the first normal keeps its fitted sign.
+        a copy of ``normal``, multiplied by -1 if required; its magnitude is unchanged
 
     Raises:
-        ValueError: if the reference is invalid or does not determine an orientation
+        ValueError: if the reference normal or point has invalid dimensions or nonfinite
+            entries, the reference normal is zero or perpendicular to the fitted normal,
+            or the reference point lies on the plane, up to numerical tolerance
     """
     oriented = np.asarray(normal, dtype=np.float64).copy()
     if reference_normal is not None:
@@ -81,7 +102,20 @@ def orient_normal(
 
 
 def fit_plane(vertices: NDArray_f64) -> NDArray_f64:
-    """Return ``[a, b, c]``; see :func:`fit_plane_geometry` for an oriented normal."""
+    """Fit a plane to 3D vertices and return only its measurement coefficients.
+
+    Args:
+        vertices: finite coordinates, shape ``(n_vertices, 3)``; at least three
+            noncollinear vertices
+
+    Returns:
+        ``[a, b, c]`` for ``z = a*x + b*y + c``, shape ``(3,)``. The slopes are
+        dimensionless; c uses the coordinates' length unit.
+
+    Raises:
+        ValueError: if the vertices do not define a unique supported plane; see
+            :func:`fit_plane_geometry` for the geometric restrictions
+    """
     return fit_plane_geometry(vertices).coefficients
 
 
@@ -93,21 +127,28 @@ def fit_plane_geometry(
 ) -> PlaneFit:
     """Fit ``z = a*x + b*y + c`` by minimizing squared perpendicular distances.
 
+    Center the vertices at their centroid and use the least varying SVD direction as the
+    plane normal. The fit treats all three coordinate directions equally; it does not
+    minimize only vertical z residuals. Convert the normal and centroid to ``[a, b, c]``
+    after selecting the normal's sign with :func:`orient_normal`.
+
     Args:
         vertices: finite 3D coordinates, shape ``(n_vertices, 3)``; at least three
             noncollinear vertices
         normal_toward: optional point on the desired side of the first plane, in the same
             coordinates and units as the vertices; must not lie on the fitted plane
-        reference_normal: first oriented normal; aligns later fits and overrides the point
+        reference_normal: first oriented normal; aligns later fits and overrides the point.
+            The caller must retain it: this fitting utility has no internal history.
 
     Returns:
         coefficients ``[a, b, c]``, centroid and unit normal. Without a reference or point,
         the normal retains the SVD sign. Pass the first fit's normal to align later fits.
 
     Raises:
-        ValueError: if the coordinates are invalid, do not determine a unique plane, or the
-            fitted plane is vertical or nearly vertical and cannot be represented reliably
-            by this equation
+        ValueError: if the coordinates have the wrong shape, are nonfinite or collinear,
+            do not determine a unique best-fit plane, or SVD fails. Also raised for vertical
+            or nearly vertical planes that cannot be represented reliably by this equation,
+            and for invalid or ambiguous orientation references (see :func:`orient_normal`).
     """
     # Convert the input to floating-point coordinates and require at least three 3D vertices.
     vertices = np.asarray(vertices, dtype=np.float64)
@@ -156,9 +197,15 @@ class PlaneModel(MeasurementModel):
     0 returns ``[a, b, c]``; other ranks return an empty array. All ranks must participate in
     construction and prediction, including those without sampled entries.
 
+    The first successful prediction establishes this instance's normal reference, optionally
+    oriented toward ``normal_toward``. Later predictions align with that first normal,
+    including sigma-point predictions and later outer iterations using the same instance.
+    A failed fit does not replace the reference. A new instance, including one created on
+    resume, establishes a new reference; orientation never changes the measured coefficients.
+
     Args:
         sampler: sampler of flattened coordinates ``x0, y0, z0, x1, y1, z1, ...``
-        comm: communicator shared with the sampler
+        comm: communicator shared with the sampler; root is communicator rank 0
         normal_toward: optional point toward which the first fitted unit normal points;
             later predictions align with that first normal
 
@@ -204,10 +251,13 @@ class PlaneModel(MeasurementModel):
 
     @property
     def normal(self) -> NDArray_f64 | None:
-        """Copy of the last fitted unit normal, on rank 0; None before a fit or on peers.
+        """Copy of the latest predicted unit normal on rank 0, or None when unavailable.
 
-        This describes the latest prediction, which may be a sigma point, not the final
-        estimated state. A failed prediction clears it.
+        This describes the latest prediction, which may be a sigma point rather than the
+        final estimated state. None is returned before a successful fit, on non-root ranks,
+        and after a failed prediction. Failure clears this value but retains the first
+        normal used as the orientation reference. Modifying the returned copy has no effect
+        on subsequent predictions.
         """
         return None if self._normal is None else self._normal.copy()
 
@@ -215,10 +265,11 @@ class PlaneModel(MeasurementModel):
         """Return three coefficients, owned by rank 0 independently of the vertex count.
 
         Args:
-            sampler: spatial sampler of the measurement
+            sampler: accepted for the measurement-model interface; the plane output layout
+                is fixed and does not depend on this argument
 
         Returns:
-            global size 3 and this rank's positions in ``[a, b, c]``
+            global size 3 and indices ``[0, 1, 2]`` on rank 0, or empty indices on other ranks
         """
         # The model returns three coefficients rather than 3N coordinates. Assign them only
         # to rank 0 so synthesis, estimation and MPI reductions count each coefficient once.
@@ -227,15 +278,22 @@ class PlaneModel(MeasurementModel):
     def predict(self, y: NDArray_f64) -> NDArray_f64:
         """Gather the current vertices and return this rank's fitted coefficients.
 
+        Reassemble flattened coordinates using the sampler's global indices, then fit the
+        complete ``(n_vertices, 3)`` array on rank 0. This supports coordinate components
+        split between ranks and ranks with no entries. Broadcast fit errors before raising
+        so all ranks leave the collective prediction together.
+
         Args:
-            y: this rank's sampled coordinate components, in the sampler's local order
+            y: one-dimensional array of this rank's coordinate components, in exactly the
+                local order of the sampler's ``global_indices``
 
         Returns:
             ``[a, b, c]`` on rank 0, an empty array on other ranks
 
         Raises:
-            ValueError: on every rank if sampled entries do not match the layout or the
-                vertices cannot be fitted by :func:`fit_plane`
+            ValueError: on every rank if sampled entries do not match the cached layout,
+                the vertices cannot be fitted by :func:`fit_plane_geometry`, or orientation
+                relative to the first normal is ambiguous
         """
         # Gather the current coordinate components, including empty arrays from ranks that
         # own no sampled entries. The stored global indices restore the vertex order.
@@ -278,6 +336,9 @@ class PlaneModel(MeasurementModel):
 
     def innovation(self, z_hat: NDArray_f64, z: NDArray_f64) -> NDArray_f64:
         """Return measured minus predicted coefficients, before noise weighting.
+
+        Both arrays follow the output ownership of :meth:`layout`: three coefficients on
+        rank 0 and no entries on peers. Estimation applies the measurement noise weights.
 
         Args:
             z_hat: this rank's predicted coefficients

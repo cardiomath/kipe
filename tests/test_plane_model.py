@@ -37,11 +37,18 @@ from kipe.synthesis import synthesize
 
 
 def _vertices(a=0.2, b=-0.3, c=1.1):
+    """Return four corners of a square lifted onto the plane ``z = a*x + b*y + c``."""
     xy = np.array([[-1.0, -1.0], [-1.0, 1.0], [1.0, -1.0], [1.0, 1.0]])
     return np.column_stack((xy, a * xy[:, 0] + b * xy[:, 1] + c))
 
 
 def test_fit_plane_exact_and_translated_vertices():
+    """Recover known coefficients, account for translations, and preserve input coordinates.
+
+    Translating all points by (dx, dy, dz) must preserve both slopes and change the
+    intercept by dz - a*dx - b*dy. The same fit must work with exactly three noncollinear
+    vertices, and fitting must not mutate the supplied array.
+    """
     vertices = _vertices()
     original = vertices.copy()
     np.testing.assert_allclose(fit_plane(vertices), [0.2, -0.3, 1.1], atol=1e-14)
@@ -56,7 +63,11 @@ def test_fit_plane_exact_and_translated_vertices():
 
 
 def test_fit_plane_orthogonal_distances_and_vertex_order():
-    """Symmetric perturbations along the normal preserve the exact best-fit plane."""
+    """Recover the orthogonal best-fit plane despite symmetric off-plane perturbations.
+
+    Equal displacements to either side along the normal preserve the expected plane.
+    Reversing the vertices must not change the fitted coefficients.
+    """
     vertices = _vertices()
     normal = np.array([-0.2, 0.3, 1.0])
     normal /= np.linalg.norm(normal)
@@ -66,6 +77,11 @@ def test_fit_plane_orthogonal_distances_and_vertex_order():
 
 
 def test_normal_toward_opposite_sides_and_translated_mesh():
+    """Opposite target points reverse the normal but preserve the plane coefficients.
+
+    Translating both vertices and target must preserve the selected unit normal; the
+    orientation must also be independent of vertex ordering.
+    """
     vertices = _vertices()
     above = fit_plane_geometry(vertices, normal_toward=(0, 0, 5))
     below = fit_plane_geometry(vertices[::-1], normal_toward=(0, 0, -5))
@@ -83,7 +99,11 @@ def test_normal_toward_opposite_sides_and_translated_mesh():
 
 @pytest.mark.parametrize("target", [None, (0, 0, -5)])
 def test_normals_consistent_across_times_and_evaluation_order(target):
-    """With a fixed first normal, later signs do not depend on evaluation order."""
+    """Align moving planes with one fixed first normal, with or without a target point.
+
+    After establishing the reference, reordered time evaluations and reversed vertex
+    arrays must produce the same normals and leave the coefficients unchanged.
+    """
     frames = [_vertices(a=0.1 + 0.02 * t, b=-0.2, c=1 + 0.1 * t) for t in range(5)]
     first = fit_plane_geometry(frames[0], normal_toward=target).normal
     expected = [fit_plane_geometry(points, reference_normal=first) for points in frames]
@@ -97,7 +117,12 @@ def test_normals_consistent_across_times_and_evaluation_order(target):
 
 
 def test_orientation_helper_uses_first_normal_not_previous_or_target():
-    """The first normal's hemisphere wins even after the point crosses a later plane."""
+    """Retain the first normal's hemisphere when the point or the previous fit disagrees.
+
+    Without any reference, preserve the supplied sign. Use a point only for the first
+    orientation; subsequent orientations must follow the first normal even when two
+    successive normals have a negative dot product with each other.
+    """
     first = np.array([0.0, 0.0, -1.0])
     np.testing.assert_array_equal(orient_normal(first, np.zeros(3)), first)
     point = (0.0, 0.0, -5.0)
@@ -134,12 +159,14 @@ def test_orientation_helper_rejects_perpendicular_reference():
 
 @pytest.mark.parametrize("target", [(0, 0, 1.1), (0, 0), (0, 0, np.nan), (0, 0, np.inf)])
 def test_normal_toward_rejects_undefined_orientation(target):
+    """Reject a target on the first plane, a malformed target, and nonfinite coordinates."""
     with pytest.raises(ValueError, match="normal_toward"):
         fit_plane_geometry(_vertices(), normal_toward=target)
 
 
 @pytest.mark.parametrize("target", [[1, 2], [1, 2, 3, 4], [1, 2, np.inf]])
 def test_normal_toward_configuration_validation(target):
+    """Require exactly three finite target coordinates when parsing plane-model options."""
     with pytest.raises(ValidationError):
         TypeAdapter(MeasurementModelOptions).validate_python({
             "type": "plane",
@@ -149,7 +176,12 @@ def test_normal_toward_configuration_validation(target):
 
 @pytest.mark.parametrize("target", [None, (0, 0, -5)])
 def test_oriented_model_distributed_and_collective_failure(target):
-    """A model retains its first reference across predictions and recoverable fit errors."""
+    """Keep the first orientation reference across MPI predictions and failed fits.
+
+    Only root exposes the normal, and callers receive a copy. Once the reference exists,
+    a later plane passing through the target is valid. A nonfinite fit must fail on every
+    rank and clear the latest normal without discarding the original reference.
+    """
     comm = MPI.COMM_WORLD
     sampler = _VertexSampler(12, comm)
     options = PlaneModelOptions(normal_toward=target)
@@ -199,6 +231,7 @@ def test_oriented_model_distributed_and_collective_failure(target):
     ],
 )
 def test_fit_plane_rejects_invalid_vertices(vertices, message):
+    """Reject invalid shapes, nonfinite points, degenerate fits and vertical planes."""
     with pytest.raises(ValueError, match=message):
         fit_plane(vertices)
 
@@ -207,20 +240,24 @@ class _VertexSampler(SpatialSampler):
     """Split coordinate components across ranks, in reverse local order."""
 
     def __init__(self, size, comm):
+        """Assign alternating global coordinate entries to ranks and reverse local order."""
         self.size = size
         self.global_indices = np.arange(size, dtype=np.int64)[comm.rank :: comm.size][::-1]
 
     def sample(self, fields):
+        """Copy this rank's coordinate entries from the replicated test field."""
         return fields["vertices"][self.global_indices].copy()
 
 
 @pytest.mark.parametrize("size", [0, 6, 10])
 def test_plane_model_rejects_invalid_sample_size(size):
+    """Reject fewer than three vertices or flattened sizes that are not multiples of three."""
     with pytest.raises(StudyFileError, match="three 3D vertices"):
         PlaneModel(_VertexSampler(size, MPI.COMM_SELF), MPI.COMM_SELF)
 
 
 def test_plane_model_rejects_repeated_indices():
+    """Reject duplicate ownership instead of overwriting a coordinate during gather."""
     sampler = _VertexSampler(12, MPI.COMM_SELF)
     sampler.global_indices[-1] = sampler.global_indices[0]
     with pytest.raises(StudyFileError, match="exactly one rank"):
@@ -228,6 +265,7 @@ def test_plane_model_rejects_repeated_indices():
 
 
 def test_plane_model_options_and_builder():
+    """Accept default plane options, reject unknown keys, and require a sampler to build it."""
     options = TypeAdapter(MeasurementModelOptions).validate_python({"type": "plane"})
     assert options == PlaneModelOptions()
     with pytest.raises(ValidationError):
@@ -239,7 +277,11 @@ def test_plane_model_options_and_builder():
 
 
 def test_distributed_vertices_and_repeated_predictions():
-    """Gather split coordinate components in global order and own the coefficients once."""
+    """Reconstruct globally ordered vertices and assign all three coefficients only to root.
+
+    Repeated predictions must reflect the new plane without changing earlier returned
+    arrays. Innovation must equal measured minus predicted coefficients on each rank.
+    """
     comm = MPI.COMM_WORLD
     sampler = _VertexSampler(12, comm)
     model = PlaneModel(sampler, comm)
@@ -258,6 +300,7 @@ def test_distributed_vertices_and_repeated_predictions():
 
 
 def test_distributed_vertices_with_empty_ranks():
+    """Fit correctly when root owns every coordinate and all other ranks own none."""
     comm = MPI.COMM_WORLD
     sampler = _VertexSampler(12, MPI.COMM_SELF)
     if comm.rank:
@@ -270,7 +313,11 @@ def test_distributed_vertices_with_empty_ranks():
 
 @pytest.mark.parametrize("invalid", ["nonfinite", "length", "vertical"])
 def test_collective_fit_errors(invalid):
-    """An invalid fit must raise on every rank instead of leaving peers in a collective."""
+    """Raise on every rank for nonfinite coordinates, wrong local lengths or vertical planes.
+
+    Failure on root must be communicated before other ranks continue, avoiding an unmatched
+    collective operation after an invalid prediction.
+    """
     comm = MPI.COMM_WORLD
     sampler = _VertexSampler(12, comm)
     model = PlaneModel(sampler, comm)
@@ -292,22 +339,32 @@ class _AnalyticSolver:
     """Vertices on z = 0.2*x - 0.3*y + height*t, with no PDE."""
 
     def __init__(self):
+        """Expose four replicated 3D vertices as a twelve-entry solver field."""
         self.state_spec = {"vertices": SimpleNamespace(local_size=12, kind="replicated")}
 
     def nominal_parameters(self):
+        """Provide the true vertical motion rate used to generate synthetic measurements."""
         return {"height": 1.5}
 
     def initial_state(self):
+        """Start at time zero with the plane intercept equal to zero."""
         return 0.0, {"vertices": _vertices(c=0.0).ravel()}
 
     def propagate(self, t0, t1, state, parameters):
+        """Set the plane intercept to height*t1 while keeping both slopes fixed."""
         height = (self.nominal_parameters() | parameters)["height"]
         return {"vertices": _vertices(c=height * t1).ravel()}
 
 
 @pytest.mark.parametrize("stddev", [1e-4, [1e-4, 2e-4, 3e-4]])
 def test_plane_synthesis_estimation_and_sensitivity(tmp_path, monkeypatch, stddev):
-    """The real operator reduces 12 coordinates to three data and estimates plane motion."""
+    """Exercise the plane model through synthesis, estimation and sensitivity analysis.
+
+    Synthetic data must contain three coefficients per time, not twelve coordinates.
+    Estimation must recover the known vertical motion rate. Finite-difference sensitivities
+    must match the analytic derivative, and the Fisher information must use the intercept's
+    noise level correctly for both scalar and component-wise standard deviations.
+    """
     # Synthesis writes on rank 0; every rank must read the same data and provenance.
     tmp_path = MPI.COMM_WORLD.bcast(tmp_path if MPI.COMM_WORLD.rank == 0 else None, root=0)
     module = types.ModuleType("plane_solver")
