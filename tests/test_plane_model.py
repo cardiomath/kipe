@@ -14,7 +14,7 @@ from kipe import sensitivity
 from kipe.estimation import estimate
 from kipe.measurements.data import read_numpy
 from kipe.measurements.models import build_model
-from kipe.measurements.operator import build_observation_operator
+from kipe.measurements.operator import ObservationOperator, build_observation_operator
 from kipe.measurements.plane import PlaneModel, fit_from_coordinates, fit_plane, orient_normal
 from kipe.options import (
     EstimationOptions,
@@ -27,7 +27,6 @@ from kipe.options import (
     ParameterPrior,
     ParametersOptions,
     PlaneModelOptions,
-    StudyFileError,
     StudyOptions,
     SynthesisNoiseOptions,
     SynthesisOptions,
@@ -183,35 +182,38 @@ def test_oriented_model_distributed_and_collective_failure(target):
     rank and clear the latest normal without discarding the original reference.
     """
     comm = MPI.COMM_WORLD
-    sampler = _VertexSampler(12, comm)
-    options = PlaneModelOptions(normal_toward=target)
-    model = build_model(options, sampler, comm)
-    assert isinstance(model, PlaneModel)
-    assert model.normal is None
-    predicted = model.predict(sampler.sample({"vertices": _vertices().ravel()}))
-    expected = np.array([0.2, -0.3, 1.1])[model.layout(sampler)[1]]
+    options = MeasurementOptions(
+        fields=["vertices"],
+        data=NumpyDataOptions(type="numpy", path="unused.npz"),
+        noise=NoiseOptions(stddev=0.1),
+        model=PlaneModelOptions(normal_toward=target),
+    )
+    operator = build_observation_operator("plane", options, _AnalyticSolver(), comm)
+    assert operator.normal is None
+    predicted = operator({"vertices": _vertices().ravel()})
+    expected = np.array([0.2, -0.3, 1.1])[operator.global_indices]
     np.testing.assert_allclose(predicted, expected, atol=1e-14)
     if comm.rank == 0:
-        normal = model.normal
+        normal = operator.normal
         assert normal is not None
         if target is not None:
             assert normal[2] < 0
         first = normal.copy()
         normal[:] = 0  # callers cannot mutate the stored reference through this property
-        assert np.linalg.norm(model.normal) == pytest.approx(1)
+        assert np.linalg.norm(operator.normal) == pytest.approx(1)
     else:
-        assert model.normal is None
+        assert operator.normal is None
     # Later planes can pass through the target: only the first fit uses it.
-    model.predict(sampler.sample({"vertices": _vertices(c=-5).ravel()}))
+    operator({"vertices": _vertices(c=-5).ravel()})
     if comm.rank == 0:
-        np.testing.assert_allclose(model.normal, first)
+        np.testing.assert_allclose(operator.normal, first)
     invalid = np.full(12, np.nan)
     with pytest.raises(ValueError, match="finite"):
-        model.predict(sampler.sample({"vertices": invalid}))
-    assert model.normal is None
-    model.predict(sampler.sample({"vertices": _vertices(c=-6).ravel()}))
+        operator({"vertices": invalid})
+    assert operator.normal is None
+    operator({"vertices": _vertices(c=-6).ravel()})
     if comm.rank == 0:
-        np.testing.assert_allclose(model.normal, first)
+        np.testing.assert_allclose(operator.normal, first)
 
 
 @pytest.mark.parametrize(
@@ -252,28 +254,19 @@ class _VertexSampler(SpatialSampler):
 @pytest.mark.parametrize("size", [0, 6, 10])
 def test_plane_model_rejects_invalid_sample_size(size):
     """Reject fewer than three vertices or flattened sizes that are not multiples of three."""
-    with pytest.raises(StudyFileError, match="three 3D vertices"):
-        PlaneModel(_VertexSampler(size, MPI.COMM_SELF), MPI.COMM_SELF)
-
-
-def test_plane_model_rejects_repeated_indices():
-    """Reject duplicate ownership instead of overwriting a coordinate during gather."""
-    sampler = _VertexSampler(12, MPI.COMM_SELF)
-    sampler.global_indices[-1] = sampler.global_indices[0]
-    with pytest.raises(StudyFileError, match="exactly one rank"):
-        PlaneModel(sampler, MPI.COMM_SELF)
+    with pytest.raises(ValueError):
+        PlaneModel().predict(np.zeros(size))
 
 
 def test_plane_model_options_and_builder():
-    """Accept default plane options, reject unknown keys, and require a sampler to build it."""
+    """Build a constructor-free array model without a sampler or MPI communicator."""
     options = TypeAdapter(MeasurementModelOptions).validate_python({"type": "plane"})
     assert options == PlaneModelOptions()
     with pytest.raises(ValidationError):
         TypeAdapter(MeasurementModelOptions).validate_python({"type": "plane", "unknown": 1})
-    with pytest.raises(StudyFileError, match="needs a spatial sampler"):
-        build_model(options)
-    model = build_model(options, _VertexSampler(12, MPI.COMM_SELF), MPI.COMM_SELF)
+    model = build_model(options)
     assert isinstance(model, PlaneModel)
+    np.testing.assert_allclose(model.predict(_vertices().ravel()), [0.2, -0.3, 1.1], atol=1e-14)
 
 
 def test_distributed_vertices_and_repeated_predictions():
@@ -284,15 +277,16 @@ def test_distributed_vertices_and_repeated_predictions():
     """
     comm = MPI.COMM_WORLD
     sampler = _VertexSampler(12, comm)
-    model = PlaneModel(sampler, comm)
-    size, indices = model.layout(sampler)
+    model = PlaneModel()
+    operator = ObservationOperator(["vertices"], sampler, model, comm)
+    size, indices = operator.size, operator.global_indices
     assert size == 3
     np.testing.assert_array_equal(
         np.concatenate(comm.allgather(indices)), np.arange(3, dtype=np.int64)
     )
-    first = model.predict(sampler.sample({"vertices": _vertices().ravel()}))
+    first = operator({"vertices": _vertices().ravel()})
     np.testing.assert_allclose(first, np.array([0.2, -0.3, 1.1])[indices], atol=1e-14)
-    second = model.predict(sampler.sample({"vertices": _vertices(-0.4, 0.5, 2.0).ravel()}))
+    second = operator({"vertices": _vertices(-0.4, 0.5, 2.0).ravel()})
     np.testing.assert_allclose(second, np.array([-0.4, 0.5, 2.0])[indices], atol=1e-14)
     np.testing.assert_allclose(first, np.array([0.2, -0.3, 1.1])[indices], atol=1e-14)
     measured = np.array([0.3, -0.1, 1.5])[indices]
@@ -305,13 +299,13 @@ def test_distributed_vertices_with_empty_ranks():
     sampler = _VertexSampler(12, MPI.COMM_SELF)
     if comm.rank:
         sampler.global_indices = np.empty(0, dtype=np.int64)
-    model = PlaneModel(sampler, comm)
-    result = model.predict(sampler.sample({"vertices": _vertices().ravel()}))
+    operator = ObservationOperator(["vertices"], sampler, PlaneModel(), comm)
+    result = operator({"vertices": _vertices().ravel()})
     expected = np.array([0.2, -0.3, 1.1]) if comm.rank == 0 else np.empty(0)
     np.testing.assert_allclose(result, expected, atol=1e-14)
 
 
-@pytest.mark.parametrize("invalid", ["nonfinite", "length", "vertical"])
+@pytest.mark.parametrize("invalid", ["nonfinite", "length", "length_on_peer", "vertical"])
 def test_collective_fit_errors(invalid):
     """Raise on every rank for nonfinite coordinates, wrong local lengths or vertical planes.
 
@@ -320,7 +314,7 @@ def test_collective_fit_errors(invalid):
     """
     comm = MPI.COMM_WORLD
     sampler = _VertexSampler(12, comm)
-    model = PlaneModel(sampler, comm)
+    operator = ObservationOperator(["vertices"], sampler, PlaneModel(), comm)
     vertices = _vertices()
     if invalid == "vertical":
         vertices[:, [0, 2]] = vertices[:, [2, 0]]
@@ -331,8 +325,10 @@ def test_collective_fit_errors(invalid):
             values[0] = np.nan
         elif invalid == "length":
             values = values[:-1]
+    if invalid == "length_on_peer" and comm.rank == min(1, comm.size - 1):
+        values = values[:-1]
     with pytest.raises(ValueError):
-        model.predict(values)
+        operator.predict(values)
 
 
 class _AnalyticSolver:

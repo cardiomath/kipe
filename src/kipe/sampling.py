@@ -13,7 +13,9 @@ do not depend on the number of ranks.
 
 To add a sampler: subclass :class:`SpatialSampler`, set ``size`` and ``global_indices``,
 implement :meth:`~SpatialSampler.sample`, add its options to :mod:`kipe.options` and a
-``case`` to :func:`build_sampler`.
+``case`` to :func:`build_sampler`. The factory validates the global layout before returning
+any sampler. For a sampler constructed directly, call :meth:`SpatialSampler.validate_layout`
+collectively before using its output in a measurement.
 """
 
 from abc import ABC, abstractmethod
@@ -44,6 +46,44 @@ class SpatialSampler(ABC):
     global_indices: NDArray_i64
     """Positions of this rank's entries in the sampled vector, in the order :meth:`sample`
     returns them; each entry is held by exactly one rank."""
+
+    def validate_layout(self, comm: MPI.Comm = MPI.COMM_WORLD) -> None:
+        """Check that every global sampled entry has exactly one owner.
+
+        All ranks participate, including those with no entries. Sizes must agree between
+        ranks and indices must be one-dimensional integer arrays covering ``0..size-1``
+        once. Local ordering is unrestricted. These indices refer to sampled entries,
+        not to mesh nodes or ghost DOFs. Validation does not reorder or mutate them.
+
+        The factory calls this once at construction. Global indices are collected on root
+        only for this check; no global layout copy is retained by the sampler.
+
+        Args:
+            comm: communicator over which the sampler distributes its entries
+
+        Raises:
+            StudyFileError: on every rank if sizes, index arrays or ownership are invalid
+        """
+        parts = comm.gather((self.size, self.global_indices), root=0)
+        error = None
+        if comm.rank == 0:
+            assert parts is not None
+            sizes = [part[0] for part in parts]
+            indices = [np.asarray(part[1]) for part in parts]
+            if any(not isinstance(size, int | np.integer) or size < 0 for size in sizes):
+                error = "sampler size must be a nonnegative integer on every rank"
+            elif any(size != sizes[0] for size in sizes):
+                error = "sampler size must agree on every rank"
+            elif any(
+                array.ndim != 1 or not np.issubdtype(array.dtype, np.integer)
+                for array in indices
+            ):
+                error = "sampler global_indices must be one-dimensional integer arrays"
+            elif not np.array_equal(np.sort(np.concatenate(indices)), np.arange(sizes[0])):
+                error = "sampler layout needs each sampled entry to be owned by exactly one rank"
+        error = comm.bcast(error, root=0)
+        if error is not None:
+            raise StudyFileError(error)
 
     # NOTE: a measurement context (time-dependent geometry, auxiliary data such as the magnitude
     # or background phase of PC-MRI) is expected soon. It becomes an additional argument of
@@ -133,23 +173,24 @@ def build_sampler(
         the spatial sampler
 
     Raises:
-        StudyFileError: if a backend sampler is used but its backend is not installed
+        StudyFileError: if a backend is unavailable, or the sampler's global layout is invalid
     """
+    sampler: SpatialSampler
     match options:
         case ArraySamplingOptions():
-            return ArraySampler(fields, solver.state_spec, comm)
+            sampler = ArraySampler(fields, solver.state_spec, comm)
         case MeshSamplingOptions():
             try:  # dolfinx only when a study uses it
                 from kipe.fenicsx.sampling.mesh import build_mesh_sampler
             except ImportError as err:
                 raise StudyFileError(f"fenicsx.mesh needs dolfinx: {err}") from err
-            return build_mesh_sampler(options, fields, solver, comm)
+            sampler = build_mesh_sampler(options, fields, solver, comm)
         case PointSamplingOptions():
             try:  # dolfinx only when a study uses it
                 from kipe.fenicsx.sampling.points import build_point_sampler
             except ImportError as err:
                 raise StudyFileError(f"fenicsx.points needs dolfinx: {err}") from err
-            return build_point_sampler(options, fields, solver, comm)
+            sampler = build_point_sampler(options, fields, solver, comm)
         case DisplacedVertexSamplingOptions():
             try:
                 from kipe.fenicsx.sampling.displaced_vertices import (
@@ -157,6 +198,8 @@ def build_sampler(
                 )
             except ImportError as err:
                 raise StudyFileError(f"fenicsx.displaced_vertices needs dolfinx: {err}") from err
-            return build_displaced_vertex_sampler(options, fields, solver, comm)
+            sampler = build_displaced_vertex_sampler(options, fields, solver, comm)
         case _:
             assert_never(options)
+    sampler.validate_layout(comm)
+    return sampler

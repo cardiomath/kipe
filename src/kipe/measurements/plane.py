@@ -5,19 +5,18 @@
 the coefficients and can also prepare measurement data from externally measured points.
 These utilities use NumPy arrays and do not require a finite element backend.
 
-:class:`PlaneModel` gathers distributed sampled coordinates, fits the complete point set
-on MPI rank 0, and compares predicted and measured coefficients by subtraction.
+:class:`PlaneModel` fits complete coordinate arrays and compares coefficients by subtraction.
+The observation operator handles distributed input and optional orientation tracking.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
-
-from mpi4py import MPI
+from typing import ClassVar
 
 import numpy as np
 
 from kipe._types import NDArray_f64, NDArray_i64
 from kipe.measurements.models import MeasurementModel
-from kipe.options import StudyFileError
 from kipe.sampling import SpatialSampler
 
 
@@ -191,161 +190,56 @@ def fit_from_coordinates(
 
 
 class PlaneModel(MeasurementModel):
-    """Fit sampled 3D vertices and compare the measured and predicted plane coefficients.
+    """Predict three plane coefficients from a complete array of sampled coordinates.
 
-    Vertex coordinates are gathered in the sampler's global order for every prediction. Rank
-    0 returns ``[a, b, c]``; other ranks return an empty array. All ranks must participate in
-    construction and prediction, including those without sampled entries.
+    This model has no MPI or sampler state. The observation operator assembles the global
+    input, calls prediction on root, and assigns the three output entries to that rank.
 
-    The first successful prediction establishes this instance's normal reference, optionally
-    oriented toward ``normal_toward``. Later predictions align with that first normal,
-    including sigma-point predictions and later outer iterations using the same instance.
-    A failed fit does not replace the reference. A new instance, including one created on
-    resume, establishes a new reference; orientation never changes the measured coefficients.
-
-    Args:
-        sampler: sampler of flattened coordinates ``x0, y0, z0, x1, y1, z1, ...``
-        comm: communicator shared with the sampler; root is communicator rank 0
-        normal_toward: optional point toward which the first fitted unit normal points;
-            later predictions align with that first normal
-
-    Raises:
-        StudyFileError: if the sampled size is not three coordinates per vertex with at least
-            three vertices, or the global indices do not cover every entry exactly once
+    An optional ``on_fit`` observer can consume the fitted geometry. The observation
+    operator uses it to track orientation separately from coefficient prediction.
     """
 
-    def __init__(
-        self,
-        sampler: SpatialSampler,
-        comm: MPI.Comm = MPI.COMM_WORLD,
-        *,
-        normal_toward: tuple[float, float, float] | None = None,
-    ) -> None:
-        # Each vertex contributes x, y and z; fitting needs at least nine sampled entries.
-        if sampler.size < 9 or sampler.size % 3:
-            raise StudyFileError("plane model needs at least three 3D vertices (3N coordinates)")
-        # Keep the sampler's global input size and the communicator used for all collectives.
-        self._comm = comm
-        self._size = sampler.size
-        self._normal_toward = normal_toward
-        self._normal: NDArray_f64 | None = None
-        self._reference_normal: NDArray_f64 | None = None
+    gather_input: ClassVar[bool] = True
+    on_fit: Callable[[Plane], None] | None = None
+    """Optional observer of fitted geometry; orientation state belongs to its owner."""
 
-        # Cache the global positions, which the sampler fixes at construction. This also
-        # supports a partition that splits the coordinate components of a vertex.
-        self._indices = comm.gather(sampler.global_indices.copy(), root=0)
-        # Verify on rank 0 that every coordinate is present exactly once, with no missing
-        # entries or duplicate owners, before using these positions for later predictions.
-        error = None
-        if comm.rank == 0:
-            assert self._indices is not None
-            indices = np.concatenate(self._indices)
-            if not np.array_equal(np.sort(indices), np.arange(self._size)):
-                error = (
-                    "plane model needs each sampled coordinate to be owned by exactly one rank"
-                )
-        # All ranks must either finish construction or raise the same validation error.
-        error = comm.bcast(error, root=0)
-        if error is not None:
-            raise StudyFileError(error)
-
-    @property
-    def normal(self) -> NDArray_f64 | None:
-        """Copy of the latest predicted unit normal on rank 0, or None when unavailable.
-
-        This describes the latest prediction, which may be a sigma point rather than the
-        final estimated state. None is returned before a successful fit, on non-root ranks,
-        and after a failed prediction. Failure clears this value but retains the first
-        normal used as the orientation reference. Modifying the returned copy has no effect
-        on subsequent predictions.
-        """
-        return None if self._normal is None else self._normal.copy()
-
-    def layout(self, sampler: SpatialSampler | None = None) -> tuple[int, NDArray_i64]:
-        """Return three coefficients, owned by rank 0 independently of the vertex count.
+    def layout(self, sampler: SpatialSampler) -> tuple[int, NDArray_i64]:
+        """Return the complete model output layout before the operator assigns ownership.
 
         Args:
-            sampler: accepted for the measurement-model interface; the plane output layout
-                is fixed and does not depend on this argument
+            sampler: accepted for the model interface; the output always has three entries
 
         Returns:
-            global size 3 and indices ``[0, 1, 2]`` on rank 0, or empty indices on other ranks
+            size 3 and indices ``[0, 1, 2]``; the operator gives empty indices to non-root ranks
         """
-        # The model returns three coefficients rather than 3N coordinates. Assign them only
-        # to rank 0 so synthesis, estimation and MPI reductions count each coefficient once.
-        return 3, np.arange(3 if self._comm.rank == 0 else 0, dtype=np.int64)
+        return 3, np.arange(3, dtype=np.int64)
 
     def predict(self, y: NDArray_f64) -> NDArray_f64:
-        """Gather the current vertices and return this rank's fitted coefficients.
-
-        Reassemble flattened coordinates using the sampler's global indices, then fit the
-        complete ``(n_vertices, 3)`` array on rank 0. This supports coordinate components
-        split between ranks and ranks with no entries. Broadcast fit errors before raising
-        so all ranks leave the collective prediction together.
+        """Fit the complete coordinate array and return ``[a, b, c]``.
 
         Args:
-            y: one-dimensional array of this rank's coordinate components, in exactly the
-                local order of the sampler's ``global_indices``
+            y: flattened coordinates in vertex order, ``x0, y0, z0, x1, y1, z1, ...``
 
         Returns:
-            ``[a, b, c]`` on rank 0, an empty array on other ranks
+            three plane coefficients, independently of vertex count
 
         Raises:
-            ValueError: on every rank if sampled entries do not match the cached layout,
-                the vertices cannot be fitted by :func:`fit_from_coordinates`, or orientation
-                relative to the first normal is ambiguous
+            ValueError: if the input cannot be reshaped to 3D points, cannot define a
+                supported plane, or the optional geometry observer rejects the orientation
         """
-        # Gather the current coordinate components, including empty arrays from ranks that
-        # own no sampled entries. The stored global indices restore the vertex order.
-        self._normal = None
-        parts = self._comm.gather(y, root=0)
-        # Other ranks keep an empty prediction because rank 0 owns all three coefficients.
-        coefficients = np.empty(0, dtype=np.float64)
-        error = None
-        if self._comm.rank == 0:
-            assert parts is not None and self._indices is not None
-            # Reconstruct the global coordinate vector and check each rank's local size.
-            vertices_coordinates = np.empty(self._size, dtype=np.float64)
-            try:
-                for indices, values in zip(self._indices, parts, strict=True):
-                    if values.ndim != 1 or len(values) != len(indices):
-                        raise ValueError(
-                            "sampled coordinate entries do not match the sampler layout"
-                        )
-                    vertices_coordinates[indices] = values
-                # Group each vertex's x, y and z, then fit one plane to all vertices.
-                fit = fit_from_coordinates(
-                    vertices_coordinates.reshape(-1, 3),
-                    normal_toward=self._normal_toward,
-                    reference_normal=self._reference_normal,
-                )
-                coefficients = fit.coefficients
-                self._normal = fit.normal
-                if self._reference_normal is None:
-                    self._reference_normal = fit.normal.copy()
-            except ValueError as err:
-                # Delay raising until the failure has been communicated to every rank.
-                error = str(err)
-
-        # Share failures before returning so other ranks cannot continue into a collective
-        # operation while rank 0 has already stopped with an invalid fit.
-        error = self._comm.bcast(error, root=0)
-        if error is not None:
-            raise ValueError(error)
-        return coefficients
+        plane = fit_from_coordinates(y.reshape(-1, 3))
+        if self.on_fit is not None:
+            self.on_fit(plane)
+        return plane.coefficients
 
     def innovation(self, z_hat: NDArray_f64, z: NDArray_f64) -> NDArray_f64:
         """Return measured minus predicted coefficients, before noise weighting.
 
-        Both arrays follow the output ownership of :meth:`layout`: three coefficients on
-        rank 0 and no entries on peers. Estimation applies the measurement noise weights.
-
         Args:
-            z_hat: this rank's predicted coefficients
-            z: this rank's measured coefficients, in the same order
+            z_hat: predicted coefficients in the order ``[a, b, c]``
+            z: measured coefficients in the same order
 
         Returns:
-            ``z - z_hat``
+            ``z - z_hat``; estimation applies measurement noise weights separately
         """
-        # Compare [a, b, c] component by component; estimation applies noise weighting later.
         return z - z_hat
