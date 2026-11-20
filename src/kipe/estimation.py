@@ -46,9 +46,11 @@ from kipe.forward_solver import (
 )
 from kipe.measurements.data import (
     Measurement,
+    format_noise,
     measurement_schedule,
     measurement_times,
     read_data,
+    select_noise_stddev,
     time_tolerance,
 )
 from kipe.measurements.operator import build_observation_operator
@@ -203,7 +205,12 @@ class Estimation:
         measurements = [("measurement", "fields", "times", "σ")]
         for m in self._measurements:
             times = f"{len(m.times)} ({m.times[0]:g} … {m.times[-1]:g})"
-            measurements.append((m.name, ", ".join(m.operator.fields), times, f"{m.stddev:g}"))
+            measurements.append((
+                m.name,
+                ", ".join(m.operator.fields),
+                times,
+                format_noise(m.stddev),
+            ))
         for line in format_table(measurements, "<<<>"):
             logger.info("  %s", line)
 
@@ -513,7 +520,17 @@ def _build_measurements(
         operator = build_observation_operator(name, options, solver, comm)
         selected = None if options.times is None else measurement_times(options.times)
         times, values = read_data(name, data_path(options, realization), operator, selected)
-        measurements.append(Measurement(name, operator, times, values, options.noise.stddev))
+        measurements.append(
+            Measurement(
+                name,
+                operator,
+                times,
+                values,
+                select_noise_stddev(
+                    options.noise.stddev, operator.size, operator.global_indices
+                ),
+            )
+        )
 
     return measurements
 

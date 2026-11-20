@@ -10,15 +10,26 @@ To add a model: subclass :class:`MeasurementModel`, implement both methods (and
 """
 
 from abc import ABC, abstractmethod
-from typing import assert_never
+from typing import ClassVar, assert_never
 
 from kipe._types import NDArray_f64, NDArray_i64
-from kipe.options import DifferenceModelOptions
+from kipe.options import (
+    DifferenceModelOptions,
+    MeasurementModelOptions,
+    PlaneModelOptions,
+)
 from kipe.sampling import SpatialSampler
 
 
 class MeasurementModel(ABC):
     """Turns sampled model fields into predicted data and compares them with the measurement."""
+
+    gather_input: ClassVar[bool] = False
+    """Request a complete globally ordered input and prediction on root only.
+
+    The observation operator handles MPI collection and output ownership for these models.
+    Other models retain the sampler's rank-local behavior.
+    """
 
     # NOTE: a measurement context (time-dependent geometry, auxiliary data such as the magnitude
     # or background phase of PC-MRI, connectivity of STL vertices) is expected soon.
@@ -33,8 +44,8 @@ class MeasurementModel(ABC):
                 :meth:`kipe.sampling.SpatialSampler.sample`
 
         Returns:
-            this rank's entries of the predicted data :math:`\hat{z}`, at the positions
-            :meth:`layout` gives
+            predicted entries :math:`\hat{z}`, at the positions :meth:`layout` gives;
+            globally gathered models return the complete output on root
         """
 
     @abstractmethod
@@ -55,9 +66,12 @@ class MeasurementModel(ABC):
         By default those of the sampler: a model that acts entry by entry, like
         :class:`DifferenceModel`, predicts one value per sampled entry, on the rank that holds
         it. A model that combines entries has its own, e.g., a plane fitted to sampled
-        points: three values, held by the rank that holds all of the points. As for the
+        vertices: three coefficients, held by rank 0 after gathering the coordinates. As for the
         sampler, each entry is held by exactly one rank, and the positions do not depend on
         the number of ranks.
+
+        For ``gather_input`` models, return the complete model output layout; the observation
+        operator assigns those entries to root and provides empty indices on other ranks.
 
         Args:
             sampler: the measurement's spatial sampler
@@ -98,7 +112,9 @@ class DifferenceModel(MeasurementModel):
         return z - z_hat
 
 
-def build_model(options: DifferenceModelOptions) -> MeasurementModel:
+def build_model(
+    options: MeasurementModelOptions,
+) -> MeasurementModel:
     """Construct the measurement model given by the ``model`` options of a measurement.
 
     Args:
@@ -110,5 +126,9 @@ def build_model(options: DifferenceModelOptions) -> MeasurementModel:
     match options:
         case DifferenceModelOptions():
             return DifferenceModel()
+        case PlaneModelOptions():
+            from kipe.measurements.plane import PlaneModel
+
+            return PlaneModel()
         case _:
             assert_never(options)

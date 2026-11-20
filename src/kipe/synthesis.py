@@ -42,9 +42,11 @@ from kipe.forward_solver import (
 )
 from kipe.measurements.data import (
     Measurement,
+    format_noise,
     measurement_schedule,
     measurement_times,
     read_data,
+    select_noise_stddev,
     time_tolerance,
     write_data,
 )
@@ -89,10 +91,14 @@ def synthesize(study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD) -> list[lis
         name: build_observation_operator(name, options, solver, comm)
         for name, options in study.measurements.items()
     }
+    # Validate both assumed and generated noise before reading checkpoints or running a solver.
+    noise = _noise(study)
+    for name, options in study.measurements.items():
+        select_noise_stddev(options.noise.stddev, operators[name].size)
+        select_noise_stddev(noise[name][0], operators[name].size)
 
     output = Path(study.output.path) / "synthesis"
     with recorded_run(output, study, _run_info(study), comm):
-        noise = _noise(study)
         _log_plan(study, noise)
         times, true_data = _truth(study, solver, operators)
 
@@ -114,7 +120,9 @@ def synthesize(study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD) -> list[lis
     return realizations
 
 
-def _log_plan(study: StudyOptions, noise: Mapping[str, tuple[float, int | None]]) -> None:
+def _log_plan(
+    study: StudyOptions, noise: Mapping[str, tuple[float | list[float], int | None]]
+) -> None:
     """Log what synthesis does: the solver, the truth, the realizations and the measurements.
 
     Args:
@@ -137,9 +145,9 @@ def _log_plan(study: StudyOptions, noise: Mapping[str, tuple[float, int | None]]
     for name, options in study.measurements.items():
         stddev, _ = noise[name]
         seed = "" if options.noise.seed is None else str(options.noise.seed)
-        sigma = f"{stddev:g}"
+        sigma = format_noise(stddev)
         if stddev != options.noise.stddev:
-            sigma += f" (assumes {options.noise.stddev:g})"
+            sigma += f" (assumes {format_noise(options.noise.stddev)})"
         rows.append((name, ", ".join(options.fields), sigma, seed))
     for line in format_table(rows, "<<>>"):
         logger.info("  %s", line)
@@ -297,7 +305,7 @@ def _realization(
     operators: Mapping[str, ObservationOperator],
     times: Mapping[str, NDArray_f64],
     true_data: Mapping[str, NDArray_f64],
-    noise: Mapping[str, tuple[float, int | None]],
+    noise: Mapping[str, tuple[float | list[float], int | None]],
 ) -> list[Measurement]:
     """Return the measurements of one noise realization.
 
@@ -319,7 +327,9 @@ def _realization(
             operators[name],
             times[name],
             _add_noise(true_data[name], operators[name], *noise[name], realization),
-            options.noise.stddev,
+            select_noise_stddev(
+                options.noise.stddev, operators[name].size, operators[name].global_indices
+            ),
         )
         for name, options in study.measurements.items()
     ]
@@ -421,7 +431,7 @@ def observe_checkpoints(
 def _add_noise(
     values: NDArray_f64,
     operator: ObservationOperator,
-    stddev: float,
+    stddev: float | list[float],
     seed: int | None,
     realization: int,
 ) -> NDArray_f64:
@@ -442,13 +452,14 @@ def _add_noise(
     Returns:
         the data, at the positions ``operator.global_indices``
     """
+    scale = select_noise_stddev(stddev, operator.size)
     if seed is None:
         return values.copy()
 
     noisy = np.empty_like(values)
     for k, z in enumerate(values):
         # the noise of all entries, the same on every rank; each keeps those it holds
-        noise = np.random.default_rng([seed, k, realization]).normal(0.0, stddev, operator.size)
+        noise = np.random.default_rng([seed, k, realization]).normal(0.0, scale, operator.size)
         noisy[k] = z + noise[operator.global_indices]
     return noisy
 
@@ -472,7 +483,7 @@ def _times(name: str, options: MeasurementOptions) -> NDArray_f64:
     return measurement_times(options.times)
 
 
-def _noise(study: StudyOptions) -> dict[str, tuple[float, int | None]]:
+def _noise(study: StudyOptions) -> dict[str, tuple[float | list[float], int | None]]:
     """Return the noise synthesis adds to each measurement's data: its standard deviation and
     seed.
 
@@ -493,8 +504,9 @@ def _noise(study: StudyOptions) -> dict[str, tuple[float, int | None]]:
     for name, options in study.measurements.items():
         synthesis = study.synthesis.noise.get(name)
         stddev = options.noise.stddev if synthesis is None else synthesis.stddev
-        if stddev > 0 and options.noise.seed is None:
+        has_noise = bool(np.any(np.asarray(stddev) > 0))
+        if has_noise and options.noise.seed is None:
             raise StudyFileError(f"measurements.{name}: synthesis needs a noise 'seed'")
-        noise[name] = (stddev, options.noise.seed if stddev > 0 else None)
+        noise[name] = (stddev, options.noise.seed if has_noise else None)
 
     return noise
