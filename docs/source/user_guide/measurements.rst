@@ -140,7 +140,8 @@ measured minus predicted values.
 ``plane``
 ^^^^^^^^^
 
-Fits a plane to sampled 3D vertices and predicts its three coefficients:
+Fits a plane to sampled 3D vertices by orthogonal least squares and predicts its three
+coefficients:
 
 .. math::
 
@@ -163,8 +164,8 @@ coordinates' length unit. To fit the vertices shared by two tagged surfaces:
           combine: intersection
         model: {type: plane}
 
-Select at least three noncollinear vertices. Vertical or nearly vertical planes are not
-supported.
+Select at least three noncollinear vertices that determine a unique best-fit plane.
+Vertical or nearly vertical planes are not supported.
 
 To specify a reference point for normal orientation, add the optional ``normal_toward``:
 
@@ -174,8 +175,9 @@ To specify a reference point for normal orientation, add the optional ``normal_t
       type: plane
       normal_toward: [0.012, -0.008, -0.045]
 
-Use coordinates in your mesh's coordinate system and units. Omit ``normal_toward`` when
-no reference point is available.
+Use coordinates in your mesh's coordinate system and units, with the point outside the
+first fitted plane. Omit ``normal_toward`` when no reference point is available. This option
+controls the normal's orientation; it does not change the predicted coefficients or innovation.
 
 For measured vertices, use the same fitting utility before writing the data file:
 
@@ -183,10 +185,12 @@ For measured vertices, use the same fitting utility before writing the data file
 
     import numpy as np
     from kipe.measurements.data import write_numpy
-    from kipe.measurements.plane import fit_plane
+    from kipe.measurements.plane import fit_from_coordinates
 
     # vertices_at_times: one (n_vertices, 3) array of measured coordinates per time
-    coefficients = np.vstack([fit_plane(vertices) for vertices in vertices_at_times])
+    coefficients = np.vstack([
+        fit_from_coordinates(vertices).coefficients for vertices in vertices_at_times
+    ])
     write_numpy("data/valve_plane.npz", times, coefficients)
 
 The file's ``values`` array has shape ``(n_times, 3)``. Set ``noise.stddev`` to a scalar or
@@ -205,6 +209,8 @@ order. The list must have one value per entry at each time. For a plane, the ord
     noise: {stddev: [0.01, 0.01, 0.001], seed: 0}
 
 Noise is independent between entries. The same values weight estimation and sensitivity.
+Each standard deviation uses its entry's units: dimensionless for ``a`` and ``b``, and the
+coordinates' length unit for ``c``. These values apply at every measurement time.
 See :doc:`synthetic_data` for how synthesis uses this value and can override it for generated
 data.
 
