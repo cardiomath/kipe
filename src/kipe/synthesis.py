@@ -439,13 +439,13 @@ def _add_noise(
 
     The noise at the k-th time of realization r is drawn from
     ``numpy.random.default_rng([seed, k, r])``, which is ``default_rng([seed, k])`` for r = 0:
-    NumPy's seed sequence ignores trailing zeros. None is drawn without a seed (standard
-    deviation 0).
+    NumPy's seed sequence ignores trailing zeros. Without a seed, return a copy of the
+    input data without adding noise.
 
     Args:
         values: this rank's entries of the true data, one row per time
         operator: the observation operator of the measurement
-        stddev: standard deviation of the added noise
+        stddev: scalar or per-entry standard deviations of the added noise
         seed: noise seed of the measurement, ``None`` for no noise
         realization: number of the noise realization
 

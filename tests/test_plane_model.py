@@ -15,7 +15,7 @@ from kipe.estimation import estimate
 from kipe.measurements.data import read_numpy
 from kipe.measurements.models import build_model
 from kipe.measurements.operator import ObservationOperator, build_observation_operator
-from kipe.measurements.plane import PlaneModel, fit_from_coordinates, fit_plane, orient_normal
+from kipe.measurements.plane import PlaneModel, fit_from_coordinates, orient_normal
 from kipe.options import (
     EstimationOptions,
     ForwardSolverOptions,
@@ -41,7 +41,7 @@ def _vertices(a=0.2, b=-0.3, c=1.1):
     return np.column_stack((xy, a * xy[:, 0] + b * xy[:, 1] + c))
 
 
-def test_fit_plane_exact_and_translated_vertices():
+def test_fit_from_coordinates_exact_and_translated_vertices():
     """Recover known coefficients, account for translations, and preserve input coordinates.
 
     Translating all points by (dx, dy, dz) must preserve both slopes and change the
@@ -50,18 +50,24 @@ def test_fit_plane_exact_and_translated_vertices():
     """
     vertices = _vertices()
     original = vertices.copy()
-    np.testing.assert_allclose(fit_plane(vertices), [0.2, -0.3, 1.1], atol=1e-14)
+    np.testing.assert_allclose(
+        fit_from_coordinates(vertices).coefficients, [0.2, -0.3, 1.1], atol=1e-14
+    )
     translation = np.array([0.4, -0.2, 0.7])
     expected_shift = translation[2] - 0.2 * translation[0] + 0.3 * translation[1]
     np.testing.assert_allclose(
-        fit_plane(vertices + translation), [0.2, -0.3, 1.1 + expected_shift], atol=1e-14
+        fit_from_coordinates(vertices + translation).coefficients,
+        [0.2, -0.3, 1.1 + expected_shift],
+        atol=1e-14,
     )
     np.testing.assert_array_equal(vertices, original)
     # Exactly three noncollinear vertices also define a plane.
-    np.testing.assert_allclose(fit_plane(vertices[:3]), [0.2, -0.3, 1.1], atol=1e-14)
+    np.testing.assert_allclose(
+        fit_from_coordinates(vertices[:3]).coefficients, [0.2, -0.3, 1.1], atol=1e-14
+    )
 
 
-def test_fit_plane_orthogonal_distances_and_vertex_order():
+def test_fit_from_coordinates_orthogonal_distances_and_vertex_order():
     """Recover the orthogonal best-fit plane despite symmetric off-plane perturbations.
 
     Equal displacements to either side along the normal preserve the expected plane.
@@ -71,8 +77,14 @@ def test_fit_plane_orthogonal_distances_and_vertex_order():
     normal = np.array([-0.2, 0.3, 1.0])
     normal /= np.linalg.norm(normal)
     perturbed = np.vstack((vertices + 0.01 * normal, vertices - 0.01 * normal))
-    np.testing.assert_allclose(fit_plane(perturbed), [0.2, -0.3, 1.1], atol=1e-14)
-    np.testing.assert_allclose(fit_plane(perturbed[::-1]), fit_plane(perturbed), atol=1e-14)
+    np.testing.assert_allclose(
+        fit_from_coordinates(perturbed).coefficients, [0.2, -0.3, 1.1], atol=1e-14
+    )
+    np.testing.assert_allclose(
+        fit_from_coordinates(perturbed[::-1]).coefficients,
+        fit_from_coordinates(perturbed).coefficients,
+        atol=1e-14,
+    )
 
 
 def test_normal_toward_opposite_sides_and_translated_mesh():
@@ -112,7 +124,9 @@ def test_normals_consistent_across_times_and_evaluation_order(target):
         )
         np.testing.assert_allclose(actual.normal, expected[i].normal, atol=1e-14)
         assert np.dot(actual.normal, expected[0].normal) > 0
-        np.testing.assert_allclose(actual.coefficients, fit_plane(frames[i]), atol=1e-14)
+        np.testing.assert_allclose(
+            actual.coefficients, fit_from_coordinates(frames[i]).coefficients, atol=1e-14
+        )
 
 
 def test_orientation_helper_uses_first_normal_not_previous_or_target():
@@ -189,31 +203,69 @@ def test_oriented_model_distributed_and_collective_failure(target):
         model=PlaneModelOptions(normal_toward=target),
     )
     operator = build_observation_operator("plane", options, _AnalyticSolver(), comm)
-    assert operator.normal is None
+    model = operator.model
+    assert isinstance(model, PlaneModel)
+    assert model.normal is None
     predicted = operator({"vertices": _vertices().ravel()})
     expected = np.array([0.2, -0.3, 1.1])[operator.global_indices]
     np.testing.assert_allclose(predicted, expected, atol=1e-14)
     if comm.rank == 0:
-        normal = operator.normal
+        normal = model.normal
         assert normal is not None
         if target is not None:
             assert normal[2] < 0
         first = normal.copy()
         normal[:] = 0  # callers cannot mutate the stored reference through this property
-        assert np.linalg.norm(operator.normal) == pytest.approx(1)
+        assert np.linalg.norm(model.normal) == pytest.approx(1)
     else:
-        assert operator.normal is None
+        assert model.normal is None
     # Later planes can pass through the target: only the first fit uses it.
     operator({"vertices": _vertices(c=-5).ravel()})
     if comm.rank == 0:
-        np.testing.assert_allclose(operator.normal, first)
+        np.testing.assert_allclose(model.normal, first)
     invalid = np.full(12, np.nan)
     with pytest.raises(ValueError, match="finite"):
         operator({"vertices": invalid})
-    assert operator.normal is None
+    assert model.normal is None
     operator({"vertices": _vertices(c=-6).ravel()})
     if comm.rank == 0:
-        np.testing.assert_allclose(operator.normal, first)
+        np.testing.assert_allclose(model.normal, first)
+    # An input-layout error happens before model.predict; the generic lifecycle hook must
+    # still clear the latest normal, while preserving the reference used after recovery.
+    local = operator.sampler.sample({"vertices": _vertices(c=-6).ravel()})
+    if comm.rank == 0:
+        local = local[:-1]
+    with pytest.raises(ValueError, match="sampler layout"):
+        operator.predict(local)
+    assert model.normal is None
+    operator({"vertices": _vertices(c=-7).ravel()})
+    if comm.rank == 0:
+        np.testing.assert_allclose(model.normal, first)
+
+
+def test_plane_factory_keeps_orientation_independent_between_models():
+    """Every model gets independent orientation history, including when no point is supplied."""
+    first = build_model(PlaneModelOptions(normal_toward=(0, 0, -5)))
+    second = build_model(PlaneModelOptions(normal_toward=(0, 0, 5)))
+    without_point = build_model(PlaneModelOptions())
+    assert isinstance(first, PlaneModel)
+    assert isinstance(second, PlaneModel)
+    assert isinstance(without_point, PlaneModel)
+    assert first.orientation is not second.orientation
+    assert first.orientation is not without_point.orientation
+    first.predict(_vertices().ravel())
+    original = first.normal
+    assert original is not None and original[2] < 0
+    assert second.normal is None
+    assert without_point.normal is None
+    second.predict(_vertices().ravel())
+    np.testing.assert_allclose(second.normal, -original)
+    np.testing.assert_allclose(first.normal, original)
+    first.clear_prediction()
+    assert first.normal is None
+    assert second.normal is not None
+    first.predict(_vertices(c=-6).ravel())
+    np.testing.assert_allclose(first.normal, original)
 
 
 @pytest.mark.parametrize(
@@ -232,10 +284,10 @@ def test_oriented_model_distributed_and_collective_failure(target):
         (np.array([[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]]), "unique"),
     ],
 )
-def test_fit_plane_rejects_invalid_vertices(vertices, message):
+def test_fit_from_coordinates_rejects_invalid_vertices(vertices, message):
     """Reject invalid shapes, nonfinite points, degenerate fits and vertical planes."""
     with pytest.raises(ValueError, match=message):
-        fit_plane(vertices)
+        fit_from_coordinates(vertices)
 
 
 class _VertexSampler(SpatialSampler):

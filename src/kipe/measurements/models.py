@@ -3,10 +3,6 @@ r"""Measurement models: from the sampled fields to predicted data, and their com
 A :class:`MeasurementModel` predicts the measured data from the sampled state,
 :math:`\hat{z} = M(y)`, and compares them with the measured data, giving the innovation
 :math:`\Gamma(z, \hat{z})`. Models act on arrays only, so they are the same for every backend.
-
-To add a model: subclass :class:`MeasurementModel`, implement both methods (and
-:meth:`~MeasurementModel.layout` if the model combines entries), add its options to
-:mod:`kipe.options` and a ``case`` to :func:`build_model`.
 """
 
 from abc import ABC, abstractmethod
@@ -27,9 +23,16 @@ class MeasurementModel(ABC):
     gather_input: ClassVar[bool] = False
     """Request a complete globally ordered input and prediction on root only.
 
-    The observation operator handles MPI collection and output ownership for these models.
-    Other models retain the sampler's rank-local behavior.
+    False selects rank-local input and prediction.
     """
+
+    def clear_prediction(self) -> None:
+        """Leave prediction state unchanged.
+
+        This default implementation does nothing. Overrides must clear only transient
+        prediction results, retain persistent history and perform no MPI collectives.
+        """
+        return None
 
     # NOTE: a measurement context (time-dependent geometry, auxiliary data such as the magnitude
     # or background phase of PC-MRI, connectivity of STL vertices) is expected soon.
@@ -40,8 +43,7 @@ class MeasurementModel(ABC):
         r"""Predict the measured data from the sampled state, :math:`\hat{z} = M(y)`.
 
         Args:
-            y: sampled state :math:`y`, as returned by
-                :meth:`kipe.sampling.SpatialSampler.sample`
+            y: sampled state :math:`y`
 
         Returns:
             predicted entries :math:`\hat{z}`, at the positions :meth:`layout` gives;
@@ -63,15 +65,7 @@ class MeasurementModel(ABC):
     def layout(self, sampler: SpatialSampler) -> tuple[int, NDArray_i64]:
         """Return the size of the predicted data, and the positions of this rank's entries.
 
-        By default those of the sampler: a model that acts entry by entry, like
-        :class:`DifferenceModel`, predicts one value per sampled entry, on the rank that holds
-        it. A model that combines entries has its own, e.g., a plane fitted to sampled
-        vertices: three coefficients, held by rank 0 after gathering the coordinates. As for the
-        sampler, each entry is held by exactly one rank, and the positions do not depend on
-        the number of ranks.
-
-        For ``gather_input`` models, return the complete model output layout; the observation
-        operator assigns those entries to root and provides empty indices on other ranks.
+        Return the sampler's global size and this rank's sampled-entry indices unchanged.
 
         Args:
             sampler: the measurement's spatial sampler
@@ -127,8 +121,10 @@ def build_model(
         case DifferenceModelOptions():
             return DifferenceModel()
         case PlaneModelOptions():
-            from kipe.measurements.plane import PlaneModel
+            from kipe.measurements.plane import PlaneModel, PlaneOrientation
 
-            return PlaneModel()
+            model = PlaneModel()
+            model.orientation = PlaneOrientation(options.normal_toward)
+            return model
         case _:
             assert_never(options)

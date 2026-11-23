@@ -55,8 +55,7 @@ class SpatialSampler(ABC):
         once. Local ordering is unrestricted. These indices refer to sampled entries,
         not to mesh nodes or ghost DOFs. Validation does not reorder or mutate them.
 
-        The factory calls this once at construction. Global indices are collected on root
-        only for this check; no global layout copy is retained by the sampler.
+        Collect global indices on root for this check without retaining a global copy.
 
         Args:
             comm: communicator over which the sampler distributes its entries

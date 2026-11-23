@@ -13,36 +13,8 @@ import numpy as np
 from kipe._types import NDArray_f64, NDArray_i64
 from kipe.forward_solver import ForwardSolver, State
 from kipe.measurements.models import MeasurementModel, build_model
-from kipe.measurements.plane import Plane, PlaneModel, orient_normal
-from kipe.options import MeasurementOptions, PlaneModelOptions, StudyFileError
+from kipe.options import MeasurementOptions, StudyFileError
 from kipe.sampling import SpatialSampler, build_sampler
-
-
-@dataclass
-class _PlaneOrientation:
-    """Retain the first normal and latest oriented normal for one observation operator."""
-
-    toward: tuple[float, float, float] | None = None
-    reference: NDArray_f64 | None = field(default=None, init=False)
-    latest: NDArray_f64 | None = field(default=None, init=False)
-
-    def record(self, plane: Plane) -> None:
-        """Observe a fitted plane without changing its measurement coefficients.
-
-        Args:
-            plane: fitted geometry, before orientation relative to this operator's history
-
-        Raises:
-            ValueError: if the reference point or normal does not determine an orientation
-        """
-        self.latest = orient_normal(
-            plane.normal,
-            plane.centroid,
-            normal_toward=self.toward,
-            reference_normal=self.reference,
-        )
-        if self.reference is None:
-            self.reference = self.latest.copy()
 
 
 @dataclass(frozen=True)
@@ -66,7 +38,6 @@ class ObservationOperator:
     comm: MPI.Comm = field(default_factory=lambda: MPI.COMM_WORLD, repr=False, compare=False)
     """Communicator used to assemble global inputs when the model requests them."""
 
-    _orientation: _PlaneOrientation | None = field(default=None, repr=False, compare=False)
     _input_indices: list[NDArray_i64] | None = field(
         default=None, init=False, repr=False, compare=False
     )
@@ -77,18 +48,6 @@ class ObservationOperator:
             return
         indices = self.comm.gather(self.sampler.global_indices.copy(), root=0)
         object.__setattr__(self, "_input_indices", indices)
-
-    @property
-    def normal(self) -> NDArray_f64 | None:
-        """Copy of the latest plane normal on root, or None before prediction or after failure.
-
-        The first normal is retained separately across failed predictions. Non-plane
-        operators and non-root ranks return None. A new operator establishes a new reference.
-        """
-        if self.comm.rank != 0:
-            return None
-        normal = None if self._orientation is None else self._orientation.latest
-        return None if normal is None else normal.copy()
 
     @property
     def size(self) -> int:
@@ -130,12 +89,15 @@ class ObservationOperator:
 
         Raises:
             ValueError: on every rank for an invalid gathered input, model prediction,
-                orientation reference or output shape
+                model-specific state or output shape
         """
+        self.model.clear_prediction()
         if not self.model.gather_input:
-            return self.model.predict(y)
-        if self._orientation is not None:
-            self._orientation.latest = None
+            try:
+                return self.model.predict(y)
+            except ValueError:
+                self.model.clear_prediction()
+                raise
         parts = self.comm.gather(y, root=0)
         predicted = np.empty(0, dtype=np.float64)
         error = None
@@ -152,8 +114,7 @@ class ObservationOperator:
                     raise ValueError("predicted entries do not match the model output layout")
             except ValueError as err:
                 error = str(err)
-                if self._orientation is not None:
-                    self._orientation.latest = None
+                self.model.clear_prediction()
         error = self.comm.bcast(error, root=0)
         if error is not None:
             raise ValueError(error)
@@ -192,17 +153,11 @@ def build_observation_operator(
     try:
         sampler = build_sampler(options.spatial_sampling, options.fields, solver, comm)
         model = build_model(options.model)
-        orientation = None
-        if isinstance(options.model, PlaneModelOptions):
-            assert isinstance(model, PlaneModel)
-            orientation = _PlaneOrientation(options.model.normal_toward)
-            model.on_fit = orientation.record
         return ObservationOperator(
             fields=options.fields,
             sampler=sampler,
             model=model,
             comm=comm,
-            _orientation=orientation,
         )
     except StudyFileError as err:
         raise StudyFileError(f"measurements.{name}: {err}") from err

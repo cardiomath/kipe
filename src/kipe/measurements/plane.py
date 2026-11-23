@@ -1,16 +1,14 @@
 """Fit sampled 3D coordinates to ``z = a*x + b*y + c`` for the ``plane`` measurement model.
 
 :func:`fit_from_coordinates` performs an orthogonal least-squares fit using SVD;
-:func:`orient_normal` selects the sign of its unit normal. :func:`fit_plane` returns only
-the coefficients and can also prepare measurement data from externally measured points.
+:func:`orient_normal` selects the sign of its unit normal.
 These utilities use NumPy arrays and do not require a finite element backend.
 
 :class:`PlaneModel` fits complete coordinate arrays and compares coefficients by subtraction.
-The observation operator handles distributed input and optional orientation tracking.
+Orientation tracking belongs to the plane model and is independent of coefficient values.
 """
 
-from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import ClassVar
 
 import numpy as np
@@ -49,15 +47,14 @@ def orient_normal(
 
     With ``reference_normal``, choose the sign giving a positive dot product with that
     reference. Otherwise, if ``normal_toward`` is supplied, choose the side containing that
-    point. With neither option, keep the fitted sign. This function stores no history:
-    callers retain the first oriented normal and pass it as the reference for later fits.
+    point. With neither option, keep the fitted sign. No orientation history is stored.
 
     Args:
         normal: fitted unit normal, shape ``(3,)``
         centroid: fitted plane's centroid, shape ``(3,)``
         normal_toward: optional point in the same coordinates and units as the centroid
         reference_normal: finite nonzero normal, shape ``(3,)``; takes precedence over
-            the point, which is then ignored. Use the first fit's normal for a fixed reference.
+            the point, which is then ignored
 
     Returns:
         a copy of ``normal``, multiplied by -1 if required; its magnitude is unchanged
@@ -100,24 +97,6 @@ def orient_normal(
     return oriented
 
 
-def fit_plane(vertices: NDArray_f64) -> NDArray_f64:
-    """Fit a plane to 3D vertices and return only its measurement coefficients.
-
-    Args:
-        vertices: finite coordinates, shape ``(n_vertices, 3)``; at least three
-            noncollinear vertices
-
-    Returns:
-        ``[a, b, c]`` for ``z = a*x + b*y + c``, shape ``(3,)``. The slopes are
-        dimensionless; c uses the coordinates' length unit.
-
-    Raises:
-        ValueError: if the vertices do not define a unique supported plane; see
-            :func:`fit_from_coordinates` for the geometric restrictions
-    """
-    return fit_from_coordinates(vertices).coefficients
-
-
 def fit_from_coordinates(
     vertices: NDArray_f64,
     *,
@@ -134,14 +113,13 @@ def fit_from_coordinates(
     Args:
         vertices: finite 3D coordinates, shape ``(n_vertices, 3)``; at least three
             noncollinear vertices
-        normal_toward: optional point on the desired side of the first plane, in the same
+        normal_toward: optional point on the desired side of the fitted plane, in the same
             coordinates and units as the vertices; must not lie on the fitted plane
-        reference_normal: first oriented normal; aligns later fits and overrides the point.
-            The caller must retain it: this fitting utility has no internal history.
+        reference_normal: normal with which to align the fitted normal; overrides the point
 
     Returns:
         coefficients ``[a, b, c]``, centroid and unit normal. Without a reference or point,
-        the normal retains the SVD sign. Pass the first fit's normal to align later fits.
+        the normal retains the SVD sign.
 
     Raises:
         ValueError: if the coordinates have the wrong shape, are nonfinite or collinear,
@@ -189,33 +167,83 @@ def fit_from_coordinates(
     return Plane(coefficients, normal, centroid)
 
 
+@dataclass
+class PlaneOrientation:
+    """Orientation history for one plane model, independent of other model instances.
+
+    Args:
+        toward: optional reference point used only to orient the first fitted normal
+    """
+
+    toward: tuple[float, float, float] | None = None
+    reference: NDArray_f64 | None = field(default=None, init=False)
+    latest: NDArray_f64 | None = field(default=None, init=False)
+
+    def record(self, plane: Plane) -> None:
+        """Store the oriented normal and retain the first normal as the reference.
+
+        Use the optional point only when establishing the reference. Later normals align
+        with that reference. The supplied plane is unchanged.
+
+        Args:
+            plane: fitted geometry, before applying this history's orientation reference
+
+        Raises:
+            ValueError: if the reference point or first normal cannot determine an orientation
+        """
+        self.latest = orient_normal(
+            plane.normal,
+            plane.centroid,
+            normal_toward=self.toward,
+            reference_normal=self.reference,
+        )
+        if self.reference is None:
+            self.reference = self.latest.copy()
+
+
 class PlaneModel(MeasurementModel):
     """Predict three plane coefficients from a complete array of sampled coordinates.
 
-    This model has no MPI or sampler state. The observation operator assembles the global
-    input, calls prediction on root, and assigns the three output entries to that rank.
-
-    An optional ``on_fit`` observer can consume the fitted geometry. The observation
-    operator uses it to track orientation separately from coefficient prediction.
+    The first successful fit establishes an orientation reference, optionally directed
+    toward a point. Subsequent normals align with that first normal. Orientation does not
+    change the coefficients used for prediction or innovation.
     """
 
     gather_input: ClassVar[bool] = True
-    on_fit: Callable[[Plane], None] | None = None
-    """Optional observer of fitted geometry; orientation state belongs to its owner."""
+    orientation: PlaneOrientation | None = None
+    """Optional reference and latest oriented normal."""
+
+    @property
+    def normal(self) -> NDArray_f64 | None:
+        """Copy of the latest oriented normal, or None before prediction or after failure.
+
+        None is also returned when orientation tracking is not configured. The first
+        reference is not modified through this copy.
+        """
+        normal = None if self.orientation is None else self.orientation.latest
+        return None if normal is None else normal.copy()
+
+    def clear_prediction(self) -> None:
+        """Clear the latest normal without discarding the first orientation reference."""
+        if self.orientation is not None:
+            self.orientation.latest = None
 
     def layout(self, sampler: SpatialSampler) -> tuple[int, NDArray_i64]:
-        """Return the complete model output layout before the operator assigns ownership.
+        """Return size 3 and indices ``[0, 1, 2]``, independently of the sampler.
 
         Args:
             sampler: accepted for the model interface; the output always has three entries
 
         Returns:
-            size 3 and indices ``[0, 1, 2]``; the operator gives empty indices to non-root ranks
+            size 3 and indices ``[0, 1, 2]``
         """
         return 3, np.arange(3, dtype=np.int64)
 
     def predict(self, y: NDArray_f64) -> NDArray_f64:
         """Fit the complete coordinate array and return ``[a, b, c]``.
+
+        Clear the latest normal before fitting and record the fitted normal when
+        orientation tracking is configured.
 
         Args:
             y: flattened coordinates in vertex order, ``x0, y0, z0, x1, y1, z1, ...``
@@ -225,11 +253,12 @@ class PlaneModel(MeasurementModel):
 
         Raises:
             ValueError: if the input cannot be reshaped to 3D points, cannot define a
-                supported plane, or the optional geometry observer rejects the orientation
+                supported plane, or the orientation reference is ambiguous
         """
+        self.clear_prediction()
         plane = fit_from_coordinates(y.reshape(-1, 3))
-        if self.on_fit is not None:
-            self.on_fit(plane)
+        if self.orientation is not None:
+            self.orientation.record(plane)
         return plane.coefficients
 
     def innovation(self, z_hat: NDArray_f64, z: NDArray_f64) -> NDArray_f64:
@@ -240,6 +269,6 @@ class PlaneModel(MeasurementModel):
             z: measured coefficients in the same order
 
         Returns:
-            ``z - z_hat``; estimation applies measurement noise weights separately
+            ``z - z_hat``
         """
         return z - z_hat
