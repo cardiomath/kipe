@@ -275,6 +275,10 @@ class _Reference:
 
         kind = node.get("type")
         if kind == "array":
+            if "prefixItems" in node:
+                # Fixed tuples describe each position, rather than a shared items schema.
+                entries = ", ".join(self._type(item) for item in node["prefixItems"])
+                return f"[{entries}]" + self._bounds(node)
             items = self._type(node["items"])
             items = _PLURALS.get(items, items.replace("list of", "lists of", 1))
             return f"list of {items}" + self._bounds(node)

@@ -4,9 +4,11 @@ It combines the spatial sampler :math:`S` (:mod:`kipe.sampling`) and the measure
 :math:`M` (:mod:`kipe.measurements.models`): it takes a model state to predicted data.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from mpi4py import MPI
+
+import numpy as np
 
 from kipe._types import NDArray_f64, NDArray_i64
 from kipe.forward_solver import ForwardSolver, State
@@ -33,6 +35,20 @@ class ObservationOperator:
     model: MeasurementModel
     """The measurement model :math:`M`."""
 
+    comm: MPI.Comm = field(default_factory=lambda: MPI.COMM_WORLD, repr=False, compare=False)
+    """Communicator used to assemble global inputs when the model requests them."""
+
+    _input_indices: list[NDArray_i64] | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
+
+    def __post_init__(self) -> None:
+        """Cache the sampler's validated positions for models needing complete input."""
+        if not self.model.gather_input:
+            return
+        indices = self.comm.gather(self.sampler.global_indices.copy(), root=0)
+        object.__setattr__(self, "_input_indices", indices)
+
     @property
     def size(self) -> int:
         """Number of entries of the predicted data, over all ranks, as the model lays them out
@@ -45,6 +61,8 @@ class ObservationOperator:
         """Positions of this rank's entries in the measurement's data, as the model lays them
         out (:meth:`~kipe.measurements.models.MeasurementModel.layout`).
         """
+        if self.model.gather_input and self.comm.rank != 0:
+            return np.empty(0, dtype=np.int64)
         return self.model.layout(self.sampler)[1]
 
     def __call__(self, state: State) -> NDArray_f64:
@@ -56,9 +74,52 @@ class ObservationOperator:
         Returns:
             this rank's entries of the predicted data, at the positions :attr:`global_indices`
         """
+        self.model.clear_prediction()
         y = self.sampler.sample({name: state[name] for name in self.fields})
 
-        return self.model.predict(y)
+        return self.predict(y)
+
+    def predict(self, y: NDArray_f64) -> NDArray_f64:
+        """Apply the model, assembling global input and distributing failures if requested.
+
+        Args:
+            y: this rank's sampled entries in the sampler's local global-index order
+
+        Returns:
+            this rank's predicted entries; gathered models produce data only on root
+
+        Raises:
+            ValueError: on every rank for an invalid gathered input, model prediction,
+                model-specific state or output shape
+        """
+        self.model.clear_prediction()
+        if not self.model.gather_input:
+            try:
+                return self.model.predict(y)
+            except ValueError:
+                self.model.clear_prediction()
+                raise
+        parts = self.comm.gather(y, root=0)
+        predicted = np.empty(0, dtype=np.float64)
+        error = None
+        if self.comm.rank == 0:
+            assert parts is not None and self._input_indices is not None
+            try:
+                coordinates = np.empty(self.sampler.size, dtype=np.float64)
+                for indices, values in zip(self._input_indices, parts, strict=True):
+                    if values.ndim != 1 or len(values) != len(indices):
+                        raise ValueError("sampled entries do not match the sampler layout")
+                    coordinates[indices] = values
+                predicted = self.model.predict(coordinates)
+                if predicted.shape != (self.size,):
+                    raise ValueError("predicted entries do not match the model output layout")
+            except ValueError as err:
+                error = str(err)
+                self.model.clear_prediction()
+        error = self.comm.bcast(error, root=0)
+        if error is not None:
+            raise ValueError(error)
+        return predicted
 
 
 def build_observation_operator(
@@ -92,9 +153,12 @@ def build_observation_operator(
 
     try:
         sampler = build_sampler(options.spatial_sampling, options.fields, solver, comm)
+        model = build_model(options.model)
+        return ObservationOperator(
+            fields=options.fields,
+            sampler=sampler,
+            model=model,
+            comm=comm,
+        )
     except StudyFileError as err:
         raise StudyFileError(f"measurements.{name}: {err}") from err
-
-    return ObservationOperator(
-        fields=options.fields, sampler=sampler, model=build_model(options.model)
-    )

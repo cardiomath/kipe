@@ -67,6 +67,20 @@ def linear(monkeypatch):
     monkeypatch.setitem(sys.modules, "linear_solver", module)  # removed after the test
 
 
+def test_component_noise_weights_rows_at_every_time(tmp_path):
+    study = _study(tmp_path)
+    study.measurements["y"] = replace(
+        study.measurements["y"], noise=NoiseOptions(stddev=[0.2, 0.7])
+    )
+    parameters = sensitivity._nominal_parameterization(
+        study, _LinearSolver().nominal_parameters()
+    )
+    jacobian = np.array([[t, 1] if j == 0 else [2, -t] for t in TIMES for j in range(2)])
+    result = sensitivity._sensitivity(study, parameters, {"y": jacobian})
+    weighted = jacobian / np.tile([0.2, 0.7], len(TIMES))[:, None]
+    np.testing.assert_allclose(result.fim, weighted.T @ weighted)
+
+
 def _study(
     tmp_path: Path,
     step: float = 0.1,

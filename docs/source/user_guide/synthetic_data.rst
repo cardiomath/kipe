@@ -36,6 +36,17 @@ assumes the measurement's noise:
       noise:
         u: {stddev: 0}
 
+``stddev`` accepts a scalar or a list in the data's column order, for example
+``{stddev: [0.01, 0.01, 0.001]}`` for plane coefficients ``[a, b, c]``. Zeros are allowed
+in synthesis overrides; the measurement's assumed standard deviations must stay positive.
+Lists must contain one value per data column, in that column's units, and apply at every
+measurement time. Noise is drawn independently for each entry.
+
+With the ``plane`` measurement model, synthesis fits the sampled vertices first and then
+adds noise to the three coefficients ``[a, b, c]``. It does not perturb the vertex
+coordinates. The measurement data therefore have three values per time, independently of
+the number of sampled vertices. See :doc:`measurements` for the equation and data format.
+
 Multiple noise realizations
 ---------------------------
 
