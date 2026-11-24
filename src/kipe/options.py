@@ -209,14 +209,54 @@ class DifferenceModelOptions:
 
 
 @dataclass(frozen=True, config=_CONFIG)
+class PlaneModelOptions:
+    """Fit ``z = a*x + b*y + c`` to sampled 3D vertices by orthogonal least squares.
+
+    The sampler must return flattened vertex coordinates, with x, y and z together for each
+    vertex. Predicted and measured data are the three coefficients, ordered ``[a, b, c]``.
+    The innovation is measured minus predicted coefficients.
+    """
+
+    type: Literal["plane"] = "plane"
+    """Kind of measurement model."""
+
+    normal_toward: (
+        tuple[
+            Annotated[float, Field(allow_inf_nan=False)],
+            Annotated[float, Field(allow_inf_nan=False)],
+            Annotated[float, Field(allow_inf_nan=False)],
+        ]
+        | None
+    ) = None
+    """Optional reference point toward which the first fitted normal is oriented.
+
+    Coordinates use the mesh's coordinate system and units. The point must lie off the
+    first plane. Later normals align with the first normal, whether or not a point was
+    provided. This affects the exposed normal, not the predicted ``[a, b, c]``.
+    """
+
+
+type MeasurementModelOptions = Annotated[
+    DifferenceModelOptions | PlaneModelOptions, Field(discriminator="type")
+]
+
+
+@dataclass(frozen=True, config=_CONFIG)
 class NoiseOptions:
     """Measurement noise: assumed by ``estimation``, added by ``synthesis``.
 
     ``synthesis.noise`` can set another noise for synthesis to add, e.g., none.
     """
 
-    stddev: PositiveFloat
-    """Standard deviation of the noise, in the unit of the data."""
+    stddev: (
+        Annotated[float, Field(gt=0, allow_inf_nan=False)]
+        | Annotated[
+            list[Annotated[float, Field(gt=0, allow_inf_nan=False)]], Field(min_length=1)
+        ]
+    )
+    """Independent noise standard deviations: one scalar for all data entries, or a list
+    with one positive value per entry, in the data's global order and units.
+    """
 
     seed: Annotated[int, Field(ge=0)] | None = None
     """Seed of the noise added by ``synthesis`` (required there, unless it adds none, see
@@ -355,7 +395,7 @@ class MeasurementOptions:
     """How the observed fields are brought to the measurement locations; the kind is selected
     by ``type``, ``array`` by default."""
 
-    model: DifferenceModelOptions = field(default_factory=DifferenceModelOptions)
+    model: MeasurementModelOptions = field(default_factory=DifferenceModelOptions)
     """How predicted data are computed from the sampled fields and compared with the data."""
 
 
@@ -416,8 +456,13 @@ type TruthOptions = Annotated[
 class SynthesisNoiseOptions:
     """Noise that synthesis adds to the data of a measurement."""
 
-    stddev: Annotated[float, Field(ge=0)]
-    """Standard deviation of the noise, in the unit of the data; 0 for noise-free data."""
+    stddev: (
+        Annotated[float, Field(ge=0, allow_inf_nan=False)]
+        | Annotated[
+            list[Annotated[float, Field(ge=0, allow_inf_nan=False)]], Field(min_length=1)
+        ]
+    )
+    """Added independent noise: a scalar or one value per data entry; 0 means noise-free."""
 
 
 @dataclass(frozen=True, config=_CONFIG)

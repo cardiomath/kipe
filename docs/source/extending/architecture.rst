@@ -106,8 +106,7 @@ result enters the filter.
        data[/"measured data z"/] --> innovation
        innovation -- "innovation Γ(z, ẑ)" --> filter["ROUKF correction<br/>kipe.roukf"]
 
-Synthesis and estimation use the same operator, so the model that generates synthetic data
-is the one that inverts them; a sensitivity analysis would use it too.
+Synthesis, estimation and sensitivity analysis use the same observation operator.
 
 **Why two parts.** Samplers depend on the discretization, models on the acquisition physics
 (e.g., the phase of an MRI signal, a Fourier transform, a mask). Models act on arrays only,
@@ -128,10 +127,12 @@ of ranks, each group with its own communicator.
 
 **Each entry on one rank.** A sampler knows the size of the sampled vector over all ranks
 and, on each rank, the ``global_indices`` of the entries that rank returns. The measurement
-model does the same for the predicted data
-(:meth:`~kipe.measurements.models.MeasurementModel.layout`): by default, the sampler's. Every
-entry is returned by exactly one rank. The filter's reductions (sums over entries) are then
-plain ``allreduce`` operations, with nothing counted twice.
+model defines the predicted data layout
+(:meth:`~kipe.measurements.models.MeasurementModel.layout`): by default, the sampler's.
+For a model with ``gather_input = True``, the layout describes the complete output; the
+observation operator assigns it to rank 0 and returns empty indices on other ranks. Every
+predicted entry is returned by exactly one rank. The filter's reductions (sums over entries)
+are then plain ``allreduce`` operations, with nothing counted twice.
 
 **Data independent of the rank count.** Measurement data are stored in the order of the global
 indices of the model's layout, by default those the sampler defines independently of the
@@ -166,15 +167,31 @@ and ``global_indices`` and implements
 :meth:`~kipe.sampling.SpatialSampler.sample`, which takes the observed fields (rank-local
 arrays) and returns this rank's sampled entries. It may take what it needs from the solver at
 construction, e.g., function spaces and facet tags, through a backend capability.
+The common ``build_sampler`` factory calls ``validate_layout(comm)`` before returning:
+all ranks must agree on the global size, and integer indices must cover each sampled entry
+exactly once. Samplers constructed directly should call this method collectively before
+use. Validation is done during setup, rather than on each prediction.
 
 **A measurement model** implements :meth:`~kipe.measurements.models.MeasurementModel.predict`
-and :meth:`~kipe.measurements.models.MeasurementModel.innovation`. It sees this rank's entries
-as arrays. A model that acts entry by entry predicts one value per sampled entry and keeps
-the sampler's layout. A model that combines entries, e.g., a plane fitted to sampled points,
+and :meth:`~kipe.measurements.models.MeasurementModel.innovation`. By default, it receives
+this rank's sampled entries as arrays. A model that acts entry by entry predicts one value
+per sampled entry and keeps the sampler's layout. A model that combines entries, e.g., a
+plane fitted to sampled points,
 overrides :meth:`~kipe.measurements.models.MeasurementModel.layout` with the size and
-positions of its own data. Without a communicator, it needs all of its input on one rank, as
-a sampler that gathers its entries on rank 0 provides. A model that combines entries spread
-over the ranks would also need the communicator; none does so far.
+positions of its own data. A model requiring the complete input sets ``gather_input = True``.
+For these models, ``layout`` returns the complete output size and indices.
+The observation operator caches global sample positions, gathers values in their global
+order, and calls the model on rank 0. It assigns that model's output entries only to root
+and broadcasts prediction ``ValueError`` exceptions before any rank returns.
+The :class:`~kipe.measurements.plane.PlaneModel` has no explicit constructor, sampler or
+communicator: it fits a complete coordinate array and returns three coefficients.
+Optional orientation history belongs to a ``PlaneOrientation`` helper in ``plane.py``,
+configured separately for each plane model by ``build_model``. The operator has no
+plane-specific imports, fields or properties. Stateful models can implement the rank-local
+``clear_prediction`` hook to discard transient output before evaluation or after a failure,
+without losing persistent history. The fitting utility
+:func:`~kipe.measurements.plane.fit_from_coordinates` works without MPI communication and
+returns coefficients, centroid and normal for preprocessing measured vertices.
 
 **A data format** is read where the data are read
 (:func:`kipe.estimation.estimate` and :func:`kipe.synthesis.synthesize`, through
