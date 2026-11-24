@@ -74,6 +74,7 @@ class ObservationOperator:
         Returns:
             this rank's entries of the predicted data, at the positions :attr:`global_indices`
         """
+        self.model.clear_prediction()
         y = self.sampler.sample({name: state[name] for name in self.fields})
 
         return self.predict(y)

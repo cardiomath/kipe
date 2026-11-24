@@ -303,6 +303,27 @@ class _VertexSampler(SpatialSampler):
         return fields["vertices"][self.global_indices].copy()
 
 
+@pytest.mark.parametrize(
+    "state,error", [({}, KeyError), ({"vertices": np.array([])}, IndexError)]
+)
+def test_sampling_failure_clears_normal_and_preserves_reference(state, error):
+    """Clear the last result before sampling while retaining the first normal for recovery."""
+    comm = MPI.COMM_SELF
+    model = build_model(PlaneModelOptions(normal_toward=(0, 0, -5)))
+    assert isinstance(model, PlaneModel)
+    operator = ObservationOperator(["vertices"], _VertexSampler(12, comm), model, comm)
+    operator({"vertices": _vertices().ravel()})
+    first = model.normal
+    assert first is not None
+
+    with pytest.raises(error):
+        operator(state)
+    assert model.normal is None
+
+    operator({"vertices": _vertices(c=-5).ravel()})
+    np.testing.assert_allclose(model.normal, first)
+
+
 @pytest.mark.parametrize("size", [0, 6, 10])
 def test_plane_model_rejects_invalid_sample_size(size):
     """Reject fewer than three vertices or flattened sizes that are not multiples of three."""
