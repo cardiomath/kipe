@@ -8,17 +8,50 @@
 # and, if the study has a sensitivity analysis, with the Cramér-Rao and Bayesian bounds. All
 # in physical units, which are comparable across realizations (see `kipe.results`).
 #
-# Run the study first, e.g., in this directory:
+# ## Run this study
 #
-#     kipe synthesis study_realizations.yaml
-#     kipe estimation study_realizations.yaml
-#     kipe sensitivity study_realizations.yaml   # optional: the bounds
+# E.g., in this directory:
+# ```bash
+# kipe synthesis study_realizations.yaml
+# kipe estimation study_realizations.yaml
+# kipe sensitivity study_realizations.yaml   # optional: the bounds
+# ```
 #
 # Then run this file as a script, `python analysis.py study_realizations.yaml [--save DIR]`,
 # or cell by cell, e.g., in VS Code or in Jupyter (with jupytext).
+#
+# ## Understanding the results
+#
+# The empirical confidence intervals and ellipsoids should converge
+# to the Cramér-Rao bound as the number of realizations grow. This will only happen
+# as long as the number of outer iterations is large enough,
+# so that the effect of the parameter prior mean is negligible.
+#
+# Still, the filter's standard deviations (and covariances) should be smaller than the empirical
+# standard deviation and covariances, while they should approximately agrees with the
+# Bayesian Cramér-Rao bound. Again, only for a sufficiently large number of outer iterations,
+# so that the influence of the prior mean is negligible. If for example only 1 outer iterations
+#  is performed, the empirical covariances will be closer to the Bayesian ones.
+#
+# Also, the influence of the prior on the filter's covariance can be assessed by comparing the
+# inflated filter covariance with the empirical covariance. If the inflated filter covariance
+# closely matches the empirical covariance, it indicates that the prior's effect has been
+# properly removed (e.g., by sufficiently increasing the number of outer iterations)
+# and the filter is unbiased with respect to the true parameter values.
+#
+# The correlations tell a similar story: the filter's should agree with the Bayesian bound,
+# while the empirical correlations and pairwise ellipses should agree with the Cramér-Rao bound.
+#
+# Another interesting test is to increse measurement noise. Here, the relative weighting of
+# the prior will increase, and therefore it will require more outer iterations to unbias
+# the estimates. This should show up as the empirical covariance (much) smaller than the CRB.
+# This effect should be reduced when increasing the number of outer iterations.
+#
+# The effects above are more clear for the largest singular values of the covariance matrices.
 
 # %%
 import argparse
+import shutil
 from itertools import combinations
 from pathlib import Path
 
@@ -39,7 +72,7 @@ parser.add_argument("-f", help=argparse.SUPPRESS)  # Jupyter kernel connection f
 args, _ = parser.parse_known_args()
 
 # colors that stay distinguishable with color vision deficiencies, in a fixed order
-COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100"]
+COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#8e63b0"]
 
 # %% [markdown]
 # ## Reading the results
@@ -51,8 +84,19 @@ names = result.names
 truth = build_forward_solver(study.forward_solver).nominal_parameters()
 true_values = np.array([truth[name] for name in names])
 
+# retrieves the prior covariances
+names = list(study.parameters.priors)
+parametrization = build_parameterization(study.parameters, names)
+count_parameters = parametrization.parameter_count
+priors_stddev = parametrization.stddev_physical(np.zeros(count_parameters))
+
+# %%
 empirical = np.cov(result.parameters, rowvar=False)  # over the realizations
 filter_covariance = result.covariance.mean(axis=0)  # mean over the realizations
+# Getting back the filter covariance that would correspond to the CRB
+inflated_filter_covariance = np.linalg.inv(
+    np.linalg.inv(filter_covariance) - np.diag(1.0 / (priors_stddev**2))
+)
 
 # the bounds, if the study has a sensitivity analysis: from theta to physical units
 bounds: dict[str, np.ndarray] = {}
@@ -64,7 +108,7 @@ if path.exists():
     J = nominal.derivative(sensitivity.theta)
     if np.all(np.isfinite(sensitivity.covariance)):
         bounds["Cramér-Rao"] = np.outer(J, J) * sensitivity.covariance
-    bounds["Bayesian"] = np.outer(J, J) * sensitivity.posterior_covariance
+    bounds["Bayesian CR"] = np.outer(J, J) * sensitivity.posterior_covariance
 
 print(f"{len(result.realizations)} realizations of {args.study}")
 
@@ -76,27 +120,34 @@ print(f"{len(result.realizations)} realizations of {args.study}")
 # filter standard deviation clearly below the empirical one means an overconfident filter.
 
 # %%
-covariances = {"empirical": empirical, "filter": filter_covariance} | bounds
+# Collect the available covariance estimates in display order and derive their
+# standard deviations
+covariances = {
+    "empirical": empirical,
+    "filter": filter_covariance,
+    "inflated filter": inflated_filter_covariance,
+} | bounds
 covariances = {
     label: covariances[label]
-    for label in ("empirical", "Cramér-Rao", "filter", "Bayesian")
+    for label in ("empirical", "Cramér-Rao", "inflated filter", "filter", "Bayesian CR")
     if label in covariances
 }
 stddevs = {label: np.sqrt(np.diag(covariance)) for label, covariance in covariances.items()}
 
-header = f"{'parameter':<10}{'truth':>10}{'bias':>9}" + "".join(f"{s:>12}" for s in stddevs)
+width = max(12, *(len(s) + 2 for s in stddevs))
+header = f"{'parameter':<10}{'truth':>10}{'bias':>9}" + "".join(f"{s:>{width}}" for s in stddevs)
 print(header + f"{'filter/emp.':>13}")
 for i, name in enumerate(names):
     bias = (result.parameters[:, i].mean() - true_values[i]) / true_values[i]
     row = f"{name:<10}{true_values[i]:>10.4g}{bias:>9.2%}"
-    row += "".join(f"{s[i]:>12.3g}" for s in stddevs.values())
+    row += "".join(f"{s[i]:>{width}.3g}" for s in stddevs.values())
     print(row + f"{stddevs['filter'][i] / stddevs['empirical'][i]:>13.2f}")
 
 # %% [markdown]
 # ## The estimates over the realizations
 #
-# Each point is the final estimate of one realization; the bar shows their mean and standard
-# deviation, the line the truth.
+# Each point is the final estimate of one realization; the error bars show the standard
+# deviations from the listed covariances, all centered at the mean estimate. The line is truth.
 
 # %%
 figure_estimates, axes = plt.subplots(
@@ -107,8 +158,10 @@ for i, (ax, name) in enumerate(zip(np.atleast_1d(axes), names, strict=True)):
     values = result.parameters[:, i]
     ax.scatter(rng.uniform(-0.15, 0.15, values.size), values, s=16, color=COLORS[0],
                alpha=0.7, label="realizations")  # fmt: skip
-    ax.errorbar(0.4, values.mean(), yerr=values.std(ddof=1), fmt="o", color=COLORS[1],
-                capsize=4, label="mean ± std")  # fmt: skip
+    offsets = np.linspace(-0.2, 0.2, len(covariances))
+    for k, (label, s) in enumerate(stddevs.items()):
+        ax.errorbar(0.4 + offsets[k], values.mean(), yerr=s[i], fmt="o", color=COLORS[k],
+                    capsize=4, label=label)  # fmt: skip
     ax.axhline(true_values[i], color="0.2", lw=1, ls="--", label="truth")
     ax.set(title=name, xticks=[], xlim=(-0.5, 0.8))
     ax.grid(axis="y", color="0.9")
@@ -135,36 +188,6 @@ figure_consistency.legend(
     *np.atleast_1d(axes)[0].get_legend_handles_labels(), loc="outside right upper"
 )
 
-# %% [markdown]
-# ## Correlations
-#
-# Of the estimates over the realizations, of the filter (mean over the realizations), and of
-# the bounds. The filter can have the right spreads but miss correlations. Where the prior
-# matters, the filter's correlations are those of the Bayesian bound, which includes it, and
-# the estimates' those of the Cramér-Rao bound (see the summary).
-
-
-# %%
-def correlation(covariance: np.ndarray) -> np.ndarray:
-    """Return the correlations of a covariance matrix."""
-    stddev = np.sqrt(np.diag(covariance))
-    return covariance / np.outer(stddev, stddev)
-
-
-correlations = {"empirical": correlation(empirical), "filter": correlation(filter_covariance)}
-correlations |= {label: correlation(covariance) for label, covariance in bounds.items()}
-
-n = len(names)
-figure_correlations, axes = plt.subplots(
-    1, len(correlations), figsize=(3.2 * len(correlations), 3), layout="constrained"
-)
-for ax, (label, matrix) in zip(np.atleast_1d(axes), correlations.items(), strict=True):
-    image = ax.imshow(matrix, cmap="RdBu_r", vmin=-1, vmax=1)
-    for (i, j), value in np.ndenumerate(matrix):
-        ax.text(j, i, f"{value:.2f}", ha="center", va="center", fontsize="small",
-                color="white" if abs(value) > 0.6 else "black")  # fmt: skip
-    ax.set(title=label, xticks=range(n), yticks=range(n), xticklabels=names, yticklabels=names)
-figure_correlations.colorbar(image, ax=axes, shrink=0.8)
 
 # %% [markdown]
 # ## Pairs: the estimates and the covariance ellipses
@@ -185,7 +208,7 @@ def ellipse(center: np.ndarray, covariance: np.ndarray, color: str, label: str) 
     )
 
 
-pairs = list(combinations(range(n), 2))
+pairs = list(combinations(range(count_parameters), 2))
 columns = min(3, len(pairs))
 rows = -(-len(pairs) // columns)
 figure_pairs, axes = plt.subplots(
@@ -206,13 +229,89 @@ for ax in axes.flat[len(pairs) :]:
     ax.set_visible(False)
 figure_pairs.legend(*axes.flat[0].get_legend_handles_labels(), loc="outside right upper")
 
+
+# %% [markdown]
+# ## Singular values of the covariances
+#
+# The covariance matrices are symmetric positive semi-definite, so their singular values are
+# their eigenvalues. The square roots of the singular values, in log scale, show the uncertainty
+# along each principal direction.
+
+
 # %%
+figure_singular, ax = plt.subplots(figsize=(5, 3.5), layout="constrained")
+for k, (label, matrix) in enumerate(covariances.items()):
+    singular_values = np.linalg.svd(matrix, compute_uv=False)  # descending
+    ax.semilogy(
+        range(1, count_parameters + 1),
+        np.sqrt(singular_values),
+        "o-",
+        color=COLORS[k],
+        label=label,
+    )
+ax.set(
+    xlabel="index",
+    ylabel="square root of singular value",
+    title="SVD analysis of the covariances",
+    xticks=range(1, count_parameters + 1),
+)
+ax.grid(color="0.9", which="both")
+ax.set_axisbelow(True)
+ax.legend()
+
+
+# %% [markdown]
+# ## Correlations
+#
+# Of the estimates over the realizations, of the filter (mean over the realizations), and of
+# the bounds. The filter can have the right spreads but miss correlations. Where the prior
+# matters, the filter's correlations are those of the Bayesian bound, which includes it, and
+# the estimates' those of the Cramér-Rao bound (see the summary).
+
+
+# %%
+def correlation(covariance: np.ndarray) -> np.ndarray:
+    """Return the correlations of a covariance matrix."""
+    stddev = np.sqrt(np.diag(covariance))
+    return covariance / np.outer(stddev, stddev)
+
+
+correlations = {label: correlation(covariance) for label, covariance in covariances.items()}
+
+figure_correlations, axes = plt.subplots(
+    1, len(correlations), figsize=(3.2 * len(correlations), 3), layout="constrained"
+)
+for ax, (label, matrix) in zip(np.atleast_1d(axes), correlations.items(), strict=True):
+    image = ax.imshow(matrix, cmap="RdBu_r", vmin=-1, vmax=1)
+    for (i, j), value in np.ndenumerate(matrix):
+        ax.text(j, i, f"{value:.2f}", ha="center", va="center", fontsize="small",
+                color="white" if abs(value) > 0.6 else "black")  # fmt: skip
+    ax.set(
+        title=label,
+        xticks=range(count_parameters),
+        yticks=range(count_parameters),
+        xticklabels=names,
+        yticklabels=names,
+    )
+figure_correlations.colorbar(image, ax=axes, shrink=0.8)
+
+
+# %%
+# SAVE FIGURES INTO DIRECTORY (OPTIONAL)
 if args.save:
     directory = Path(args.save)
     directory.mkdir(parents=True, exist_ok=True)
-    figures = ["estimates", "consistency", "correlations", "pairs"]
+    study_file = Path(args.study) if args.study else None
+    shutil.copy2(study_file, directory)
+    figures = ["estimates", "consistency", "correlations", "singular_values", "pairs"]
     for figure, name in zip(
-        (figure_estimates, figure_consistency, figure_correlations, figure_pairs),
+        (
+            figure_estimates,
+            figure_consistency,
+            figure_correlations,
+            figure_singular,
+            figure_pairs,
+        ),
         figures,
         strict=True,
     ):

@@ -31,39 +31,7 @@ The covariances are in physical units, which are comparable across realizations.
 which differs from realization to realization, so that the realizations' :math:`\theta`, and for
 ``multiplicative`` parameters even its scale, refer to different anchors.
 
-The template
-------------
+A template notebook
+-------------------
 
-``examples/fitzhugh_nagumo/analysis.py`` is a template to copy and adapt, for a study with
-noise realizations, such as ``examples/fitzhugh_nagumo/study_realizations.yaml``:
-
-.. code-block:: bash
-
-    kipe synthesis study_realizations.yaml
-    kipe estimation study_realizations.yaml
-    kipe sensitivity study_realizations.yaml   # optional: the bounds
-    python analysis.py study_realizations.yaml  # or --save DIR for the figures
-
-It runs as a script, or cell by cell as a notebook (its cells are marked with ``# %%``, which
-VS Code and, with jupytext, Jupyter understand). It prints a summary per parameter: the bias of
-the mean estimate, and the standard deviations of the estimates over the realizations
-(empirical), of the filter (mean over the realizations), and of the Cramér–Rao and Bayesian
-bounds. Its figures show:
-
-- **the estimates over the realizations**, with their mean, spread and the truth;
-- **the consistency**: the empirical standard deviation against the filter's and the bounds.
-- **the correlations**: empirical, of the filter and of the bounds. A filter can have the
-  right spreads but miss correlations;
-- **the pairs**: for each pair of parameters, the estimates and the 2σ ellipses of the
-  covariances, which show size and orientation together.
-
-In this example, the filter's standard deviation for ``b`` is about 30 % lower than the
-empirical standard deviation, which is close to the Cramér–Rao bound (the data-only bound).
-The filter's standard deviation instead agrees with the Bayesian bound, which also includes
-the prior. Outer iterations largely reduce the prior's influence on the estimate by anchoring
-each pass at the estimate from the previous pass. Consequently, the estimates scatter about
-as much as the data alone allow. The filter's covariance, however, still includes the prior
-from the final pass. When that prior is informative relative to the data, as for ``b``, the
-covariance understates the observed scatter. The correlations tell a similar story: the
-filter's agree with the Bayesian bound, while the empirical correlations and pairwise
-ellipses agree with the Cramér–Rao bound.
+``examples/fitzhugh_nagumo/analysis.py`` is a (fully documented) template to copy and adapt, for a study with noise realizations, such as ``examples/fitzhugh_nagumo/study_realizations.yaml``. The template contains also an explanation on how to interpret the results, and how the results should look like when changing the configuration.

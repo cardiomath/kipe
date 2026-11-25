@@ -109,17 +109,17 @@ class EstimatedParameter:
                 assert_never(self.reparameterization)
 
     def theta_step(self, step: float) -> float:
-        r"""Return the step in :math:`\theta` corresponding to a step in the parameter.
+        r"""Convert a parameter step to the corresponding step in :math:`\theta`.
 
-        With ``log`` and ``multiplicative`` reparameterizations, ``step`` is the relative step in
-        the parameter, at its anchor; with ``additive``, a fraction of the parameter's
-        prior standard deviation, which gives the step its unit:
+        For ``log`` and ``multiplicative`` reparameterizations, ``step`` is the relative
+        parameter change at its anchor. For ``additive``, it is a fraction of the parameter's
+        prior standard deviation, so the resulting step has the parameter's units:
 
         - ``log``: :math:`h_\theta = h`, to first order;
         - ``multiplicative``: :math:`h_\theta = h`;
         - ``additive``: :math:`h_\theta = h \sigma_\theta`.
 
-        Used by the sensitivity analysis (:mod:`kipe.sensitivity`), whose parameterization is
+        Sensitivity analysis (:mod:`kipe.sensitivity`) uses this method with its parameterization
         anchored at the nominal values.
 
         Args:
@@ -157,6 +157,11 @@ class Parameterization:
         """Names of the estimated parameters."""
         return [parameter.name for parameter in self.parameters]
 
+    @property
+    def parameter_count(self) -> int:
+        """Number of estimated parameters."""
+        return len(self.parameters)
+
     def stddev_theta(self) -> NDArray_f64:
         r"""Return the initial standard deviations of :math:`\theta`.
 
@@ -164,6 +169,17 @@ class Parameterization:
             initial standard deviations of :math:`\theta`
         """
         return np.array([parameter.stddev_theta for parameter in self.parameters])
+
+    def stddev_physical(self, theta: NDArray_f64) -> NDArray_f64:
+        r"""Return the standard deviations in physical parameter space, to first order.
+
+        Args:
+            theta: reparameterized parameters, in the order of :attr:`parameters`
+
+        Returns:
+            physical standard deviations, in the order of :attr:`parameters`
+        """
+        return np.abs(self.derivative(theta)) * self.stddev_theta()
 
     def theta_step(self, step: float) -> NDArray_f64:
         r"""Return the steps in :math:`\theta` of a step in the parameters, one per parameter.
