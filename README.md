@@ -4,6 +4,7 @@
 [![Documentation](https://img.shields.io/badge/docs-cardiomath.github.io%2Fkipe-blue)](https://cardiomath.github.io/kipe/)
 ![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24552132.svg)](https://doi.org/10.5281/zenodo.24552132)
 
 <!-- docs: start of the introduction (index.md) -->
 
@@ -76,8 +77,13 @@ pytest
 
 See [Development](https://cardiomath.github.io/kipe/extending/development.html) in the documentation.
 
+## Citing kipe
+
+If you use kipe, please cite it with its DOI,
+[10.5281/zenodo.24552132](https://doi.org/10.5281/zenodo.24552132), and state the version you
+used (`kipe --version`);
+[CITATION.cff](https://github.com/cardiomath/kipe/blob/main/CITATION.cff) has the full metadata.
+
 ## License
 
-MIT, see [LICENSE](https://github.com/cardiomath/kipe/blob/main/LICENSE). If you use kipe, please
-cite it as described in
-[CITATION.cff](https://github.com/cardiomath/kipe/blob/main/CITATION.cff).
+MIT, see [LICENSE](https://github.com/cardiomath/kipe/blob/main/LICENSE).
