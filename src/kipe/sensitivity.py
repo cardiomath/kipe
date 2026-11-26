@@ -30,16 +30,11 @@ themselves are noise-free.
   after each pass equals it: with ``additive`` and ``multiplicative``, observations linear in
   the parameters are also linear in :math:`\bs{\theta}`; with ``log``, they are not. It is close
   to :math:`\bs{M}^{-1}` only where the data dominate the prior (see below).
-- For ``log`` and ``additive``, :math:`\bs{\theta}` here differs from the filter's only by a
-  constant, so :math:`\bs{M}` is the same in both. ``multiplicative``,
-  :math:`\phi_i = \phi_i^0 \theta_i`, scales by the anchors :math:`\phi_i^0` in the filter,
-  i.e., the initial values, by the nominal values :math:`\phi_{\mathrm{true},i}` here: the
-  filter's :math:`\bs{P}_\theta` corresponds to :math:`\bs{D} \bs{P}_\theta \bs{D}` here,
-  :math:`\bs{D} = \operatorname{diag}(\phi_i^0 / \phi_{\mathrm{true},i})`. The correlations
-  are the same in both. With several iterations, :math:`\phi_i^0` is the anchor of the last
-  pass, the estimate of the one before. Its prior is relative to that anchor too, so the
-  Bayesian bound to compare with is :math:`(\bs{M} + (\bs{D} \bs{P}^0_\theta \bs{D})^{-1})^{-1}`
-  here, the reported one only for :math:`\bs{D} \approx \bs{1}`.
+- :math:`\bs{\theta}` is the filter's: the study's parameterization, anchored at the prior
+  means, with :math:`\bs{\theta}_\mathrm{true}` the nominal parameters in it. So
+  :math:`\bs{M}` and the filter's :math:`\bs{P}_\theta` compare directly, in every outer
+  iteration, and the Bayesian bound uses the filter's prior :math:`\bs{P}^0_\theta`, the same
+  in every pass.
 - The singular values :math:`s_1 \geq \dots \geq s_p` of :math:`\bs{\tilde{J}}` and its right
   singular vectors, the columns of :math:`\bs{V}` in
   :math:`\bs{\tilde{J}} = \bs{U} \operatorname{diag}(\bs{s}) \bs{V}^T`, are also the
@@ -209,6 +204,8 @@ def run(study: StudyOptions, index: int, comm: MPI.Comm = MPI.COMM_WORLD) -> Non
     directory = run_directory(study, index)
     if not study.measurements:
         raise StudyFileError("sensitivity needs a measurements section")
+    if study.parameters is None:
+        raise StudyFileError("sensitivity needs a parameters section")
 
     solver = build_forward_solver(study.forward_solver)
     operators = {
@@ -217,8 +214,10 @@ def run(study: StudyOptions, index: int, comm: MPI.Comm = MPI.COMM_WORLD) -> Non
     }
     times = {name: _times(name, study) for name in study.measurements}
 
-    parameterization = _nominal_parameterization(study, solver.nominal_parameters())
-    theta = _perturbed_theta(parameterization, study.sensitivity.step, index)
+    nominal = solver.nominal_parameters()
+    parameterization = build_parameterization(study.parameters, nominal.keys())
+    theta_true = parameterization.to_theta(nominal)
+    theta = _perturbed_theta(parameterization, theta_true, study.sensitivity.step, index)
     physical = parameterization.to_physical(theta)
     label = _label(parameterization, index)
 
@@ -261,13 +260,16 @@ def assemble(study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD) -> Sensitivit
     n = run_count(study)
     if not study.measurements:
         raise StudyFileError("sensitivity needs a measurements section")
+    if study.parameters is None:
+        raise StudyFileError("sensitivity needs a parameters section")
 
     output = Path(study.output.path) / "sensitivity"
     with recorded_run(output, study, comm=comm):
         solver = build_forward_solver(study.forward_solver)
         nominal = solver.nominal_parameters()
-        parameterization = _nominal_parameterization(study, nominal)
-        _check_runs(study, parameterization)
+        parameterization = build_parameterization(study.parameters, nominal.keys())
+        theta_true = parameterization.to_theta(nominal)
+        _check_runs(study, parameterization, theta_true)
 
         step = parameterization.theta_step(study.sensitivity.step)
         jacobians = {}
@@ -281,7 +283,7 @@ def assemble(study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD) -> Sensitivit
             ]
             jacobians[name] = np.column_stack(columns)
 
-        sensitivity = _sensitivity(study, parameterization, jacobians)
+        sensitivity = _sensitivity(study, parameterization, theta_true, jacobians)
 
         if comm.rank == 0:
             _write(output / "sensitivity.npz", sensitivity, study.sensitivity.step)
@@ -291,38 +293,21 @@ def assemble(study: StudyOptions, comm: MPI.Comm = MPI.COMM_WORLD) -> Sensitivit
     return sensitivity
 
 
-def _nominal_parameterization(
-    study: StudyOptions, nominal: dict[str, float]
-) -> Parameterization:
-    r"""Return the study's parameterization, anchored at the nominal parameters:
-    :math:`\bs{\theta}` at the anchors maps to them, :math:`\bs{\theta}_\mathrm{true}`.
-
-    Args:
-        study: the study options, with parameters
-        nominal: the solver's nominal parameters
-
-    Returns:
-        the parameterization
-    """
-    if study.parameters is None:
-        raise StudyFileError("sensitivity needs a parameters section")
-
-    parameterization = build_parameterization(study.parameters, nominal.keys())
-    return parameterization.with_anchor(nominal)
-
-
-def _perturbed_theta(parameterization: Parameterization, step: float, index: int) -> NDArray_f64:
+def _perturbed_theta(
+    parameterization: Parameterization, theta_true: NDArray_f64, step: float, index: int
+) -> NDArray_f64:
     r"""Return :math:`\theta` of a run.
 
     Args:
-        parameterization: the parameterization, anchored at the nominal parameters
+        parameterization: the study's parameterization
+        theta_true: :math:`\bs{\theta}_\mathrm{true}`, the nominal parameters in :math:`\theta`
         step: the step, see :attr:`kipe.options.SensitivityOptions.step`
         index: number of the run
 
     Returns:
         :math:`\bs{\theta}_\mathrm{true}`, perturbed along parameter ``index // 2``
     """
-    theta = parameterization.anchor_theta()
+    theta = theta_true.copy()
     j = index // 2
     sign = 1.0 if index % 2 == 0 else -1.0
     theta[j] += sign * parameterization.theta_step(step)[j]
@@ -364,12 +349,15 @@ def _times(name: str, study: StudyOptions) -> NDArray_f64:
     return measurement_times(options.times)
 
 
-def _check_runs(study: StudyOptions, parameterization: Parameterization) -> None:
-    """Check that all runs are finished, with the parameters the study asks for.
+def _check_runs(
+    study: StudyOptions, parameterization: Parameterization, theta_true: NDArray_f64
+) -> None:
+    r"""Check that all runs are finished, with the parameters the study asks for.
 
     Args:
         study: the study options
-        parameterization: the parameterization, anchored at the nominal values
+        parameterization: the study's parameterization
+        theta_true: :math:`\bs{\theta}_\mathrm{true}`, the nominal parameters in :math:`\theta`
 
     Raises:
         StudyFileError: if a run is missing or unfinished, or has other parameters
@@ -381,7 +369,8 @@ def _check_runs(study: StudyOptions, parameterization: Parameterization) -> None
         if not run_info or run_info.get("status") != "finished":
             missing.append(str(i))
         elif not np.array_equal(
-            run_info["theta"], _perturbed_theta(parameterization, study.sensitivity.step, i)
+            run_info["theta"],
+            _perturbed_theta(parameterization, theta_true, study.sensitivity.step, i),
         ):
             different.append(str(i))
 
@@ -398,13 +387,17 @@ def _check_runs(study: StudyOptions, parameterization: Parameterization) -> None
 
 
 def _sensitivity(
-    study: StudyOptions, parameterization: Parameterization, jacobians: dict[str, NDArray_f64]
+    study: StudyOptions,
+    parameterization: Parameterization,
+    theta_true: NDArray_f64,
+    jacobians: dict[str, NDArray_f64],
 ) -> Sensitivity:
-    """Return the Fisher information and what follows from it.
+    r"""Return the Fisher information and what follows from it.
 
     Args:
         study: the study options, with measurements
-        parameterization: the parameterization, anchored at the nominal values
+        parameterization: the study's parameterization
+        theta_true: :math:`\bs{\theta}_\mathrm{true}`, the nominal parameters in :math:`\theta`
         jacobians: the sensitivities of each measurement
 
     Returns:
@@ -444,7 +437,7 @@ def _sensitivity(
 
     return Sensitivity(
         names=parameterization.names,
-        theta=parameterization.anchor_theta(),
+        theta=theta_true,
         stddev_theta=parameterization.stddev_theta(),
         jacobians=jacobians,
         fims=fims,
@@ -517,17 +510,18 @@ def _log(sensitivity: Sensitivity, parameterization: Parameterization, step: flo
 
     Args:
         sensitivity: the result
-        parameterization: the parameterization, anchored at the nominal values
+        parameterization: the study's parameterization
         step: the step of the finite differences, ``sensitivity.step``
     """
     logger.info("sensitivity at the nominal parameters (step %g)", step)
     ranges = parameterization.physical_range(sensitivity.theta, sensitivity.stddev)
     rows = [("parameter", "nominal", "prior σ_θ", "CR σ_θ", "CR 1σ range", "with prior σ_θ")]
+    nominal = parameterization.to_physical(sensitivity.theta)
     for i, name in enumerate(sensitivity.names):
         lower, upper = ranges[i]
         rows.append((
             name,
-            f"{parameterization.parameters[i].anchor:.4g}",
+            f"{nominal[name]:.4g}",
             f"{sensitivity.stddev_theta[i]:.3g}",
             f"{sensitivity.stddev[i]:.3g}",
             f"[{lower:.4g}, {upper:.4g}]",

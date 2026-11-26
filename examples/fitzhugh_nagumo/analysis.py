@@ -60,8 +60,8 @@ path = Path(study.output.path) / "sensitivity" / "sensitivity.npz"
 if path.exists():
     sensitivity = read_sensitivity(path)
     assert study.parameters is not None
-    nominal = build_parameterization(study.parameters, names).with_anchor(truth)
-    J = nominal.derivative(sensitivity.theta)
+    parameterization = build_parameterization(study.parameters, truth.keys())
+    J = parameterization.derivative(sensitivity.theta)
     if np.all(np.isfinite(sensitivity.covariance)):
         bounds["Cramér-Rao"] = np.outer(J, J) * sensitivity.covariance
     bounds["Bayesian"] = np.outer(J, J) * sensitivity.posterior_covariance

@@ -510,7 +510,8 @@ class EstimationOptions:
 
     iterations: Annotated[int, Field(ge=1)] = 1
     """Number of passes over the measurements. Each pass after the first starts from the
-    previous estimate, with the initial uncertainty."""
+    previous estimate, with the prior's uncertainty: relative to that estimate for ``log``,
+    the same physical spread for ``multiplicative`` and ``additive``."""
 
 
 @dataclass(frozen=True, config=_CONFIG)
@@ -527,9 +528,10 @@ class SensitivityOptions:
     """
 
     step: PositiveFloat = 0.01
-    r"""Step of the finite differences: the relative change of each parameter, e.g., 0.01 for
-    1 % (``log``, ``multiplicative``); for ``additive`` parameters, a fraction of their prior
-    ``stddev``, which gives the step its unit."""
+    r"""Step of the finite differences: for ``log`` parameters, the relative change of each,
+    e.g., 0.01 for 1 %; for ``multiplicative`` parameters, a change by that fraction of their
+    prior ``mean``; for ``additive`` parameters, a fraction of their prior ``stddev``, which
+    gives the step its unit."""
 
 
 @dataclass(frozen=True, config=_CONFIG)

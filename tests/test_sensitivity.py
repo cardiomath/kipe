@@ -28,6 +28,7 @@ from kipe.options import (
     StudyOptions,
     dump_study,
 )
+from kipe.parameters import build_parameterization
 
 EXAMPLE = Path(__file__).parents[1] / "examples" / "fitzhugh_nagumo" / "study.yaml"
 TIMES = [1.0, 2.0, 3.0]
@@ -72,11 +73,12 @@ def test_component_noise_weights_rows_at_every_time(tmp_path):
     study.measurements["y"] = replace(
         study.measurements["y"], noise=NoiseOptions(stddev=[0.2, 0.7])
     )
-    parameters = sensitivity._nominal_parameterization(
-        study, _LinearSolver().nominal_parameters()
-    )
+    assert study.parameters is not None
+    nominal = _LinearSolver().nominal_parameters()
+    parameterization = build_parameterization(study.parameters, nominal.keys())
+    theta_true = parameterization.to_theta(nominal)
     jacobian = np.array([[t, 1] if j == 0 else [2, -t] for t in TIMES for j in range(2)])
-    result = sensitivity._sensitivity(study, parameters, {"y": jacobian})
+    result = sensitivity._sensitivity(study, parameterization, theta_true, {"y": jacobian})
     weighted = jacobian / np.tile([0.2, 0.7], len(TIMES))[:, None]
     np.testing.assert_allclose(result.fim, weighted.T @ weighted)
 
@@ -145,6 +147,31 @@ def test_linear_model(tmp_path, linear):
     np.testing.assert_array_equal(saved["fim"], result.fim)
     np.testing.assert_array_equal(saved["J_y"], result.jacobians["y"])
     assert saved["names"].tolist() == ["a", "b"]
+
+
+def test_evaluated_at_the_truth_in_the_filters_theta(tmp_path, linear):
+    """With prior means off the truth: theta_true maps to the nominal parameters, and the
+    sensitivities are with respect to the filter's theta, phi = mean * theta for
+    multiplicative, so the physical sensitivities are scaled by the prior means."""
+    study = _study(tmp_path, reparameterization="multiplicative")
+    assert study.parameters is not None
+    nominal = _LinearSolver().nominal_parameters()
+    means = {name: 1.2 * value for name, value in nominal.items()}
+    priors = {
+        name: replace(prior, mean=means[name]) for name, prior in study.parameters.priors.items()
+    }
+    study = replace(study, parameters=replace(study.parameters, priors=priors))
+    result = _analyze(study)
+
+    parameterization = build_parameterization(study.parameters, nominal.keys())
+    assert parameterization.to_physical(result.theta) == pytest.approx(nominal, rel=1e-12)
+
+    t = np.array(TIMES)
+    J = np.zeros((2 * len(t), 2))  # by the physical parameters, as in test_linear_model
+    J[0::2] = np.column_stack([t, np.ones_like(t)])
+    J[1::2] = np.column_stack([2 * np.ones_like(t), -t])
+    scaled = J * np.array([means["a"], means["b"]])  # d phi / d theta = the prior mean
+    np.testing.assert_allclose(result.jacobians["y"], scaled, rtol=1e-9, atol=1e-12)
 
 
 def test_runs_one_by_one(tmp_path, linear):
@@ -305,9 +332,8 @@ def test_fisher_information_is_what_the_filter_learns(
     the prior, the Bayesian Cramer-Rao bound.
 
     The prior's mean is the truth and the data are the model's own, without noise: the
-    estimate stays at the nominal values, so for multiplicative, theta keeps its scale over
-    the passes (each anchors it at the previous estimate), and needs no rescaling to compare
-    with M.
+    estimate stays at the nominal values. For an estimate away from them, see
+    test_filter_covariance_away_from_the_truth.
     """
     options = EstimationOptions(sigma_points=sigma_points, iterations=iterations)
     study = _study(tmp_path, reparameterization=reparameterization, estimation=options)
@@ -324,11 +350,10 @@ def test_fisher_information_is_what_the_filter_learns(
     np.testing.assert_allclose(P, result.posterior_covariance, rtol=1e-9)
 
 
-def test_rescaled_filter_covariance_for_multiplicative(tmp_path, linear):
-    """With noisy data, the estimate leaves the nominal values, and each pass anchors theta
-    at the previous one: for multiplicative, the last pass's theta and prior are relative to
-    its center phi^0. With D = diag(phi^0 / phi_true), the filter's covariance D P D in the
-    theta of the sensitivity analysis is (M + (D P_0 D)^-1)^-1."""
+def test_filter_covariance_away_from_the_truth(tmp_path, linear):
+    """With noisy data, the estimate leaves the nominal values. theta and its prior are still
+    the study's in every pass, so the filter's covariance after the last pass is the Bayesian
+    bound (M + P_0^-1)^-1, without any rescaling, also for multiplicative."""
     options = EstimationOptions(iterations=3)
     study = _study(tmp_path, reparameterization="multiplicative", estimation=options)
     result = _analyze(study)
@@ -340,13 +365,11 @@ def test_rescaled_filter_covariance_for_multiplicative(tmp_path, linear):
     estimate(study)
 
     history = np.load(tmp_path / "results" / "estimation" / "history.npz")
-    center = history["parameters"][history["iteration"] == 2][0]  # first row of the last pass
-    D = np.diag(center / np.array([a, b]))
-    assert np.abs(np.diag(D) - 1).max() > 0.05  # not the trivial case D = 1
+    start = history["parameters"][history["iteration"] == 2][0]  # where the last pass starts
+    assert np.abs(start / np.array([a, b]) - 1).max() > 0.05  # away from the truth
 
-    P, P_0 = history["P_theta"][-1], np.diag(result.stddev_theta**2)
-    expected = np.linalg.inv(result.fim + np.linalg.inv(D @ P_0 @ D))
-    np.testing.assert_allclose(D @ P @ D, expected, rtol=1e-9)
+    P = history["P_theta"][-1]
+    np.testing.assert_allclose(P, result.posterior_covariance, rtol=1e-9)
 
 
 def test_example_study(tmp_path, monkeypatch):

@@ -98,22 +98,22 @@ def test_reparameterization_per_parameter():
         ("additive", {"stddev": 0.5}),
     ],
 )
-def test_with_anchor_moves_the_anchor_to_the_estimate(reparameterization, spread):
-    """Between outer iterations: after anchoring at the estimate, theta at the anchor maps to
-    the estimate; the standard deviations of theta stay."""
+def test_to_theta_inverts_to_physical(reparameterization, spread):
+    """to_theta maps physical values back to theta, also away from the anchors."""
     parameterization = _build({
         "reparameterization": reparameterization,
         "priors": {"c": {"mean": 3.0, **spread}, "a": {"mean": 0.2, **spread}},
     })
     theta = parameterization.anchor_theta() + np.array([0.5, -0.25])
-    estimate = parameterization.to_physical(theta)
+    physical = parameterization.to_physical(theta)
+    np.testing.assert_allclose(parameterization.to_theta(physical), theta, rtol=1e-14)
 
-    anchored = parameterization.with_anchor(estimate)
-    assert anchored.to_physical(anchored.anchor_theta()) == pytest.approx(estimate)
-    np.testing.assert_allclose(anchored.stddev_theta(), parameterization.stddev_theta())
 
-    original = parameterization.to_physical(parameterization.anchor_theta())
-    assert original == pytest.approx({"c": 3.0, "a": 0.2})  # unchanged by with_anchor
+def test_to_theta_needs_the_sign_of_the_anchor_for_log():
+    """phi = phi0 e^theta has the sign of phi0: other values have no theta."""
+    parameter = EstimatedParameter("c", "log", 3.0, 0.1)
+    with pytest.raises(ValueError):
+        parameter.to_theta(-1.0)
 
 
 def test_unknown_parameter_lists_available():

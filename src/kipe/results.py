@@ -5,13 +5,11 @@ The estimation of each noise realization writes its history (:mod:`kipe.estimati
 covariance of it, and the estimate at the end of each outer iteration: for the statistics of
 the estimates over the noise, e.g., their spread compared with the filter's uncertainty.
 
-The covariances are in physical units. The filter's :math:`\bs{\theta}` of the last outer
-iteration is relative to its anchor, the estimate of the iteration before, which differs from
-realization to realization; for ``multiplicative`` parameters, even the scale of
-:math:`\bs{\theta}` does. The physical covariance, :math:`\bs{J} \bs{P}_\theta \bs{J}` with
-:math:`\bs{J} = \operatorname{diag}(\mathrm{d}\phi_i / \mathrm{d}\theta_i)` at the final estimate
-(:meth:`kipe.parameters.Parameterization.derivative`), is comparable across realizations, to
-first order.
+The covariances are in physical units: :math:`\bs{J} \bs{P}_\theta \bs{J}`, with
+:math:`\bs{J} = \operatorname{diag}(\mathrm{d}\phi_i / \mathrm{d}\theta_i)` at the final
+estimate (:meth:`kipe.parameters.Parameterization.derivative`), to first order, so that they
+compare with the spread of the estimates. :math:`\bs{\theta}` itself is the same for all
+realizations and outer iterations, relative to the prior means.
 """
 
 import logging
@@ -87,13 +85,7 @@ def read_realizations(study: StudyOptions) -> Realizations:
 
         finals = _last_of_each_iteration(steps)[:n_iterations]
         last = finals[-1]
-        # the last iteration's theta is relative to its anchor: the estimate before it
-        anchors = parameterization
-        if n_iterations > 1:
-            anchors = parameterization.with_anchor(
-                dict(zip(names, finals[-2].parameters.tolist(), strict=True))
-            )
-        J = anchors.derivative(last.theta)
+        J = parameterization.derivative(last.theta)
 
         read.append(r)
         parameters.append(last.parameters)
