@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/cardiomath/kipe/actions/workflows/ci.yml/badge.svg)](https://github.com/cardiomath/kipe/actions/workflows/ci.yml)
 [![Documentation](https://img.shields.io/badge/docs-cardiomath.github.io%2Fkipe-blue)](https://cardiomath.github.io/kipe/)
+[![PyPI](https://img.shields.io/pypi/v/kipe)](https://pypi.org/project/kipe/)
 ![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24552132.svg)](https://doi.org/10.5281/zenodo.24552132)
@@ -14,9 +15,9 @@
 kipe estimates the parameters of distributed dynamical models, e.g., time-dependent PDE models,
 from time series of measurements,  with the reduced-order unscented Kalman filter (ROUKF).
 
-The filter needs only forward runs of your model, no derivatives, through a lean interface. Around
-the estimation, kipe generates synthetic measurement data for twin experiments, from a run of the
-model or from the checkpoints of an earlier run, and analyzes the identifiability of the
+The filter needs only forward runs of your model, no derivatives, through a lean interface.
+Around the estimation, kipe generates synthetic measurement data for twin experiments, from a run
+of the model or from the checkpoints of an earlier run, and analyzes the identifiability of the
 parameters with the Fisher information.
 
 ## Key features
@@ -75,7 +76,8 @@ pre-commit install --hook-type pre-commit --hook-type commit-msg
 pytest
 ```
 
-See [Development](https://cardiomath.github.io/kipe/extending/development.html) in the documentation.
+See [Development](https://cardiomath.github.io/kipe/extending/development.html) in the
+documentation.
 
 ## Citing kipe
 
