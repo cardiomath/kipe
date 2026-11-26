@@ -1,60 +1,80 @@
-"""Limited-memory Anderson mixing for an externally evaluated fixed-point map."""
+"""Run SciPy Anderson mixing with a fixed budget of map evaluations."""
+
+import logging
+from collections.abc import Callable
 
 import numpy as np
+from scipy.optimize import anderson
 
 from kipe._types import NDArray_f64
 from kipe.options import AndersonOptions
 
+logger = logging.getLogger(__name__)
 
-class Anderson:
-    """Mix previous inputs and corrections without additional forward evaluations.
+
+class InvalidAndersonPoint(Exception):
+    """The proposed input cannot be represented in the map's parameter domain."""
+
+
+class _Completed(Exception):
+    """The requested number of map evaluations has been completed."""
+
+
+def run_anderson(
+    evaluate: Callable[[NDArray_f64], NDArray_f64],
+    initial: NDArray_f64,
+    options: AndersonOptions,
+    evaluations: int,
+) -> None:
+    """Evaluate a fixed-point map using SciPy to select successive inputs.
 
     Args:
-        options: history length and regularization of the residual least-squares problem
+        evaluate: map returning G(x); raises InvalidAndersonPoint for inadmissible inputs
+        initial: initial input vector
+        options: Anderson memory and regularization
+        evaluations: number of successful map evaluations, including the initial input
+
+    Raises:
+        InvalidAndersonPoint: if the initial input is inadmissible
+        ValueError: if a map output is nonfinite
     """
+    completed = 0
+    last_output: NDArray_f64 | None = None
 
-    def __init__(self, options: AndersonOptions) -> None:
-        self._options = options
-        self._inputs: list[NDArray_f64] = []
-        self._residuals: list[NDArray_f64] = []
+    def residual(x: NDArray_f64) -> NDArray_f64:
+        nonlocal completed, last_output
+        if not np.all(np.isfinite(x)):
+            raise InvalidAndersonPoint
+        output = evaluate(x)
+        if not np.all(np.isfinite(output)):
+            raise ValueError("nonfinite Anderson map output")
+        last_output = output.copy()
+        completed += 1
+        # Stop inside the evaluation to avoid an extra expensive map call or an unused step.
+        if completed == evaluations:
+            raise _Completed
+        return output - x
 
-    def reset(self) -> None:
-        """Discard the history after an inadmissible extrapolation."""
-        self._inputs.clear()
-        self._residuals.clear()
-
-    def update(self, x: NDArray_f64, g: NDArray_f64) -> NDArray_f64:
-        """Return the next input from the current input and its unaccelerated output.
-
-        Args:
-            x: fixed-point input in fixed, scaled parameter coordinates
-            g: output of one complete outer iteration, in the same coordinates
-
-        Returns:
-            the accelerated next input; the plain output on the first call or numerical failure
-        """
-        self._inputs.append(x.copy())
-        self._residuals.append((g - x).copy())
-        keep = self._options.memory + 1
-        self._inputs = self._inputs[-keep:]
-        self._residuals = self._residuals[-keep:]
-        if len(self._inputs) == 1:
-            return g.copy()
-
-        dx = np.diff(np.asarray(self._inputs), axis=0).T
-        df = np.diff(np.asarray(self._residuals), axis=0).T
-        # Extended Anderson with alpha=1, as in the reference notebook. Solve the
-        # augmented least-squares system instead of forming its normal equations.
-        penalty = self._options.regularization * np.linalg.norm(df, axis=0)
-        matrix = np.vstack((df, np.diag(penalty)))
-        rhs = np.concatenate((self._residuals[-1], np.zeros(df.shape[1])))
+    start = initial.copy()
+    while completed < evaluations:
         try:
-            weights = np.linalg.lstsq(matrix, rhs, rcond=None)[0]
-            candidate = g - (dx + df) @ weights
-        except np.linalg.LinAlgError:
-            self.reset()
-            return g.copy()
-        if not np.all(np.isfinite(candidate)):
-            self.reset()
-            return g.copy()
-        return candidate
+            anderson(
+                residual,
+                start,
+                alpha=1,
+                M=options.memory,
+                w0=options.regularization,
+                iter=evaluations,
+                maxiter=evaluations + 1,
+                line_search=None,
+            )
+        except _Completed:
+            return
+        except InvalidAndersonPoint:
+            if last_output is None:
+                raise
+            logger.warning("invalid Anderson extrapolation; using the unaccelerated output")
+        # On an invalid input, restart from the last ordinary output with fresh history.
+        # At an exact root SciPy returns early; continue to honor the evaluation budget.
+        assert last_output is not None
+        start = last_output.copy()

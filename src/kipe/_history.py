@@ -9,6 +9,7 @@ interrupted one (``kipe estimation --resume``).
 import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from importlib.metadata import version
 from pathlib import Path
 
 from mpi4py import MPI
@@ -221,7 +222,8 @@ def _check_unchanged(output: Path, study: StudyOptions) -> None:
         study: the study options
 
     Raises:
-        StudyFileError: if the study differs, or the earlier run has no ``study.yaml``
+        StudyFileError: if the study differs, the earlier run has no ``study.yaml``, or
+            the Anderson implementation or SciPy version differs from the saved run
     """
     saved = output / "study.yaml"
     if not saved.exists():
@@ -242,6 +244,18 @@ def _check_unchanged(output: Path, study: StudyOptions) -> None:
             f"cannot resume the estimation in {output}: the study has changed since "
             f"({', '.join(changed)}); only estimation.iterations may differ"
         )
+    if study.estimation.anderson is not None:
+        run_path = output / "run.yaml"
+        run = YAML(typ="safe").load(run_path) if run_path.exists() else {}
+        expected = {
+            "implementation": "scipy.optimize.anderson",
+            "scipy_version": version("scipy"),
+        }
+        if (run or {}).get("anderson") != expected:
+            raise StudyFileError(
+                "cannot resume: Anderson backend or SciPy version differs from the saved run; "
+                "use the original implementation and version, or start a new estimation"
+            )
 
 
 def _check_data_unchanged(output: Path, data: Mapping[str, DataFile], comm: MPI.Comm) -> None:

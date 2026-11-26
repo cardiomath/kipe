@@ -5,7 +5,7 @@ set of measurements: at each measurement time, the sigma points are propagated w
 forward solver, compared with the data of the measurements at that time through their
 observation operators, and the estimate is corrected. The measurements may have different
 times; the filter steps through all of them in order. Outer iterations repeat the pass,
-starting from the previous estimate.
+starting from the previous estimate or an Anderson extrapolation.
 :func:`estimate` builds all of this from a study file.
 
 The estimation history is written to ``<output.path>/estimation/``: ``history.csv`` (one row
@@ -20,6 +20,7 @@ and writes to its subdirectory, e.g., ``estimation/r07/``.
 import logging
 import time
 from collections.abc import Mapping, Sequence
+from importlib.metadata import version
 from pathlib import Path
 from typing import Any
 
@@ -28,7 +29,7 @@ from mpi4py import MPI
 import numpy as np
 
 from kipe import roukf
-from kipe._anderson import Anderson
+from kipe._anderson import InvalidAndersonPoint, run_anderson
 from kipe._formatting import format_table
 from kipe._history import (
     History,
@@ -127,9 +128,9 @@ class Estimation:
     def run(self) -> Parameters:
         """Run the outer iterations, each a pass of the filter over all measurements.
 
-        Each pass after the first starts from the previous estimate, with the initial
-        uncertainty. After each pass, the history is written to ``history.npz``. A run that
-        continues an earlier one starts after its completed iterations, from their estimate.
+        Passes use the initial uncertainty and start from the previous estimate or an
+        Anderson extrapolation. Save each completed pass to ``history.npz``. On resume,
+        replay completed estimates without rerunning their filter passes.
 
         Returns:
             the estimated parameters, as physical values
@@ -137,40 +138,22 @@ class Estimation:
         self._log_setup()
         started = time.perf_counter()
 
-        # the estimate after the completed iterations, anchored as they were
-        parameterization = self._parameterization
-        acceleration = None if self._anderson is None else Anderson(self._anderson)
-        for theta in final_thetas(self._history.steps):
-            parameterization = self._next_iteration(parameterization, theta, acceleration)
         if self._completed_iterations:
             logger.info(
                 "resumed after iteration %d/%d", self._completed_iterations, self._iterations
             )
 
-        for iteration in range(self._completed_iterations, self._iterations):
-            title = f" iteration {iteration + 1}/{self._iterations} "
-            logger.info("%s", title.center(_WIDTH, "━"))
-            iteration_started = time.perf_counter()
-
-            filter_state = self._assimilate(parameterization, iteration)
-
-            elapsed = time.perf_counter() - iteration_started
-            logger.info("")
-            logger.info(
-                "  estimate after iteration %d/%d (%.3g s)",
-                iteration + 1,
-                self._iterations,
-                elapsed,
-            )
-            for line in format_table(_estimate_rows(filter_state, parameterization), "<><"):
-                logger.info("    %s", line)
-
-            estimate = parameterization.to_physical(filter_state.theta)
-            # get parameterization of next iteration, anchored at the current estimate
-            parameterization = self._next_iteration(
-                parameterization, filter_state.theta, acceleration
-            )
-            self._history.write_npz()
+        if self._anderson is None:
+            parameterization = self._parameterization
+            for theta in final_thetas(self._history.steps):
+                parameterization = parameterization.with_anchor(
+                    parameterization.to_physical(theta)
+                )
+            for iteration in range(self._completed_iterations, self._iterations):
+                estimate = self._run_pass(parameterization, iteration)
+                parameterization = parameterization.with_anchor(estimate)
+        else:
+            estimate = self._run_anderson()
 
         logger.info("%s", "━" * _WIDTH)
         logger.info("%-11s%s", "history", self._output / "history.{csv,npz}")
@@ -178,40 +161,64 @@ class Estimation:
 
         return estimate
 
-    def _next_iteration(
-        self,
-        parameterization: Parameterization,
-        theta: NDArray_f64,
-        acceleration: Anderson | None,
-    ) -> Parameterization:
-        """Return the next pass's anchor, replayable from completed filter estimates.
+    def _run_pass(self, parameterization: Parameterization, iteration: int) -> Parameters:
+        """Run, log and save one complete filter pass and return its physical estimate.
 
         Args:
-            parameterization: the current pass's anchors and uncertainty
-            theta: final unaccelerated filter estimate of that pass
-            acceleration: optional mixing history, replayed identically on resume
+            parameterization: starting parameters and initial uncertainty
+            iteration: zero-based outer iteration index
 
         Returns:
-            a parameterization with the next anchor and the unchanged initial uncertainty
+            the completed filter pass's physical parameter estimate
         """
-        values = parameterization.to_physical(theta)
-        if acceleration is None:
-            return parameterization.with_anchor(values)
+        title = f" iteration {iteration + 1}/{self._iterations} "
+        logger.info("%s", title.center(_WIDTH, "━"))
+        started = time.perf_counter()
+        filter_state = self._assimilate(parameterization, iteration)
+        logger.info("")
+        logger.info(
+            "  estimate after iteration %d/%d (%.3g s)",
+            iteration + 1,
+            self._iterations,
+            time.perf_counter() - started,
+        )
+        for line in format_table(_estimate_rows(filter_state, parameterization), "<><"):
+            logger.info("    %s", line)
+        self._history.write_npz()
+        return parameterization.to_physical(filter_state.theta)
+
+    def _run_anderson(self) -> Parameters:
+        """Replay completed estimates and run remaining passes with SciPy Anderson.
+
+        Returns:
+            the last completed filter pass's physical parameter estimate
+        """
+        assert self._anderson is not None
         fixed = self._parameterization
         scale = fixed.stddev_theta()
-        anchors = {p.name: p.anchor for p in parameterization.parameters}
-        x = fixed.to_theta(anchors) / scale
-        g = fixed.to_theta(values) / scale
-        candidate = acceleration.update(x, g)
-        try:
-            mixed = fixed.to_physical(candidate * scale)
-            if not all(np.isfinite(value) for value in mixed.values()):
-                raise ValueError("nonfinite accelerated parameters")
-            return parameterization.with_anchor(mixed)
-        except (OverflowError, ValueError):
-            logger.warning("invalid Anderson extrapolation; using the ROUKF estimate")
-            acceleration.reset()
-            return parameterization.with_anchor(values)
+        recorded = final_thetas(self._history.steps)
+        iteration = 0
+        estimate: Parameters = {}
+
+        def evaluate(x: NDArray_f64) -> NDArray_f64:
+            nonlocal iteration, estimate
+            try:
+                anchors = fixed.to_physical(x * scale)
+                if not all(np.isfinite(value) for value in anchors.values()):
+                    raise ValueError("nonfinite accelerated parameters")
+                parameterization = fixed.with_anchor(anchors)
+            except (OverflowError, ValueError) as err:
+                raise InvalidAndersonPoint from err
+            if iteration < len(recorded):
+                # Rebuild SciPy's mixing history without rerunning completed forward solves.
+                estimate = parameterization.to_physical(recorded[iteration])
+            else:
+                estimate = self._run_pass(parameterization, iteration)
+            iteration += 1
+            return fixed.to_theta(estimate) / scale
+
+        run_anderson(evaluate, fixed.anchor_theta() / scale, self._anderson, self._iterations)
+        return estimate
 
     def _log_setup(self) -> None:
         """Log what is estimated, from which measurements, and how."""
@@ -473,6 +480,11 @@ def estimate(
     )
 
     run: dict[str, Any] = {"assimilation_times": estimation.times}
+    if study.estimation.anderson is not None:
+        run["anderson"] = {
+            "implementation": "scipy.optimize.anderson",
+            "scipy_version": version("scipy"),
+        }
     if study.synthesis.realizations > 1:
         run["realization"] = realization
     run["data"] = data

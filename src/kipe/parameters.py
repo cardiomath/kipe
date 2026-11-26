@@ -34,7 +34,8 @@ class EstimatedParameter:
     anchor: float
     r"""The physical value :math:`\phi^0` that :math:`\theta` is relative to, e.g.,
     :math:`\phi = \phi^0 \, e^\theta` for ``log``: in an estimation, first the prior mean, then,
-    in later outer iterations, the previous estimate (:meth:`Parameterization.with_anchor`);
+    in later outer iterations, the previous estimate or an Anderson extrapolation
+    (:meth:`Parameterization.with_anchor`);
     in the sensitivity analysis, the nominal value."""
 
     stddev_theta: float
@@ -244,7 +245,7 @@ class Parameterization:
         r"""Return the parameterization with other anchors.
 
         The standard deviations of :math:`\theta` stay. Used between outer iterations, which
-        anchor :math:`\theta` at the estimate, so that the next pass starts from it, and by the
+        anchor :math:`\theta` at the estimate or an Anderson extrapolation, and by the
         sensitivity analysis, which anchors it at the nominal values.
 
         Args:
