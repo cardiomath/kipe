@@ -5,9 +5,9 @@ physical values :math:`\phi`. :class:`Parameterization` maps between the two.
 """
 
 import math
-from collections.abc import Collection, Mapping
-from dataclasses import dataclass, replace
-from typing import Self, assert_never
+from collections.abc import Collection
+from dataclasses import dataclass
+from typing import assert_never
 
 import numpy as np
 
@@ -33,9 +33,9 @@ class EstimatedParameter:
 
     anchor: float
     r"""The physical value :math:`\phi^0` that :math:`\theta` is relative to, e.g.,
-    :math:`\phi = \phi^0 \, e^\theta` for ``log``: in an estimation, first the prior mean, then,
-    in later outer iterations, the previous estimate (:meth:`Parameterization.with_anchor`);
-    in the sensitivity analysis, the nominal value."""
+    :math:`\phi = \phi^0 \, e^\theta` for ``log``: the prior mean. It stays fixed: outer
+    iterations continue in the same :math:`\theta`, and the sensitivity analysis evaluates at
+    the nominal values in it (:meth:`to_theta`)."""
 
     stddev_theta: float
     r"""Initial standard deviation of :math:`\theta`."""
@@ -49,8 +49,8 @@ class EstimatedParameter:
             raise ValueError(f"{self.name}: 'multiplicative' needs a nonzero mean")
 
     def anchor_theta(self) -> float:
-        r"""Return :math:`\theta` at the anchor, where the filter starts: 0, or 1 for
-        ``multiplicative``.
+        r"""Return :math:`\theta` at the anchor, the prior mean, where the first outer
+        iteration starts: 0, or 1 for ``multiplicative``.
 
         Returns:
             :math:`\theta` at the anchor
@@ -84,6 +84,30 @@ class EstimatedParameter:
             case _:
                 assert_never(self.reparameterization)
 
+    def to_theta(self, phi: float) -> float:
+        r"""Map the physical value to :math:`\theta`, the inverse of :meth:`to_physical`.
+
+        Args:
+            phi: physical value
+
+        Returns:
+            reparameterized parameter
+
+        Raises:
+            ValueError: for ``log``, if the value does not have the sign of the anchor
+        """
+        phi0 = self.anchor
+
+        match self.reparameterization:
+            case "log":
+                return math.log(phi / phi0)
+            case "multiplicative":
+                return phi / phi0
+            case "additive":
+                return phi - phi0
+            case _:
+                assert_never(self.reparameterization)
+
     def derivative(self, theta: float) -> float:
         r"""Return the derivative of the physical value by :math:`\theta`,
         :math:`\mathrm{d}\phi / \mathrm{d}\theta`.
@@ -111,20 +135,21 @@ class EstimatedParameter:
     def theta_step(self, step: float) -> float:
         r"""Return the step in :math:`\theta` corresponding to a step in the parameter.
 
-        With ``log`` and ``multiplicative`` reparameterizations, ``step`` is the relative step in
-        the parameter, at its anchor; with ``additive``, a fraction of the parameter's
-        prior standard deviation, which gives the step its unit:
+        With ``log``, ``step`` is a relative change of the parameter, at any value; with
+        ``multiplicative``, a change by that fraction of its anchor, the prior mean; with
+        ``additive``, a fraction of the parameter's prior standard deviation, which gives the
+        step its unit:
 
         - ``log``: :math:`h_\theta = h`, to first order;
         - ``multiplicative``: :math:`h_\theta = h`;
         - ``additive``: :math:`h_\theta = h \sigma_\theta`.
 
-        Used by the sensitivity analysis (:mod:`kipe.sensitivity`), whose parameterization is
-        anchored at the nominal values.
+        Used by the sensitivity analysis (:mod:`kipe.sensitivity`), which takes the steps at the
+        nominal values.
 
         Args:
-            step: relative change of the parameter (``log``, ``multiplicative``), or fraction of
-                its prior standard deviation (``additive``)
+            step: relative change of the parameter (``log``) or fraction of its prior mean
+                (``multiplicative``), or fraction of its prior standard deviation (``additive``)
 
         Returns:
             step in :math:`\theta`
@@ -144,9 +169,8 @@ class Parameterization:
 
     Converts :math:`\theta` to the physical values passed to the forward solver
     (:meth:`to_physical`), each entry by its parameter's reparameterization, relative to its
-    anchor (:attr:`EstimatedParameter.anchor`). The anchors stay fixed during one pass of the
-    filter over the measurements; outer iterations move them to the estimate
-    (:meth:`with_anchor`).
+    anchor, the prior mean (:attr:`EstimatedParameter.anchor`), and back (:meth:`to_theta`).
+    :math:`\theta` is the same in all outer iterations and in the sensitivity analysis.
     """
 
     parameters: list[EstimatedParameter]
@@ -193,7 +217,8 @@ class Parameterization:
         ])
 
     def anchor_theta(self) -> NDArray_f64:
-        r"""Return :math:`\theta` at the anchors, where the filter starts.
+        r"""Return :math:`\theta` at the anchors, the prior means, where the first outer
+        iteration starts.
 
         Returns:
             :math:`\theta` at the anchors
@@ -214,23 +239,18 @@ class Parameterization:
             for parameter, value in zip(self.parameters, theta, strict=True)
         }
 
-    def with_anchor(self, values: Mapping[str, float]) -> Self:
-        r"""Return the parameterization with other anchors.
-
-        The standard deviations of :math:`\theta` stay. Used between outer iterations, which
-        anchor :math:`\theta` at the estimate, so that the next pass starts from it, and by the
-        sensitivity analysis, which anchors it at the nominal values.
+    def to_theta(self, physical: Parameters) -> NDArray_f64:
+        r"""Map physical values to :math:`\theta`, the inverse of :meth:`to_physical`.
 
         Args:
-            values: the new anchors, as physical values, by parameter name
+            physical: parameter name -> physical value
 
         Returns:
-            new parameterization
+            reparameterized parameters, in the order of :attr:`parameters`
         """
-        return replace(
-            self,
-            parameters=[replace(p, anchor=values[p.name]) for p in self.parameters],
-        )
+        return np.array([
+            parameter.to_theta(physical[parameter.name]) for parameter in self.parameters
+        ])
 
     def one_sigma_range(self) -> list[tuple[float, float]]:
         r"""Return the physical values at :math:`\theta` of the anchors

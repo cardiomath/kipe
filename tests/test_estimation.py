@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 from ruamel.yaml import YAML
 
+from kipe._history import HISTORY_FORMAT
 from kipe._yaml import write_yaml
 from kipe.cli import main
 from kipe.estimation import Estimation, estimate
@@ -27,6 +28,7 @@ from kipe.options import (
     OutputOptions,
     ParameterPrior,
     ParametersOptions,
+    Reparameterization,
     SigmaPoints,
     StudyOptions,
     SynthesisOptions,
@@ -149,8 +151,75 @@ def test_iterations_restart_from_estimate(tmp_path):
     np.testing.assert_allclose(
         history["parameters"][second][0], history["parameters"][first][-1]
     )
+    np.testing.assert_array_equal(history["theta"][second][0], history["theta"][first][-1])
     np.testing.assert_allclose(history["P_theta"][second][0], history["P_theta"][first][0])
-    np.testing.assert_array_equal(history["theta"][second][0], 0.0)  # log: restart at theta = 0
+
+
+def _priors(
+    reparameterization: Reparameterization, means: dict[str, float], relative_stddev: float = 0.2
+) -> ParametersOptions:
+    """Return priors at the given means, with the spread of the priors of :func:`_options`:
+    ``relative_stddev`` for ``log`` and ``multiplicative``; for ``additive``, the same physical
+    spread, at the initial values."""
+    if reparameterization == "additive":
+        priors = {
+            name: ParameterPrior(mean=mean, stddev=relative_stddev * INITIAL[name])
+            for name, mean in means.items()
+        }
+    else:
+        priors = {
+            name: ParameterPrior(mean=mean, relative_stddev=relative_stddev)
+            for name, mean in means.items()
+        }
+    return ParametersOptions(reparameterization=reparameterization, priors=priors)
+
+
+@pytest.mark.parametrize("reparameterization", ["log", "additive"])
+def test_continuing_equals_restarting_at_the_estimate(tmp_path, reparameterization):
+    """log and additive: a pass that continues from the previous estimate is a new estimation
+    with that estimate as prior mean, since their prior has the same spread in theta around
+    every point."""
+    options = _options(tmp_path, iterations=2, times=TimeRange(start=0.5, stop=5.0, step=0.5))
+    continued = replace(options, parameters=_priors(reparameterization, INITIAL))
+    synthesize(continued)
+    estimate(continued)
+    history = _history(tmp_path)
+    first, second = history["iteration"] == 0, history["iteration"] == 1
+    names, values = history["names"].tolist(), history["parameters"][first][-1].tolist()
+    estimated = dict(zip(names, values, strict=True))  # the first pass's estimate
+
+    restarted = replace(  # on the same data
+        options,
+        output=OutputOptions(path=str(tmp_path / "restarted")),
+        parameters=_priors(reparameterization, estimated),
+        estimation=replace(options.estimation, iterations=1),
+    )
+    estimate(restarted)
+    restarted_history = np.load(tmp_path / "restarted" / "estimation" / "history.npz")
+    for key in ["parameters", "lower", "upper"]:
+        np.testing.assert_allclose(
+            restarted_history[key], history[key][second], rtol=1e-12, err_msg=key
+        )
+
+
+def test_multiplicative_is_additive_in_other_units(tmp_path):
+    """multiplicative measures theta in units of the prior mean, additive in the parameter's:
+    with the same physical spread, the estimates are the same in every pass."""
+    options = _options(tmp_path, iterations=3, times=TimeRange(start=0.5, stop=5.0, step=0.5))
+    multiplicative = replace(options, parameters=_priors("multiplicative", INITIAL))
+    synthesize(multiplicative)
+    estimate(multiplicative)
+
+    additive = replace(  # on the same data
+        options,
+        output=OutputOptions(path=str(tmp_path / "additive")),
+        parameters=_priors("additive", INITIAL),
+    )
+    estimate(additive)
+    additive_history = np.load(tmp_path / "additive" / "estimation" / "history.npz")
+    history = _history(tmp_path)
+    for key in ["parameters", "lower", "upper"]:
+        np.testing.assert_allclose(additive_history[key], history[key], rtol=1e-12, err_msg=key)
 
 
 def test_history_files(tmp_path):
@@ -179,6 +248,7 @@ def test_history_files(tmp_path):
     # the physical 1σ range encloses the estimate
     assert np.all(history["lower"] < history["parameters"])
     assert np.all(history["parameters"] < history["upper"])
+    assert int(history["history_format"]) == HISTORY_FORMAT
 
 
 def test_times_select_from_the_data(tmp_path):
@@ -569,6 +639,28 @@ def test_resume_a_complete_estimation(tmp_path, reference):
     assert b"complete after 2 iterations, nothing to resume" in after.pop("kipe.log")
     before.pop("kipe.log")
     assert after == before
+
+
+def _as_written_by_kipe_0_6(output: Path) -> None:
+    """Remove the history format from ``history.npz``, as kipe 0.6 and earlier wrote it."""
+    with np.load(output / "history.npz") as history:
+        arrays = {key: history[key] for key in history.files if key != "history_format"}
+    np.savez(output / "history.npz", **arrays)
+
+
+def test_resume_a_history_of_another_format(tmp_path, capsys):
+    """The theta of kipe 0.6's histories are relative to each iteration's anchor: they cannot be
+    continued."""
+    study = str(_study(tmp_path, times=SHORT, iterations=1))
+    assert main(["synthesis", study, "--log-level", "warning"]) == 0
+    assert main(["estimation", study, "--log-level", "warning"]) == 0
+    _as_written_by_kipe_0_6(_estimation(tmp_path))
+
+    study = str(_study(tmp_path, times=SHORT, iterations=2))
+    assert main(["estimation", study, "--resume"]) == 1
+    error = capsys.readouterr().err
+    assert "has history format 1, written by kipe " in error
+    assert "start the estimation anew" in error
 
 
 def test_resume_a_changed_study(tmp_path, capsys, reference):

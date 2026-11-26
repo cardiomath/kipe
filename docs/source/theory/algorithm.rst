@@ -158,12 +158,13 @@ initial covariance and the initial state,
 
 .. math::
 
-   \bs{\phi}^{0,(j+1)} = \bs{\phi}\big(\bs{\hat\theta}^{(j)}\big), \qquad
-   \bs{\theta}^{0,(j+1)} = \bs{\theta}^0, \qquad
+   \bs{\theta}^{0,(j+1)} = \bs{\hat\theta}^{(j)}, \qquad
    \bs{P}_\theta^{0,(j+1)} = \bs{P}_\theta^0, \qquad
    \bs{\hat\chi}^{0,(j+1)}_+ = \bs{\chi}^0,
 
-with :math:`\bs{\phi}^{0,(0)} = \bs{\phi}^0`. For the multiplicative reparameterization,
-:math:`\bs{\phi}(\bs{\hat\theta}^{(j)}) = \bs{\phi}^{0,(j)} \circ \bs{\hat\theta}^{(j)}`, as in
-[NAB26]_. For a linear least-squares problem, the iterations converge linearly to the
-minimizer of the data misfit (see [NAB26]_).
+with :math:`\bs{\theta}^{0,(0)} = \bs{\theta}^0`. :math:`\bs{\theta}` stays relative to the prior
+mean :math:`\bs{\phi}^0` in all passes, so the prior of each pass is the initial one, centered
+at the previous estimate. For the log form, its spread is then relative to the previous
+estimate, since :math:`\mathrm{d}\phi_i / \mathrm{d}\theta_i = \phi_i`; for the multiplicative
+and additive forms, it is the same physical spread in every pass. For a linear least-squares
+problem, the iterations converge linearly to the minimizer of the data misfit (see [NAB26]_).

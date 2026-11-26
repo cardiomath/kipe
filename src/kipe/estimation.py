@@ -5,7 +5,7 @@ set of measurements: at each measurement time, the sigma points are propagated w
 forward solver, compared with the data of the measurements at that time through their
 observation operators, and the estimate is corrected. The measurements may have different
 times; the filter steps through all of them in order. Outer iterations repeat the pass,
-starting from the previous estimate.
+continuing from the previous estimate with the spread reset to the prior standard deviation.
 :func:`estimate` builds all of this from a study file.
 
 The estimation history is written to ``<output.path>/estimation/``: ``history.csv`` (one row
@@ -33,7 +33,6 @@ from kipe._history import (
     History,
     Step,
     count_iterations,
-    final_thetas,
     read_completed_steps,
 )
 from kipe._types import NDArray_f64
@@ -135,22 +134,22 @@ class Estimation:
         self._log_setup()
         started = time.perf_counter()
 
-        # the estimate after the completed iterations, anchored as they were
-        parameterization = self._parameterization
-        for theta in final_thetas(self._history.steps):
-            estimate = parameterization.to_physical(theta)
-            parameterization = parameterization.with_anchor(estimate)
         if self._completed_iterations:
             logger.info(
                 "resumed after iteration %d/%d", self._completed_iterations, self._iterations
             )
+
+        # continue estimation from last entry in the history if resuming, else from prior mean
+        steps = self._history.steps
+        theta = steps[-1].theta if steps else self._parameterization.anchor_theta()
 
         for iteration in range(self._completed_iterations, self._iterations):
             title = f" iteration {iteration + 1}/{self._iterations} "
             logger.info("%s", title.center(_WIDTH, "━"))
             iteration_started = time.perf_counter()
 
-            filter_state = self._assimilate(parameterization, iteration)
+            filter_state = self._assimilate(theta, iteration)
+            theta = filter_state.theta
 
             elapsed = time.perf_counter() - iteration_started
             logger.info("")
@@ -160,19 +159,18 @@ class Estimation:
                 self._iterations,
                 elapsed,
             )
-            for line in format_table(_estimate_rows(filter_state, parameterization), "<><"):
+            for line in format_table(
+                _estimate_rows(filter_state, self._parameterization), "<><"
+            ):
                 logger.info("    %s", line)
 
-            estimate = parameterization.to_physical(filter_state.theta)
-            # get parameterization of next iteration, anchored at the current estimate
-            parameterization = parameterization.with_anchor(estimate)
             self._history.write_npz()
 
         logger.info("%s", "━" * _WIDTH)
         logger.info("%-11s%s", "history", self._output / "history.{csv,npz}")
         logger.info("%-11s%.3g s", "run time", time.perf_counter() - started)
 
-        return estimate
+        return self._parameterization.to_physical(self._history.steps[-1].theta)
 
     def _log_setup(self) -> None:
         """Log what is estimated, from which measurements, and how."""
@@ -214,14 +212,12 @@ class Estimation:
         for line in format_table(measurements, "<<<>"):
             logger.info("  %s", line)
 
-    def _assimilate(
-        self, parameterization: Parameterization, iteration: int
-    ) -> roukf.FilterState:
+    def _assimilate(self, theta_start: NDArray_f64, iteration: int) -> roukf.FilterState:
         r"""Run one pass of the filter over all measurement times.
 
         Args:
-            parameterization: the estimated parameters, relative to this pass's initial
-                estimate
+            theta_start: :math:`\theta` at which the pass starts: the prior mean in the first
+                pass, the estimate of the previous pass in later ones
             iteration: index of this pass
 
         Returns:
@@ -238,12 +234,12 @@ class Estimation:
 
         filter_state = roukf.initial_state(
             self._layout.to_vector(solver_state),
-            parameterization.anchor_theta(),
-            parameterization.stddev_theta(),
+            theta_start,
+            self._parameterization.stddev_theta(),
             self._stencil,
         )
-        self._history.record(iteration, t, filter_state, parameterization)
-        logger.info("%s", _table_header(parameterization.names))
+        self._history.record(iteration, t, filter_state, self._parameterization)
+        logger.info("%s", _table_header(self._parameterization.names))
 
         for k, t_next in enumerate(self.times):
             # 1. sampling
@@ -251,14 +247,14 @@ class Estimation:
 
             # 2. propagation and 3. innovations
             x_sigma, Gamma = self._propagate_and_observe(
-                t, float(t_next), x_sigma, theta_sigma, parameterization, k
+                t, float(t_next), x_sigma, theta_sigma, k
             )
 
             # 4. correction
             filter_state = roukf.update(x_sigma, theta_sigma, Gamma, self._stencil, self._comm)
             t = float(t_next)
-            self._history.record(iteration, t, filter_state, parameterization)
-            physical = parameterization.to_physical(filter_state.theta)
+            self._history.record(iteration, t, filter_state, self._parameterization)
+            physical = self._parameterization.to_physical(filter_state.theta)
             logger.info("%s", _table_row(k + 1, t, physical, self._innovation_rms(Gamma)))
 
         return filter_state
@@ -269,7 +265,6 @@ class Estimation:
         t_next: float,
         x_sigma: NDArray_f64,
         theta_sigma: NDArray_f64,
-        parameterization: Parameterization,
         k: int,
     ) -> tuple[NDArray_f64, NDArray_f64]:
         """Propagate the sigma points to the next measurement time and compute their innovations.
@@ -282,7 +277,6 @@ class Estimation:
             t_next: the next measurement time
             x_sigma: the sigma-point states at ``t``, one per column, shape ``(n, r)``
             theta_sigma: the sigma-point parameters, one per column, shape ``(p, r)``
-            parameterization: maps the parameters to physical values for the solver
             k: index of the next assimilation step
 
         Returns:
@@ -294,7 +288,7 @@ class Estimation:
 
         r = x_sigma.shape[1]
         for i in range(r):
-            phi = parameterization.to_physical(theta_sigma[:, i])
+            phi = self._parameterization.to_physical(theta_sigma[:, i])
             values = ", ".join(f"{name} = {value:.4g}" for name, value in phi.items())
             logger.debug("step %d, sigma point %d/%d: %s", k + 1, i + 1, r, values)
             started = time.perf_counter()

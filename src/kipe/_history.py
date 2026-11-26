@@ -3,7 +3,8 @@
 :class:`History` writes ``history.csv``, one row per assimilation step as the filter runs,
 and ``history.npz``, all steps of the completed outer iterations with the full parameter
 covariance. :func:`read_completed_steps` reads them back, for an estimation that continues an
-interrupted one (``kipe estimation --resume``).
+interrupted one (``kipe estimation --resume``). ``history.npz`` records the version of its
+content, :data:`HISTORY_FORMAT`; a history of another format is not read.
 """
 
 import logging
@@ -14,7 +15,7 @@ from pathlib import Path
 from mpi4py import MPI
 
 import numpy as np
-from ruamel.yaml import YAML
+from ruamel.yaml import YAML, YAMLError
 
 from kipe import roukf
 from kipe._types import NDArray_f64
@@ -23,6 +24,14 @@ from kipe.parameters import Parameterization
 from kipe.provenance import DataFile
 
 logger = logging.getLogger(__name__)
+
+HISTORY_FORMAT = 2
+r"""The version of the content of ``history.npz``, increased when its meaning changes:
+
+- 2: :math:`\theta` of all outer iterations relative to the same anchors, the prior means;
+- 1, written without this number (kipe 0.6 and earlier): :math:`\theta` of each outer
+  iteration relative to its own anchors, the estimate of the iteration before.
+"""
 
 
 @dataclass(frozen=True)
@@ -116,6 +125,7 @@ class History:
 
         np.savez(
             self._path / "history.npz",
+            history_format=np.array(HISTORY_FORMAT),
             names=np.array(self._names),
             iteration=np.array([step.iteration for step in self._steps]),
             time=np.array([step.time for step in self._steps]),
@@ -156,12 +166,22 @@ def read_steps(path: Path, names: list[str]) -> list[Step]:
         the steps; none if there is no ``history.npz``
 
     Raises:
-        StudyFileError: if the history has other parameters
+        StudyFileError: if the history has another format (:data:`HISTORY_FORMAT`) or other
+            parameters
     """
     if not (path / "history.npz").exists():
         return []
 
     with np.load(path / "history.npz") as history:
+        written = int(history["history_format"]) if "history_format" in history.files else 1
+        if written != HISTORY_FORMAT:
+            version = _kipe_version(path)
+            by = f", written by kipe {version}" if version else ""
+            raise StudyFileError(
+                f"{path / 'history.npz'} has history format {written}{by}; this kipe reads "
+                f"format {HISTORY_FORMAT} (see kipe._history.HISTORY_FORMAT): start the "
+                "estimation anew"
+            )
         if history["names"].tolist() != names:
             raise StudyFileError(
                 f"{path / 'history.npz'} estimates {', '.join(history['names'])}, the study "
@@ -179,6 +199,22 @@ def read_steps(path: Path, names: list[str]) -> list[Step]:
             )
             for i in range(len(history["time"]))
         ]
+
+
+def _kipe_version(path: Path) -> str | None:
+    """Return the version of kipe that ran an estimation, from its provenance.
+
+    Args:
+        path: output directory of the estimation
+
+    Returns:
+        the version in its ``environment.yaml``; None if it is missing
+    """
+    try:
+        environment = YAML(typ="safe").load(path / "environment.yaml")
+        return str(environment["packages"]["kipe"]["version"])
+    except (OSError, YAMLError, KeyError, TypeError):
+        return None
 
 
 def read_completed_steps(
@@ -285,19 +321,3 @@ def count_iterations(steps: Sequence[Step]) -> int:
         the number of iterations
     """
     return steps[-1].iteration + 1 if steps else 0
-
-
-def final_thetas(steps: Sequence[Step]) -> list[NDArray_f64]:
-    r"""Return the estimate :math:`\theta` at the end of each outer iteration of recorded steps.
-
-    Args:
-        steps: the steps, of complete iterations, in order
-
-    Returns:
-        the estimate of the last step of each iteration
-    """
-    last: dict[int, NDArray_f64] = {}
-    for step in steps:
-        last[step.iteration] = step.theta
-
-    return list(last.values())

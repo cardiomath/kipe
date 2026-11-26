@@ -156,8 +156,8 @@ def test_asynchronous_point_measurements(shared_tmp_path):
     COMM.barrier()  # rank 0 writes the history at the end
     history = np.load(Path(study.output.path) / "estimation" / "history.npz")
     assert len(history["time"]) == 3 * (1 + 10)  # each pass: the initial estimate, 5 + 5 times
-    last = history["iteration"] == history["iteration"][-1]
-    anchor = history["parameters"][last][0]  # the last pass is relative to its start
+    assert study.parameters is not None
+    means = np.array([prior.mean for prior in study.parameters.priors.values()])
     theta, P = history["theta"][-1], history["P_theta"][-1]
-    theta_true = np.log(np.array(list(true.values())) / anchor)  # log reparameterization
+    theta_true = np.log(np.array(list(true.values())) / means)  # log, relative to the means
     np.testing.assert_array_less(np.abs(theta - theta_true), 3 * np.sqrt(np.diag(P)))

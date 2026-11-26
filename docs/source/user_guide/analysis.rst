@@ -26,10 +26,9 @@ filter's covariance of it, and the estimate at the end of each outer iteration:
 A realization whose estimation has not completed all of its outer iterations is skipped, with
 a warning, so that the results of a job array can be read while it runs (:doc:`parallel`).
 
-The covariances are in physical units, which are comparable across realizations. The filter's
-:math:`\theta` is not: outer iterations anchor the last pass at the estimate of the pass before,
-which differs from realization to realization, so that the realizations' :math:`\theta`, and for
-``multiplicative`` parameters even its scale, refer to different anchors.
+The covariances are in physical units, so that they compare with the spread of the estimates.
+The filter's :math:`\theta` is the same for all realizations and outer iterations, relative to
+the prior means.
 
 The template
 ------------
@@ -60,7 +59,7 @@ bounds. Its figures show:
 In this example, the filter's standard deviation for ``b`` is about 30 % lower than the
 empirical standard deviation, which is close to the Cramér–Rao bound (the data-only bound).
 The filter's standard deviation instead agrees with the Bayesian bound, which also includes
-the prior. Outer iterations largely reduce the prior's influence on the estimate by anchoring
+the prior. Outer iterations largely reduce the prior's influence on the estimate by starting
 each pass at the estimate from the previous pass. Consequently, the estimates scatter about
 as much as the data alone allow. The filter's covariance, however, still includes the prior
 from the final pass. When that prior is informative relative to the data, as for ``b``, the

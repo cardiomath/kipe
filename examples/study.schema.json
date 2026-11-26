@@ -126,7 +126,7 @@
         },
         "iterations": {
           "default": 1,
-          "description": "Number of passes over the measurements. Each pass after the first starts from the\nprevious estimate, with the initial uncertainty.",
+          "description": "Number of passes over the measurements. Each pass after the first starts from the\nprevious estimate, with the prior's uncertainty: relative to that estimate for ``log``,\nthe same physical spread for ``multiplicative`` and ``additive``.",
           "minimum": 1,
           "title": "Iterations",
           "type": "integer"
@@ -575,7 +575,7 @@
       "properties": {
         "step": {
           "default": 0.01,
-          "description": "Step of the finite differences: the relative change of each parameter, e.g., 0.01 for\n1 % (``log``, ``multiplicative``); for ``additive`` parameters, a fraction of their prior\n``stddev``, which gives the step its unit.",
+          "description": "Step of the finite differences: for ``log`` parameters, the relative change of each,\ne.g., 0.01 for 1 %; for ``multiplicative`` parameters, a change by that fraction of their\nprior ``mean``; for ``additive`` parameters, a fraction of their prior ``stddev``, which\ngives the step its unit.",
           "exclusiveMinimum": 0,
           "title": "Step",
           "type": "number"
