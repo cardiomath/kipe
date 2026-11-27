@@ -239,6 +239,23 @@ class Parameterization:
             for parameter, value in zip(self.parameters, theta, strict=True)
         }
 
+    def validate_physical(self, theta: NDArray_f64) -> None:
+        r"""Validate that physical parameters are admissible for their reparameterizations.
+
+        Args:
+            theta: reparameterized parameters, in the order of :attr:`parameters`
+
+        Raises:
+            ValueError: if any parameter is nonfinite or violates reparameterization constraints
+        """
+        physical = self.to_physical(theta)
+        if not all(np.isfinite(value) for value in physical.values()):
+            raise ValueError("nonfinite parameters")
+        for parameter in self.parameters:
+            value = physical[parameter.name]
+            if parameter.reparameterization == "log" and value == 0:
+                raise ValueError(f"{parameter.name}: log parameter underflow")
+
     def to_theta(self, physical: Parameters) -> NDArray_f64:
         r"""Map physical values to :math:`\theta`, the inverse of :meth:`to_physical`.
 

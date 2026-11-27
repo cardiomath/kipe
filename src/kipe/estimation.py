@@ -30,7 +30,7 @@ from mpi4py import MPI
 import numpy as np
 
 from kipe import roukf
-from kipe._acceleration import InvalidAccelerationPoint, run_acceleration
+from kipe._acceleration import run_acceleration
 from kipe._formatting import format_table
 from kipe._history import (
     History,
@@ -157,6 +157,9 @@ class Estimation:
             Returns:
                 the saved or newly computed filter estimate
             """
+
+            self._parameterization.validate_physical(theta)
+
             nonlocal iteration
             if iteration < self._completed_iterations:
                 result = recorded[iteration]
@@ -190,38 +193,9 @@ class Estimation:
             for _ in range(self._completed_iterations, self._iterations):
                 theta = evaluate(theta)
         else:
-            scale = self._parameterization.stddev_theta()
-
-            def scaled_map(x: NDArray_f64) -> NDArray_f64:
-                """Validate scaled inputs and return the scaled filter estimate.
-
-                Args:
-                    x: prior coordinates divided by the prior standard deviations
-
-                Returns:
-                    the filter estimate divided by the same standard deviations
-
-                Raises:
-                    InvalidAccelerationPoint: if the input produces unrepresentable parameters
-                """
-                theta = x * scale
-                try:
-                    physical = self._parameterization.to_physical(theta)
-                    if not all(np.isfinite(value) for value in physical.values()):
-                        raise ValueError("nonfinite accelerated parameters")
-                    for parameter in self._parameterization.parameters:
-                        if (
-                            parameter.reparameterization == "log"
-                            and physical[parameter.name] == 0
-                        ):
-                            raise ValueError("log parameter underflow")
-                except (OverflowError, ValueError) as err:
-                    raise InvalidAccelerationPoint from err
-                return evaluate(theta) / scale
-
             run_acceleration(
-                scaled_map,
-                self._parameterization.anchor_theta() / scale,
+                evaluate,
+                self._parameterization.anchor_theta(),
                 self._acceleration,
                 self._iterations,
             )
