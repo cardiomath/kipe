@@ -9,7 +9,7 @@ and where each of these extensions goes. The API pages document each part in det
 Principles
 ----------
 
-**The core is solver-agnostic.** The core (``kipe``) uses numpy and MPI only. Everything that
+**The core is solver-agnostic.** The core (``kipe``) uses NumPy, SciPy and MPI. Everything that
 needs a discretization library lives in a backend subpackage (``kipe.fenicsx``), imported only
 when a study uses it. The FitzHugh–Nagumo example (:mod:`kipe.examples.fitzhugh_nagumo`)
 runs without any backend and keeps it that way.
