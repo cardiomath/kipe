@@ -16,19 +16,19 @@ forward_solver:
 parameters:
   reparameterization: multiplicative
   priors:
-    a: {mean: 0.2, relative_stddev: 0.1}
-    b: {mean: 0.2, relative_stddev: 0.1}
-    c: {mean: 3.0, relative_stddev: 0.1}
+    a: {mean: 0.3, relative_stddev: 0.1}
+    b: {mean: 0.3, relative_stddev: 0.1}
+    c: {mean: 2.0, relative_stddev: 0.1}
 
 measurements:
   v:
     fields: [v]
-    times: {start: 0.5, stop: 20.0, step: 0.5}
+    times: {start: 2, stop: 20.0, step: 2.0}
     data: {type: numpy, path: 'data/r{realization:02d}/v.npz'}
     noise: {stddev: 0.05, seed: 0}
   w:
     fields: [w]
-    times: {start: 0.5, stop: 20.0, step: 0.5}
+    times: {start: 2, stop: 20.0, step: 2.0}
     data: {type: numpy, path: 'data/r{realization:02d}/w.npz'}
     noise: {stddev: 0.05, seed: 1}
 
@@ -36,4 +36,6 @@ synthesis:
   realizations: 50
 
 estimation:
-  iterations: 6
+  sigma_points: simplex  # shape of the UKF's sigma-point stencil
+  iterations: 10  # outer iterations: restart from the previous estimate
+  acceleration: {memory: 10, regularization: 0.01}

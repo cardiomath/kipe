@@ -21,20 +21,21 @@ parameters:
 measurements:  # each at its own times: w less often, in between those of v
   v:
     fields: [v]
-    times: {start: 0.5, stop: 20.0, step: 0.5}
+    times: {start: 2, stop: 20.0, step: 2.0}
     data: {type: numpy, path: data/v.npz}
-    noise: {stddev: 0.01, seed: 0}
+    noise: {stddev: 0.05, seed: 0}
   w:
     fields: [w]
-    times: {start: 0.75, stop: 20.0, step: 1.0}
+    times: {start: 2, stop: 20.0, step: 2.0}
     data: {type: numpy, path: data/w.npz}
-    noise: {stddev: 0.01, seed: 1}
+    noise: {stddev: 0.05, seed: 1}
 
 synthesis:
   truth: {type: run}  # run the solver with its nominal parameters (the default)
 
 estimation:
   sigma_points: simplex  # shape of the UKF's sigma-point stencil
-  iterations: 5  # outer iterations: restart from the previous estimate
+  iterations: 10  # outer iterations: restart from the previous estimate
+  acceleration: {memory: 10, regularization: 0.01}
 
 # end-of-study-file
