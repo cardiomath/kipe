@@ -5,7 +5,8 @@ set of measurements: at each measurement time, the sigma points are propagated w
 forward solver, compared with the data of the measurements at that time through their
 observation operators, and the estimate is corrected. The measurements may have different
 times; the filter steps through all of them in order. Outer iterations repeat the pass,
-continuing from the previous estimate with the spread reset to the prior standard deviation.
+continuing from the previous estimate or an accelerated estimate with the spread reset to
+the prior standard deviation.
 :func:`estimate` builds all of this from a study file.
 
 The estimation history is written to ``<output.path>/estimation/``: ``history.csv`` (one row
@@ -20,6 +21,7 @@ and writes to its subdirectory, e.g., ``estimation/r07/``.
 import logging
 import time
 from collections.abc import Mapping, Sequence
+from importlib.metadata import version
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +30,7 @@ from mpi4py import MPI
 import numpy as np
 
 from kipe import roukf
+from kipe._acceleration import InvalidAccelerationPoint, run_acceleration
 from kipe._formatting import format_table
 from kipe._history import (
     History,
@@ -102,6 +105,7 @@ class Estimation:
         self._measurements = measurements
         self._iterations = options.iterations
         self._sigma_points = options.sigma_points
+        self._acceleration = options.acceleration
         self._output = output
         self._comm = comm
 
@@ -124,9 +128,10 @@ class Estimation:
     def run(self) -> Parameters:
         """Run the outer iterations, each a pass of the filter over all measurements.
 
-        Each pass after the first starts from the previous estimate, with the initial
-        uncertainty. After each pass, the history is written to ``history.npz``. A run that
-        continues an earlier one starts after its completed iterations, from their estimate.
+        Passes start from the previous estimate or an accelerated estimate, in the same
+        prior coordinates and with the prior uncertainty. Save each completed pass to
+        ``history.npz``. On resume, replay completed accelerated estimates without rerunning
+        their filter passes.
 
         Returns:
             the estimated parameters, as physical values
@@ -139,17 +144,29 @@ class Estimation:
                 "resumed after iteration %d/%d", self._completed_iterations, self._iterations
             )
 
-        # continue estimation from last entry in the history if resuming, else from prior mean
         steps = self._history.steps
-        theta = steps[-1].theta if steps else self._parameterization.anchor_theta()
+        recorded = {step.iteration: step.theta for step in steps}
+        iteration = self._completed_iterations if self._acceleration is None else 0
 
-        for iteration in range(self._completed_iterations, self._iterations):
+        def evaluate(theta: NDArray_f64) -> NDArray_f64:
+            """Return a saved estimate or run and save the next pass in fixed coordinates.
+
+            Args:
+                theta: starting parameters in the fixed prior coordinates
+
+            Returns:
+                the saved or newly computed filter estimate
+            """
+            nonlocal iteration
+            if iteration < self._completed_iterations:
+                result = recorded[iteration]
+                iteration += 1
+                return result
             title = f" iteration {iteration + 1}/{self._iterations} "
             logger.info("%s", title.center(_WIDTH, "━"))
             iteration_started = time.perf_counter()
 
             filter_state = self._assimilate(theta, iteration)
-            theta = filter_state.theta
 
             elapsed = time.perf_counter() - iteration_started
             logger.info("")
@@ -165,6 +182,47 @@ class Estimation:
                 logger.info("    %s", line)
 
             self._history.write_npz()
+            iteration += 1
+            return filter_state.theta
+
+        if self._acceleration is None:
+            theta = steps[-1].theta if steps else self._parameterization.anchor_theta()
+            for _ in range(self._completed_iterations, self._iterations):
+                theta = evaluate(theta)
+        else:
+
+            def fixed_point_map(theta: NDArray_f64) -> NDArray_f64:
+                """Validate parameters and return the filter estimate in fixed coordinates.
+
+                Args:
+                    theta: starting parameters in the fixed prior coordinates
+
+                Returns:
+                    the filter estimate in the same coordinates
+
+                Raises:
+                    InvalidAccelerationPoint: if the input produces unrepresentable parameters
+                """
+                try:
+                    physical = self._parameterization.to_physical(theta)
+                    if not all(np.isfinite(value) for value in physical.values()):
+                        raise ValueError("nonfinite accelerated parameters")
+                    for parameter in self._parameterization.parameters:
+                        if (
+                            parameter.reparameterization == "log"
+                            and physical[parameter.name] == 0
+                        ):
+                            raise ValueError("log parameter underflow")
+                except (OverflowError, ValueError) as err:
+                    raise InvalidAccelerationPoint from err
+                return evaluate(theta)
+
+            run_acceleration(
+                fixed_point_map,
+                self._parameterization.anchor_theta(),
+                self._acceleration,
+                self._iterations,
+            )
 
         logger.info("%s", "━" * _WIDTH)
         logger.info("%-11s%s", "history", self._output / "history.{csv,npz}")
@@ -183,6 +241,12 @@ class Estimation:
         n_points = self._stencil.points.shape[1]
         logger.info("    %-14s%s (%d sigma points)", "stencil", self._sigma_points, n_points)
         logger.info("    %-14s%d", "iterations", self._iterations)
+        if self._acceleration is not None:
+            logger.info(
+                "    acceleration    memory=%d, regularization=%g",
+                self._acceleration.memory,
+                self._acceleration.regularization,
+            )
         logger.info("    %-14s%d", "steps", len(self._schedule))
         logger.info("    %-14s%d", "MPI ranks", self._comm.size)
         logger.info("")
@@ -217,7 +281,7 @@ class Estimation:
 
         Args:
             theta_start: :math:`\theta` at which the pass starts: the prior mean in the first
-                pass, the estimate of the previous pass in later ones
+                pass, the previous estimate or an accelerated estimate in later ones
             iteration: index of this pass
 
         Returns:
@@ -422,6 +486,12 @@ def estimate(
     )
 
     run: dict[str, Any] = {"assimilation_times": estimation.times}
+    if study.estimation.acceleration is not None:
+        run["acceleration"] = {
+            "implementation": "scipy.optimize.anderson",
+            "coordinates": "theta",
+            "scipy_version": version("scipy"),
+        }
     if study.synthesis.realizations > 1:
         run["realization"] = realization
     run["data"] = data

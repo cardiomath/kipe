@@ -32,6 +32,27 @@ turn and writes its results to a separate directory. To run a single realization
 task in a cluster job array — use ``kipe estimation study.yaml --realization R``
 (:option:`kipe estimation --realization`, :doc:`parallel`).
 
+Acceleration
+------------
+
+To accelerate the outer iterations, add ``acceleration`` to ``estimation``:
+
+.. code-block:: yaml
+
+    estimation:
+      iterations: 10
+      acceleration:
+        memory: 5
+        regularization: 0.01
+
+``memory`` is the number of previous differences used (default 5). ``regularization``
+stabilizes the extrapolation (default 0.01; use 0 to disable it). Omit ``acceleration`` or set
+it to ``null`` for ordinary ROUKF iterations.
+
+Acceleration selects the starting parameters for the next ROUKF pass and can reduce the
+number of passes needed to converge.
+
+
 Results
 -------
 
