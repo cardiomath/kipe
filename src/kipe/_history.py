@@ -259,7 +259,8 @@ def _check_unchanged(output: Path, study: StudyOptions) -> None:
 
     Raises:
         StudyFileError: if the study differs, the earlier run has no ``study.yaml``, or
-            the acceleration implementation or SciPy version differs from the saved run
+            the acceleration implementation, coordinates or SciPy version differs from
+            the saved run
     """
     saved = output / "study.yaml"
     if not saved.exists():
@@ -286,17 +287,14 @@ def _check_unchanged(output: Path, study: StudyOptions) -> None:
         run = YAML(typ="safe").load(run_path) if run_path.exists() else {}
         expected = {
             "implementation": "scipy.optimize.anderson",
+            "coordinates": "theta",
             "scipy_version": version("scipy"),
         }
-        run_metadata = run or {}
-        saved_acceleration = run_metadata.get(
-            "acceleration", run_metadata.get("aceleration", run_metadata.get("anderson"))
-        )
-        if saved_acceleration != expected:
+        if (run or {}).get("acceleration") != expected:
             raise StudyFileError(
-                "cannot resume: acceleration backend or SciPy version differs "
-                "from the saved run; use the original implementation and version, "
-                "or start a new estimation"
+                "cannot resume: acceleration configuration differs from the saved run "
+                "(implementation, coordinates or SciPy version); use the original "
+                "configuration or start a new estimation"
             )
 
 

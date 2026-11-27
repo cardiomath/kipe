@@ -190,21 +190,19 @@ class Estimation:
             for _ in range(self._completed_iterations, self._iterations):
                 theta = evaluate(theta)
         else:
-            scale = self._parameterization.stddev_theta()
 
-            def scaled_map(x: NDArray_f64) -> NDArray_f64:
-                """Validate scaled inputs and return the scaled filter estimate.
+            def fixed_point_map(theta: NDArray_f64) -> NDArray_f64:
+                """Validate parameters and return the filter estimate in fixed coordinates.
 
                 Args:
-                    x: prior coordinates divided by the prior standard deviations
+                    theta: starting parameters in the fixed prior coordinates
 
                 Returns:
-                    the filter estimate divided by the same standard deviations
+                    the filter estimate in the same coordinates
 
                 Raises:
                     InvalidAccelerationPoint: if the input produces unrepresentable parameters
                 """
-                theta = x * scale
                 try:
                     physical = self._parameterization.to_physical(theta)
                     if not all(np.isfinite(value) for value in physical.values()):
@@ -217,11 +215,11 @@ class Estimation:
                             raise ValueError("log parameter underflow")
                 except (OverflowError, ValueError) as err:
                     raise InvalidAccelerationPoint from err
-                return evaluate(theta) / scale
+                return evaluate(theta)
 
             run_acceleration(
-                scaled_map,
-                self._parameterization.anchor_theta() / scale,
+                fixed_point_map,
+                self._parameterization.anchor_theta(),
                 self._acceleration,
                 self._iterations,
             )
@@ -491,6 +489,7 @@ def estimate(
     if study.estimation.acceleration is not None:
         run["acceleration"] = {
             "implementation": "scipy.optimize.anderson",
+            "coordinates": "theta",
             "scipy_version": version("scipy"),
         }
     if study.synthesis.realizations > 1:

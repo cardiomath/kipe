@@ -17,7 +17,7 @@ from dataclasses import field
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from pydantic import AliasChoices, ConfigDict, Field, PositiveFloat, PositiveInt, TypeAdapter
+from pydantic import ConfigDict, Field, PositiveFloat, PositiveInt, TypeAdapter
 from pydantic.dataclasses import dataclass
 from ruamel.yaml import YAML, YAMLError
 
@@ -525,12 +525,10 @@ class EstimationOptions:
     to that estimate for ``log``, the same physical spread for ``multiplicative`` and
     ``additive``."""
 
-    acceleration: AccelerationOptions | None = Field(
-        default=None, validation_alias=AliasChoices("acceleration", "aceleration", "anderson")
-    )
+    acceleration: AccelerationOptions | None = None
     """Optional SciPy-based acceleration, e.g., ``{memory: 5}``; omitted or null keeps
-    ordinary ROUKF iterations. Uses the fixed prior coordinates scaled by their initial
-    standard deviations, without changing the parameterization or prior covariance.
+    ordinary ROUKF iterations. Uses the fixed prior coordinates directly, without changing
+    the parameterization or prior covariance.
     """
 
 

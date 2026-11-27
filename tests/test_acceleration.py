@@ -13,6 +13,7 @@ import pytest
 from pydantic import ValidationError
 from ruamel.yaml import YAML
 
+from kipe import estimation
 from kipe._acceleration import InvalidAccelerationPoint, run_acceleration
 from kipe.estimation import estimate
 from kipe.measurements.data import write_numpy
@@ -195,17 +196,11 @@ class _LinearSolver:
 
 @pytest.mark.parametrize("reparameterization", ["additive", "log", "multiplicative"])
 @pytest.mark.parametrize(
-    "completed,interrupted,legacy_key",
-    [
-        (1, False, None),
-        (2, False, None),
-        (4, False, None),
-        (2, True, "anderson"),
-        (2, True, "aceleration"),
-    ],
+    "completed,interrupted",
+    [(1, False), (2, False), (4, False), (2, True)],
 )
 def test_roukf_acceleration_and_resume(
-    tmp_path, monkeypatch, reparameterization, completed, interrupted, legacy_key
+    tmp_path, monkeypatch, reparameterization, completed, interrupted
 ):
     """Resume the same estimates and covariances without rerunning completed filter passes."""
     comm = MPI.COMM_WORLD
@@ -227,9 +222,9 @@ def test_roukf_acceleration_and_resume(
                 name: ParameterPrior(
                     mean=-2 if reparameterization == "log" and name == "b" else 2,
                     **(
-                        {"stddev": 0.1}
+                        {"stddev": {"a": 0.1, "b": 0.2}[name]}
                         if reparameterization == "additive"
-                        else {"relative_stddev": 0.1}
+                        else {"relative_stddev": {"a": 0.1, "b": 0.2}[name]}
                     ),
                 )
                 for name in ["a", "b"]
@@ -247,6 +242,31 @@ def test_roukf_acceleration_and_resume(
             iterations=5, acceleration=AccelerationOptions(memory=2, regularization=0)
         ),
     )
+    if reparameterization in {"additive", "multiplicative"}:
+        # Check the map passed to SciPy in native theta coordinates with unequal spreads.
+        jacobian = np.eye(2) if reparameterization == "additive" else 2 * np.eye(2)
+        offset = np.full(2, 2.0) if reparameterization == "additive" else np.zeros(2)
+        observation = _LinearSolver.H @ jacobian
+        information_theta = observation.T @ observation / 0.5**2
+        prior_precision_theta = np.diag(1 / np.array([0.1, 0.2]) ** 2)
+        rhs_theta = observation.T @ (_LinearSolver.H @ (np.array([0.6, -0.4]) - offset)) / 0.5**2
+        initial_theta = np.zeros(2) if reparameterization == "additive" else np.ones(2)
+
+        def check_native_coordinates(evaluate, initial, options, evaluations):
+            np.testing.assert_allclose(initial, initial_theta, atol=1e-14)
+
+            def checked_map(theta):
+                actual = evaluate(theta)
+                expected = np.linalg.solve(
+                    information_theta + prior_precision_theta,
+                    rhs_theta + prior_precision_theta @ theta,
+                )
+                np.testing.assert_allclose(actual, expected, atol=1e-10)
+                return actual
+
+            run_acceleration(checked_map, initial, options, evaluations)
+
+        monkeypatch.setattr(estimation, "run_acceleration", check_native_coordinates)
     result = estimate(study)
     if reparameterization in {"additive", "multiplicative"}:
         np.testing.assert_allclose(list(result.values()), [0.6, -0.4], atol=1e-8)
@@ -260,8 +280,10 @@ def test_roukf_acceleration_and_resume(
     plain_result = estimate(plain)
     if reparameterization in {"additive", "multiplicative"}:
         # With fixed anchors, each linear pass has the same prior precision.
-        sigma = 0.1 if reparameterization == "additive" else 2 * 0.1
-        precision = np.eye(2) / sigma**2
+        sigma = np.array([0.1, 0.2])
+        if reparameterization == "multiplicative":
+            sigma *= 2
+        precision = np.diag(1 / sigma**2)
         information = _LinearSolver.H.T @ _LinearSolver.H / 0.5**2
         rhs = information @ np.array([0.6, -0.4])
         expected = np.full(2, 2.0)
@@ -290,19 +312,6 @@ def test_roukf_acceleration_and_resume(
     else:
         estimate(replace(resumed, estimation=replace(study.estimation, iterations=completed)))
     comm.barrier()
-    if interrupted:
-        # Existing archived studies and run metadata must remain usable after the rename.
-        if comm.rank == 0:
-            yaml = YAML()
-            saved_study = tmp_path / "resumed/estimation/study.yaml"
-            saved_run = tmp_path / "resumed/estimation/run.yaml"
-            for path in [saved_study, saved_run]:
-                saved = yaml.load(path)
-                settings = saved["estimation"] if path == saved_study else saved
-                settings[legacy_key] = settings.pop("acceleration")
-                with path.open("w") as stream:
-                    yaml.dump(saved, stream)
-        comm.barrier()
     calls = []
 
     def counted_propagate(self, *args, **kwargs):
@@ -339,25 +348,27 @@ def test_roukf_acceleration_and_resume(
         )
     comm.barrier()
 
-    if comm.rank == 0:
-        yaml = YAML()
-        path = tmp_path / "resumed/estimation/run.yaml"
-        run = yaml.load(path)
-        run["acceleration"]["scipy_version"] = "different-version"
-        with path.open("w") as stream:
-            yaml.dump(run, stream)
-    comm.barrier()
-    with pytest.raises(StudyFileError, match="acceleration backend or SciPy version"):
-        estimate(
-            replace(resumed, estimation=replace(study.estimation, iterations=6)), resume=True
-        )
-    if comm.rank == 0:
-        del run["acceleration"]
-        with path.open("w") as stream:
-            yaml.dump(run, stream)
-    comm.barrier()
-    with pytest.raises(StudyFileError, match="acceleration backend or SciPy version"):
-        estimate(
-            replace(resumed, estimation=replace(study.estimation, iterations=6)), resume=True
-        )
-    comm.barrier()
+    yaml = YAML()
+    path = tmp_path / "resumed/estimation/run.yaml"
+    run = yaml.load(path)
+    assert run["acceleration"]["coordinates"] == "theta"
+    for changed in ["scipy_version", "coordinates", "missing_coordinates", "missing_metadata"]:
+        if comm.rank == 0:
+            altered = dict(run)
+            metadata = dict(run["acceleration"])
+            if changed == "missing_metadata":
+                del altered["acceleration"]
+            else:
+                if changed == "missing_coordinates":
+                    del metadata["coordinates"]
+                else:
+                    metadata[changed] = "different-value"
+                altered["acceleration"] = metadata
+            with path.open("w") as stream:
+                yaml.dump(altered, stream)
+        comm.barrier()
+        with pytest.raises(StudyFileError, match="acceleration configuration differs"):
+            estimate(
+                replace(resumed, estimation=replace(study.estimation, iterations=6)), resume=True
+            )
+        comm.barrier()
