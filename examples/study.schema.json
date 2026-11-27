@@ -2,6 +2,28 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "kipe study file",
   "$defs": {
+    "AccelerationOptions": {
+      "additionalProperties": false,
+      "description": "Acceleration between complete passes of the ROUKF, without line search.",
+      "properties": {
+        "memory": {
+          "default": 5,
+          "description": "Maximum number of previous differences used for the extrapolation.",
+          "exclusiveMinimum": 0,
+          "title": "Memory",
+          "type": "integer"
+        },
+        "regularization": {
+          "default": 0.01,
+          "description": "Relative regularization of residual differences; 0 disables regularization.",
+          "minimum": 0,
+          "title": "Regularization",
+          "type": "number"
+        }
+      },
+      "title": "AccelerationOptions",
+      "type": "object"
+    },
     "ArraySamplingOptions": {
       "additionalProperties": false,
       "description": "Sample all entries of the observed fields, concatenated in the order of ``fields``.",
@@ -126,10 +148,22 @@
         },
         "iterations": {
           "default": 1,
-          "description": "Number of passes over the measurements. Each pass after the first starts from the\nprevious estimate, with the prior's uncertainty: relative to that estimate for ``log``,\nthe same physical spread for ``multiplicative`` and ``additive``.",
+          "description": "Number of passes over the measurements. Each pass after the first starts from the\nprevious estimate or an accelerated estimate, with the prior's uncertainty: relative\nto that estimate for ``log``, the same physical spread for ``multiplicative`` and\n``additive``.",
           "minimum": 1,
           "title": "Iterations",
           "type": "integer"
+        },
+        "acceleration": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AccelerationOptions"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional SciPy-based acceleration, e.g., ``{memory: 5}``; omitted or null keeps\nordinary ROUKF iterations. Uses the fixed prior coordinates scaled by their initial\nstandard deviations, without changing the parameterization or prior covariance."
         }
       },
       "title": "EstimationOptions",

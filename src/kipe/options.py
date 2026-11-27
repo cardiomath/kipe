@@ -17,7 +17,7 @@ from dataclasses import field
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from pydantic import ConfigDict, Field, PositiveFloat, PositiveInt, TypeAdapter
+from pydantic import AliasChoices, ConfigDict, Field, PositiveFloat, PositiveInt, TypeAdapter
 from pydantic.dataclasses import dataclass
 from ruamel.yaml import YAML, YAMLError
 
@@ -495,6 +495,17 @@ type SigmaPoints = Literal["simplex", "canonical", "unique"]
 
 
 @dataclass(frozen=True, config=_CONFIG)
+class AccelerationOptions:
+    """Acceleration between complete passes of the ROUKF, without line search."""
+
+    memory: PositiveInt = 5
+    """Maximum number of previous differences used for the extrapolation."""
+
+    regularization: Annotated[float, Field(ge=0, allow_inf_nan=False)] = 0.01
+    """Relative regularization of residual differences; 0 disables regularization."""
+
+
+@dataclass(frozen=True, config=_CONFIG)
 class EstimationOptions:
     """Parameter estimation with the reduced-order unscented Kalman filter (ROUKF)."""
 
@@ -510,8 +521,17 @@ class EstimationOptions:
 
     iterations: Annotated[int, Field(ge=1)] = 1
     """Number of passes over the measurements. Each pass after the first starts from the
-    previous estimate, with the prior's uncertainty: relative to that estimate for ``log``,
-    the same physical spread for ``multiplicative`` and ``additive``."""
+    previous estimate or an accelerated estimate, with the prior's uncertainty: relative
+    to that estimate for ``log``, the same physical spread for ``multiplicative`` and
+    ``additive``."""
+
+    acceleration: AccelerationOptions | None = Field(
+        default=None, validation_alias=AliasChoices("acceleration", "aceleration", "anderson")
+    )
+    """Optional SciPy-based acceleration, e.g., ``{memory: 5}``; omitted or null keeps
+    ordinary ROUKF iterations. Uses the fixed prior coordinates scaled by their initial
+    standard deviations, without changing the parameterization or prior covariance.
+    """
 
 
 @dataclass(frozen=True, config=_CONFIG)
