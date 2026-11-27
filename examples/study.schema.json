@@ -163,7 +163,7 @@
             }
           ],
           "default": null,
-          "description": "Optional SciPy-based acceleration, e.g., ``{memory: 5}``; omitted or null keeps\nordinary ROUKF iterations. Uses the fixed prior coordinates scaled by their initial\nstandard deviations, without changing the parameterization or prior covariance."
+          "description": "Optional SciPy-based acceleration, e.g., ``{memory: 5}``; omitted or null keeps\nordinary ROUKF iterations."
         }
       },
       "title": "EstimationOptions",

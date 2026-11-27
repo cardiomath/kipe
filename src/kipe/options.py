@@ -529,8 +529,7 @@ class EstimationOptions:
         default=None, validation_alias=AliasChoices("acceleration", "aceleration", "anderson")
     )
     """Optional SciPy-based acceleration, e.g., ``{memory: 5}``; omitted or null keeps
-    ordinary ROUKF iterations. Uses the fixed prior coordinates scaled by their initial
-    standard deviations, without changing the parameterization or prior covariance.
+    ordinary ROUKF iterations.
     """
 
 
