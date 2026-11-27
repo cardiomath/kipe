@@ -32,6 +32,7 @@ classifiers = [
 dependencies = [
   "mpi4py>=4",         # needs an MPI library at runtime, e.g., the system's or `pip install mpich`
   "numpy>=1.26",
+  "scipy>=1.12",       # Anderson acceleration of outer iterations
   "pydantic>=2.7",     # use_attribute_docstrings
   "ruamel.yaml>=0.18", # YAML 1.2: 1e-3 is a float
   "matplotlib>=3.8",   # kipe plot
@@ -46,7 +47,6 @@ kipe = "kipe.cli:main"
 dev = [
   "pytest>=8",
   "jsonschema>=4", # the example study files against `kipe schema`, in tests only
-  "scipy>=1.12",   # reference solutions in tests only
   "ruff==0.16.9",  # pinned: preview formatting differs between versions
   "mypy==2.3.1",
   "pre-commit",
@@ -146,7 +146,7 @@ no_implicit_reexport = false
 warn_return_any = false
 
 [[tool.mypy.overrides]]
-module = "plotext"            # no type information
+module = ["plotext", "scipy.optimize"] # no bundled type information
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

@@ -49,14 +49,16 @@ To accelerate the outer iterations, add ``anderson`` to ``estimation``:
 stabilizes the extrapolation (default 0.01; use 0 to disable it). Omit ``anderson`` or set
 it to ``null`` for ordinary ROUKF iterations.
 
-Each outer iteration still performs one complete ROUKF pass. Anderson selects the next
+Each outer iteration still performs one complete ROUKF pass. SciPy Anderson selects the next
 pass's starting parameters; the reported estimate and covariance remain those of the
 completed filter pass. No additional forward evaluations or line search are used.
 Acceleration can reduce the required number of passes, but is not guaranteed to improve
 convergence on every nonlinear problem.
 
 With ``--resume``, keep the same Anderson settings. Completed iterations reconstruct the
-mixing history, so resuming gives the same sequence as an uninterrupted run.
+mixing history without rerunning their forward solves, so resuming gives the same sequence
+as an uninterrupted run. The Anderson implementation and SciPy version must match the saved
+run. Start a new estimation for histories produced by the earlier custom implementation.
 
 Results
 -------

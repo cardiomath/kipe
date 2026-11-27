@@ -148,7 +148,7 @@
         },
         "iterations": {
           "default": 1,
-          "description": "Number of passes over the measurements. Each pass after the first starts from the\nprevious estimate, with the initial uncertainty.",
+          "description": "Number of passes over the measurements. Each pass after the first starts from the\nprevious estimate or an Anderson extrapolation, with the initial uncertainty.",
           "minimum": 1,
           "title": "Iterations",
           "type": "integer"

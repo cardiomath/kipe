@@ -521,7 +521,7 @@ class EstimationOptions:
 
     iterations: Annotated[int, Field(ge=1)] = 1
     """Number of passes over the measurements. Each pass after the first starts from the
-    previous estimate, with the initial uncertainty."""
+    previous estimate or an Anderson extrapolation, with the initial uncertainty."""
 
     anderson: AndersonOptions | None = None
     """Optional acceleration of outer iterations, e.g., ``{memory: 3}``; omitted or null
