@@ -7,12 +7,12 @@ import numpy as np
 from scipy.optimize import anderson
 
 from kipe._types import NDArray_f64
-from kipe.options import AcelerationOptions
+from kipe.options import AccelerationOptions
 
 logger = logging.getLogger(__name__)
 
 
-class InvalidAcelerationPoint(Exception):
+class InvalidAccelerationPoint(Exception):
     """The proposed input cannot be represented in the map's parameter domain."""
 
 
@@ -20,22 +20,22 @@ class _Completed(Exception):
     """The requested number of map evaluations has been completed."""
 
 
-def run_aceleration(
+def run_acceleration(
     evaluate: Callable[[NDArray_f64], NDArray_f64],
     initial: NDArray_f64,
-    options: AcelerationOptions,
+    options: AccelerationOptions,
     evaluations: int,
 ) -> None:
     """Evaluate a fixed-point map using SciPy to select successive inputs.
 
     Args:
-        evaluate: map returning G(x); raises InvalidAcelerationPoint for inadmissible inputs
+        evaluate: map returning G(x); raises InvalidAccelerationPoint for inadmissible inputs
         initial: initial input vector
         options: acceleration memory and regularization
         evaluations: number of successful map evaluations, including the initial input
 
     Raises:
-        InvalidAcelerationPoint: if the initial input or the unaccelerated fallback is
+        InvalidAccelerationPoint: if the initial input or the unaccelerated fallback is
             inadmissible
         ValueError: if a map output is nonfinite
     """
@@ -45,10 +45,10 @@ def run_aceleration(
     def residual(x: NDArray_f64) -> NDArray_f64:
         nonlocal completed, last_output
         if not np.all(np.isfinite(x)):
-            raise InvalidAcelerationPoint
+            raise InvalidAccelerationPoint
         output = evaluate(x)
         if not np.all(np.isfinite(output)):
-            raise ValueError("nonfinite aceleration map output")
+            raise ValueError("nonfinite acceleration map output")
         last_output = output.copy()
         completed += 1
         # Stop inside the evaluation to avoid an extra expensive map call or an unused step.
@@ -72,10 +72,10 @@ def run_aceleration(
             )
         except _Completed:
             return
-        except InvalidAcelerationPoint:
+        except InvalidAccelerationPoint:
             if last_output is None or completed == before_restart:
                 raise
-            logger.warning("invalid aceleration extrapolation; using the unaccelerated output")
+            logger.warning("invalid acceleration extrapolation; using the unaccelerated output")
         # On an invalid input, restart from the last ordinary output with fresh history.
         # At an exact root SciPy returns early; continue to honor the evaluation budget.
         assert last_output is not None

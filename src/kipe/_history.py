@@ -273,25 +273,28 @@ def _check_unchanged(output: Path, study: StudyOptions) -> None:
     ]
     if earlier.estimation.sigma_points != study.estimation.sigma_points:
         changed.append("estimation.sigma_points")
-    if earlier.estimation.aceleration != study.estimation.aceleration:
-        changed.append("estimation.aceleration")
+    if earlier.estimation.acceleration != study.estimation.acceleration:
+        changed.append("estimation.acceleration")
     if changed:
         raise StudyFileError(
             f"cannot resume the estimation in {output}: the study has changed since "
             f"({', '.join(changed)}); only estimation.iterations may differ"
         )
 
-    if study.estimation.aceleration is not None:
+    if study.estimation.acceleration is not None:
         run_path = output / "run.yaml"
         run = YAML(typ="safe").load(run_path) if run_path.exists() else {}
         expected = {
             "implementation": "scipy.optimize.anderson",
             "scipy_version": version("scipy"),
         }
-        saved_aceleration = (run or {}).get("aceleration", (run or {}).get("anderson"))
-        if saved_aceleration != expected:
+        run_metadata = run or {}
+        saved_acceleration = run_metadata.get(
+            "acceleration", run_metadata.get("aceleration", run_metadata.get("anderson"))
+        )
+        if saved_acceleration != expected:
             raise StudyFileError(
-                "cannot resume: aceleration backend or SciPy version differs "
+                "cannot resume: acceleration backend or SciPy version differs "
                 "from the saved run; use the original implementation and version, "
                 "or start a new estimation"
             )

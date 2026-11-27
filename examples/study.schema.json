@@ -2,12 +2,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "kipe study file",
   "$defs": {
-    "AcelerationOptions": {
+    "AccelerationOptions": {
       "additionalProperties": false,
       "description": "Acceleration between complete passes of the ROUKF, without line search.",
       "properties": {
         "memory": {
-          "default": 3,
+          "default": 5,
           "description": "Maximum number of previous differences used for the extrapolation.",
           "exclusiveMinimum": 0,
           "title": "Memory",
@@ -21,7 +21,7 @@
           "type": "number"
         }
       },
-      "title": "AcelerationOptions",
+      "title": "AccelerationOptions",
       "type": "object"
     },
     "ArraySamplingOptions": {
@@ -153,17 +153,17 @@
           "title": "Iterations",
           "type": "integer"
         },
-        "aceleration": {
+        "acceleration": {
           "anyOf": [
             {
-              "$ref": "#/$defs/AcelerationOptions"
+              "$ref": "#/$defs/AccelerationOptions"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "description": "Optional SciPy-based acceleration, e.g., ``{memory: 3}``; omitted or null keeps\nordinary ROUKF iterations. Uses the fixed prior coordinates scaled by their initial\nstandard deviations, without changing the parameterization or prior covariance."
+          "description": "Optional SciPy-based acceleration, e.g., ``{memory: 5}``; omitted or null keeps\nordinary ROUKF iterations. Uses the fixed prior coordinates scaled by their initial\nstandard deviations, without changing the parameterization or prior covariance."
         }
       },
       "title": "EstimationOptions",

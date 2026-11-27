@@ -1,4 +1,4 @@
-"""SciPy Aceleration integration, evaluation budgets and ROUKF restart behavior."""
+"""SciPy Acceleration integration, evaluation budgets and ROUKF restart behavior."""
 
 import sys
 import types
@@ -13,11 +13,11 @@ import pytest
 from pydantic import ValidationError
 from ruamel.yaml import YAML
 
-from kipe._aceleration import InvalidAcelerationPoint, run_aceleration
+from kipe._acceleration import InvalidAccelerationPoint, run_acceleration
 from kipe.estimation import estimate
 from kipe.measurements.data import write_numpy
 from kipe.options import (
-    AcelerationOptions,
+    AccelerationOptions,
     EstimationOptions,
     ForwardSolverOptions,
     MeasurementOptions,
@@ -39,7 +39,9 @@ def test_scalar_linear_map_and_evaluation_budget():
         inputs.append(x.copy())
         return 0.9 * x + 0.1
 
-    run_aceleration(evaluate, np.array([0.0]), AcelerationOptions(memory=1, regularization=0), 3)
+    run_acceleration(
+        evaluate, np.array([0.0]), AccelerationOptions(memory=1, regularization=0), 3
+    )
     np.testing.assert_allclose(np.asarray(inputs).ravel(), [0, 0.1, 1], atol=1e-13)
 
 
@@ -52,7 +54,7 @@ def test_exact_fixed_point_keeps_requested_pass_count(evaluations):
         inputs.append(x.copy())
         return x.copy()
 
-    run_aceleration(evaluate, np.array([2.0]), AcelerationOptions(), evaluations)
+    run_acceleration(evaluate, np.array([2.0]), AccelerationOptions(), evaluations)
     np.testing.assert_array_equal(inputs, np.full((evaluations, 1), 2.0))
 
 
@@ -64,11 +66,13 @@ def test_invalid_extrapolation_restarts_at_last_plain_output():
     def evaluate(x):
         if x[0] > 0.5:
             rejected.append(x.copy())
-            raise InvalidAcelerationPoint
+            raise InvalidAccelerationPoint
         inputs.append(x.copy())
         return 0.9 * x + 0.1
 
-    run_aceleration(evaluate, np.array([0.0]), AcelerationOptions(memory=1, regularization=0), 4)
+    run_acceleration(
+        evaluate, np.array([0.0]), AccelerationOptions(memory=1, regularization=0), 4
+    )
     assert len(rejected) == 1
     np.testing.assert_allclose(np.asarray(inputs).ravel(), [0, 0.1, 0.19, 0.271])
 
@@ -80,11 +84,11 @@ def test_invalid_fallback_is_not_retried_indefinitely():
     def evaluate(x):
         inputs.append(x.copy())
         if x[0] >= 1:
-            raise InvalidAcelerationPoint
+            raise InvalidAccelerationPoint
         return np.ones(1)
 
-    with pytest.raises(InvalidAcelerationPoint):
-        run_aceleration(evaluate, np.zeros(1), AcelerationOptions(), 3)
+    with pytest.raises(InvalidAccelerationPoint):
+        run_acceleration(evaluate, np.zeros(1), AccelerationOptions(), 3)
     np.testing.assert_array_equal(np.asarray(inputs).ravel(), [0, 1, 1])
 
 
@@ -96,17 +100,17 @@ def test_constant_residual_preserves_plain_updates():
         inputs.append(x.copy())
         return x + 1
 
-    run_aceleration(evaluate, np.zeros(1), AcelerationOptions(regularization=0), 4)
+    run_acceleration(evaluate, np.zeros(1), AccelerationOptions(regularization=0), 4)
     np.testing.assert_allclose(np.asarray(inputs).ravel(), [0, 1, 2, 3])
 
 
 @pytest.mark.parametrize("initial,output", [(np.inf, 1.0), (0.0, np.nan)])
 def test_nonfinite_vectors_are_rejected(initial, output):
     """Reject invalid initial inputs and nonfinite map outputs explicitly."""
-    expected = InvalidAcelerationPoint if np.isinf(initial) else ValueError
+    expected = InvalidAccelerationPoint if np.isinf(initial) else ValueError
     with pytest.raises(expected):
-        run_aceleration(
-            lambda x: np.array([output]), np.array([initial]), AcelerationOptions(), 2
+        run_acceleration(
+            lambda x: np.array([output]), np.array([initial]), AccelerationOptions(), 2
         )
 
 
@@ -117,7 +121,7 @@ def test_map_failure_is_not_hidden():
         raise ValueError("forward solver failed")
 
     with pytest.raises(ValueError, match="forward solver failed"):
-        run_aceleration(evaluate, np.zeros(1), AcelerationOptions(), 2)
+        run_acceleration(evaluate, np.zeros(1), AccelerationOptions(), 2)
 
 
 def test_linear_least_squares_matches_scipy():
@@ -140,14 +144,14 @@ def test_linear_least_squares_matches_scipy():
         outputs.append(G(x))
         return outputs[-1]
 
-    run_aceleration(evaluate, np.full(3, 2.0), AcelerationOptions(), 9)
+    run_acceleration(evaluate, np.full(3, 2.0), AccelerationOptions(), 9)
     reference = []
     try:
         anderson(
             lambda x: G(x) - x,
             np.full(3, 2.0),
             alpha=1,
-            M=3,
+            M=5,
             w0=0.01,
             maxiter=8,
             f_tol=1e-16,
@@ -170,7 +174,7 @@ def test_linear_least_squares_matches_scipy():
 def test_invalid_options(options):
     """Reject unsupported memory and regularization values."""
     with pytest.raises(ValidationError):
-        AcelerationOptions(**options)
+        AccelerationOptions(**options)
 
 
 class _LinearSolver:
@@ -191,10 +195,17 @@ class _LinearSolver:
 
 @pytest.mark.parametrize("reparameterization", ["additive", "log", "multiplicative"])
 @pytest.mark.parametrize(
-    "completed,interrupted", [(1, False), (2, False), (4, False), (2, True)]
+    "completed,interrupted,legacy_key",
+    [
+        (1, False, None),
+        (2, False, None),
+        (4, False, None),
+        (2, True, "anderson"),
+        (2, True, "aceleration"),
+    ],
 )
 def test_roukf_acceleration_and_resume(
-    tmp_path, monkeypatch, reparameterization, completed, interrupted
+    tmp_path, monkeypatch, reparameterization, completed, interrupted, legacy_key
 ):
     """Resume the same estimates and covariances without rerunning completed filter passes."""
     comm = MPI.COMM_WORLD
@@ -233,7 +244,7 @@ def test_roukf_acceleration_and_resume(
             )
         },
         estimation=EstimationOptions(
-            iterations=5, aceleration=AcelerationOptions(memory=2, regularization=0)
+            iterations=5, acceleration=AccelerationOptions(memory=2, regularization=0)
         ),
     )
     result = estimate(study)
@@ -288,7 +299,7 @@ def test_roukf_acceleration_and_resume(
             for path in [saved_study, saved_run]:
                 saved = yaml.load(path)
                 settings = saved["estimation"] if path == saved_study else saved
-                settings["anderson"] = settings.pop("aceleration")
+                settings[legacy_key] = settings.pop("acceleration")
                 with path.open("w") as stream:
                     yaml.dump(saved, stream)
         comm.barrier()
@@ -319,10 +330,10 @@ def test_roukf_acceleration_and_resume(
                 else:
                     expected_theta = np.log(physical / np.array([2, -2]))
                 np.testing.assert_allclose(full["theta"], expected_theta, atol=1e-12)
-    with pytest.raises(StudyFileError, match=r"estimation\.aceleration"):
+    with pytest.raises(StudyFileError, match=r"estimation\.acceleration"):
         estimate(
             replace(
-                resumed, estimation=replace(study.estimation, iterations=6, aceleration=None)
+                resumed, estimation=replace(study.estimation, iterations=6, acceleration=None)
             ),
             resume=True,
         )
@@ -332,20 +343,20 @@ def test_roukf_acceleration_and_resume(
         yaml = YAML()
         path = tmp_path / "resumed/estimation/run.yaml"
         run = yaml.load(path)
-        run["aceleration"]["scipy_version"] = "different-version"
+        run["acceleration"]["scipy_version"] = "different-version"
         with path.open("w") as stream:
             yaml.dump(run, stream)
     comm.barrier()
-    with pytest.raises(StudyFileError, match="aceleration backend or SciPy version"):
+    with pytest.raises(StudyFileError, match="acceleration backend or SciPy version"):
         estimate(
             replace(resumed, estimation=replace(study.estimation, iterations=6)), resume=True
         )
     if comm.rank == 0:
-        del run["aceleration"]
+        del run["acceleration"]
         with path.open("w") as stream:
             yaml.dump(run, stream)
     comm.barrier()
-    with pytest.raises(StudyFileError, match="aceleration backend or SciPy version"):
+    with pytest.raises(StudyFileError, match="acceleration backend or SciPy version"):
         estimate(
             replace(resumed, estimation=replace(study.estimation, iterations=6)), resume=True
         )

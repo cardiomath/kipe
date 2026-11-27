@@ -30,7 +30,7 @@ from mpi4py import MPI
 import numpy as np
 
 from kipe import roukf
-from kipe._aceleration import InvalidAcelerationPoint, run_aceleration
+from kipe._acceleration import InvalidAccelerationPoint, run_acceleration
 from kipe._formatting import format_table
 from kipe._history import (
     History,
@@ -105,7 +105,7 @@ class Estimation:
         self._measurements = measurements
         self._iterations = options.iterations
         self._sigma_points = options.sigma_points
-        self._aceleration = options.aceleration
+        self._acceleration = options.acceleration
         self._output = output
         self._comm = comm
 
@@ -146,7 +146,7 @@ class Estimation:
 
         steps = self._history.steps
         recorded = {step.iteration: step.theta for step in steps}
-        iteration = self._completed_iterations if self._aceleration is None else 0
+        iteration = self._completed_iterations if self._acceleration is None else 0
 
         def evaluate(theta: NDArray_f64) -> NDArray_f64:
             """Return a saved estimate or run and save the next pass in fixed coordinates.
@@ -185,7 +185,7 @@ class Estimation:
             iteration += 1
             return filter_state.theta
 
-        if self._aceleration is None:
+        if self._acceleration is None:
             theta = steps[-1].theta if steps else self._parameterization.anchor_theta()
             for _ in range(self._completed_iterations, self._iterations):
                 theta = evaluate(theta)
@@ -202,7 +202,7 @@ class Estimation:
                     the filter estimate divided by the same standard deviations
 
                 Raises:
-                    InvalidAcelerationPoint: if the input produces unrepresentable parameters
+                    InvalidAccelerationPoint: if the input produces unrepresentable parameters
                 """
                 theta = x * scale
                 try:
@@ -216,13 +216,13 @@ class Estimation:
                         ):
                             raise ValueError("log parameter underflow")
                 except (OverflowError, ValueError) as err:
-                    raise InvalidAcelerationPoint from err
+                    raise InvalidAccelerationPoint from err
                 return evaluate(theta) / scale
 
-            run_aceleration(
+            run_acceleration(
                 scaled_map,
                 self._parameterization.anchor_theta() / scale,
-                self._aceleration,
+                self._acceleration,
                 self._iterations,
             )
 
@@ -243,11 +243,11 @@ class Estimation:
         n_points = self._stencil.points.shape[1]
         logger.info("    %-14s%s (%d sigma points)", "stencil", self._sigma_points, n_points)
         logger.info("    %-14s%d", "iterations", self._iterations)
-        if self._aceleration is not None:
+        if self._acceleration is not None:
             logger.info(
-                "    aceleration    memory=%d, regularization=%g",
-                self._aceleration.memory,
-                self._aceleration.regularization,
+                "    acceleration    memory=%d, regularization=%g",
+                self._acceleration.memory,
+                self._acceleration.regularization,
             )
         logger.info("    %-14s%d", "steps", len(self._schedule))
         logger.info("    %-14s%d", "MPI ranks", self._comm.size)
@@ -488,8 +488,8 @@ def estimate(
     )
 
     run: dict[str, Any] = {"assimilation_times": estimation.times}
-    if study.estimation.aceleration is not None:
-        run["aceleration"] = {
+    if study.estimation.acceleration is not None:
+        run["acceleration"] = {
             "implementation": "scipy.optimize.anderson",
             "scipy_version": version("scipy"),
         }
