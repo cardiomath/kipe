@@ -14,7 +14,7 @@ from pydantic import ValidationError
 from ruamel.yaml import YAML
 
 from kipe._acceleration import InvalidAccelerationPoint, run_acceleration
-from kipe.estimation import estimate
+from kipe.estimation import Estimation, estimate
 from kipe.measurements.data import write_numpy
 from kipe.options import (
     AccelerationOptions,
@@ -122,6 +122,32 @@ def test_map_failure_is_not_hidden():
 
     with pytest.raises(ValueError, match="forward solver failed"):
         run_acceleration(evaluate, np.zeros(1), AccelerationOptions(), 2)
+
+
+@pytest.mark.parametrize("error", [ValueError("underflow"), OverflowError("overflow")])
+def test_parameter_validation_errors_are_invalid_acceleration_points(monkeypatch, error):
+    """Translate invalid physical parameters so acceleration can restart."""
+    estimation = object.__new__(Estimation)
+    estimation._log_setup = lambda: None
+    estimation._history = SimpleNamespace(steps=[])
+    estimation._completed_iterations = 0
+    estimation._iterations = 2
+    estimation._acceleration = AccelerationOptions()
+
+    def validate_physical(theta):
+        raise error
+
+    estimation._parameterization = SimpleNamespace(
+        anchor_theta=lambda: np.zeros(1), validate_physical=validate_physical
+    )
+    monkeypatch.setattr(
+        "kipe.estimation.run_acceleration",
+        lambda evaluate, *_: evaluate(np.zeros(1)),
+    )
+
+    with pytest.raises(InvalidAccelerationPoint) as exc_info:
+        estimation.run()
+    assert exc_info.value.__cause__ is error
 
 
 def test_linear_least_squares_matches_scipy():

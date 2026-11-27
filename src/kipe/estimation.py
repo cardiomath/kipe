@@ -30,7 +30,7 @@ from mpi4py import MPI
 import numpy as np
 
 from kipe import roukf
-from kipe._acceleration import run_acceleration
+from kipe._acceleration import InvalidAccelerationPoint, run_acceleration
 from kipe._formatting import format_table
 from kipe._history import (
     History,
@@ -158,7 +158,12 @@ class Estimation:
                 the saved or newly computed filter estimate
             """
 
-            self._parameterization.validate_physical(theta)
+            try:
+                self._parameterization.validate_physical(theta)
+            except (OverflowError, ValueError) as err:
+                if self._acceleration is None:
+                    raise
+                raise InvalidAccelerationPoint from err
 
             nonlocal iteration
             if iteration < self._completed_iterations:
